@@ -142,7 +142,7 @@ function SocialLink({
       className="
         group inline-flex items-center justify-center
         w-10 h-10 rounded-full
-        border border-[var(--color-stone-200)] bg-white
+        border border-[var(--color-stone-200)] bg-white/5
         text-[var(--color-stone-500)]
         hover:border-[#ED7926]/45 hover:bg-gradient-to-br hover:from-[#ED7926]/10 hover:to-[#0973BA]/10
         hover:text-[#ED7926]
@@ -254,32 +254,26 @@ export default function Footer({
     <footer
       aria-label={dictionary.footer.ariaLabel}
       className="relative mt-20 md:mt-28 overflow-hidden text-[var(--color-stone-700)]"
-      /* ☀️ Soft, ferah zemin — koyu lacivert kaldırıldı. Sıcak kırık beyaz
-         yüzey; turuncu/mavi yalnızca çok hafif, ayrı glow katmanlarında
-         atmosferik bir iz olarak kullanılıyor (ağır gradient yok). */
-      style={{
-        background:
-          "linear-gradient(180deg, #fdfaf5 0%, #faf5ec 55%, #f6efe2 100%)",
-      }}
+      /* 🌊 Sitenin ana koyu laciverti (#0B1F3A = --color-stone-900), düz
+         zemin; gradient/glow yok. Footer içindeki metin/çizgi renkleri
+         `--color-stone-*` değişkenleriyle tanımlı → değişkenler YALNIZ bu
+         elemanda açık tonlara yeniden eşlenir (yerleşim ve sınıflar aynı;
+         site geneli ve admin ETKİLENMEZ). Kontrast (#0B1F3A üzerinde):
+         900 16.5 · 800 15.1 · 700 13.4 · 600 11.1 · 500 9.0 · 400 6.4. */
+      style={
+        {
+          background: "#0B1F3A",
+          "--color-stone-900": "#ffffff",
+          "--color-stone-800": "#f1f5f9",
+          "--color-stone-700": "#e2e8f0",
+          "--color-stone-600": "#cbd5e1",
+          "--color-stone-500": "#b4c0d3",
+          "--color-stone-400": "#94a3b8",
+          "--color-stone-300": "#64748b",
+          "--color-stone-200": "rgba(255, 255, 255, 0.12)",
+        } as React.CSSProperties
+      }
     >
-      {/* Turuncu ambient iz — sağ üst, çok hafif. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-40 right-[-140px] w-[620px] h-[420px] blur-3xl opacity-[0.10]"
-        style={{
-          background:
-            "radial-gradient(circle at center, rgba(237,121,38,0.35), transparent 70%)",
-        }}
-      />
-      {/* Mavi ambient iz — sol alt, çok hafif. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-28 left-[-120px] w-[520px] h-[360px] blur-3xl opacity-[0.09]"
-        style={{
-          background:
-            "radial-gradient(circle at center, rgba(9,115,186,0.32), transparent 70%)",
-        }}
-      />
 
       <div className="relative max-w-7xl mx-auto px-5 md:px-10 lg:px-16 pb-10">
         {/* ═════════════ SECTION 2 — MARKA + KEŞFET (asimetrik, kolon-kartı yok) ═════════════
@@ -450,7 +444,7 @@ export default function Footer({
                   <span className="block text-[11px] uppercase tracking-[0.18em] text-[var(--color-stone-400)] mb-1.5">
                     {dictionary.footer.email}
                   </span>
-                  <span className="text-[16px] md:text-[18px] text-[var(--color-stone-700)] group-hover:text-[#0973BA] transition-colors duration-300 motion-reduce:transition-none break-all">
+                  <span className="text-[16px] md:text-[18px] text-[var(--color-stone-700)] group-hover:text-[#ED7926] transition-colors duration-300 motion-reduce:transition-none break-all">
                     {settings.email}
                   </span>
                 </a>
@@ -538,7 +532,9 @@ export default function Footer({
               alt={dictionary.footer.paymentMethodsAlt}
               width={1400}
               height={400}
-              className="h-8 w-auto object-contain opacity-90"
+              /* Koyu VISA/troy/mastercard yazıları lacivert zeminde
+                 kaybolmasın: logolar beyaz zemin üzerinde (boyut aynı). */
+              className="h-8 w-auto object-contain box-content bg-white rounded-md px-2 py-1"
             />
           </div>
 
