@@ -99,7 +99,7 @@ export default function MakiFinansPage() {
       <header className="space-y-4">
         <div className="space-y-2">
           <h1 className="font-display text-2xl md:text-3xl text-[var(--color-stone-900)] tracking-[-0.02em]">
-            Maki Finans
+            KalkanDigital Finans
           </h1>
           <p className="text-sm text-[var(--color-stone-500)] max-w-xl">
             Finans, komisyon ve gelir yönetimi modülü.

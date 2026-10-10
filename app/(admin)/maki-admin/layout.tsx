@@ -193,7 +193,7 @@ const menuGroups: MenuGroup[] = [
     label: "Finans",
     items: [
       {
-        name: "Maki Finans",
+        name: "KalkanDigital Finans",
         href: "/maki-admin/maki-finans",
         icon: Wallet,
         permissionKey: "finance",
@@ -585,6 +585,10 @@ function AdminBrandMark() {
         padding: 0,
         overflow: "hidden",
         background: "transparent",
+        /* Yalnız sidebar logosu: 42 → 52px ("M" yedeği ve giriş
+           ekranı logoları ETKİLENMEZ). */
+        width: 52,
+        height: 52,
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -234,7 +234,7 @@ export const SIDEBAR_PERMISSIONS: PermissionItem[] = [
      yeni grup. Eski admin'lere otomatik grant migration YOK; admin
      ekranından elle eklenmesi gerekir (kullanıcı talebi: migration
      üretme). Super-admin ekleyince diğer admin'lere yetki verebilir. */
-  { key: "finance", label: "Maki Finans", group: "Finans" },
+  { key: "finance", label: "KalkanDigital Finans", group: "Finans" },
 
   // İçerik
   { key: "pages", label: "Sayfalar", group: "İçerik" },

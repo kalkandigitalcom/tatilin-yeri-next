@@ -600,9 +600,8 @@ export default function AdminLoginPage() {
    <img onError> → mevcut "M" hardcoded fallback'a düşer
    (UI bozulmaz; storage'a logo yüklenmemişse eski rozet kalır).
 
-   Mobil header'da kullanılır. Önceki w-12 h-12 (48px) yerine
-   w-14 h-14 (56px) — daha güçlü branding hissiyatı için ~%17
-   büyüdü. Premium polish: layered shadow + soft cyan ring.
+   Mobil header'da kullanılır. Logo çerçevesiz, 72px yükseklik;
+   "M" yedeği (logo yoksa) eski 56px kutu tasarımında kalır.
 ---------------------------------------------- */
 function LoginBrandMark() {
   const [imgFailed, setImgFailed] = useState<boolean>(false);
@@ -623,31 +622,22 @@ function LoginBrandMark() {
     );
   }
 
+  /* Logo çerçevesiz: beyaz kutu/gölge YOK; yükseklik 56 → 72px,
+     genişlik orana göre (kırpma/esnetme yok, geniş logoda üst sınır). */
   return (
-    <div
-      className="w-14 h-14 rounded-2xl overflow-hidden bg-white flex items-center justify-center"
-      style={{
-        boxShadow:
-          "0 12px 32px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.06)",
-      }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={getAdminLogoUrl(logoVersion)}
-        alt="Admin"
-        onError={() => setImgFailed(true)}
-        className="w-full h-full object-contain"
-      />
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getAdminLogoUrl(logoVersion)}
+      alt="KalkanDigital"
+      onError={() => setImgFailed(true)}
+      className="block h-[72px] w-auto max-w-[260px] object-contain"
+    />
   );
 }
 
 /* ---------------------------------------------
-   🔥 DesktopBrandMark — sol premium panel için BÜYÜK rozet.
-   Önceki w-14 h-14 (56px) yerine w-[72px] h-[72px] —
-   ~%29 daha büyük; ilk bakışta marka daha güçlü hissedilir.
-   Premium polish: yumuşak sky/cyan glow halkası + layered shadow,
-   white surface; dark panel üzerinde belirgin durur.
+   🔥 DesktopBrandMark — sol koyu panelin logosu. Logo çerçevesiz
+   (beyaz kutu/glow yok), 96px yükseklik, oran korunur.
    Aynı fallback semantiği; storage'da admin-logo.webp yoksa
    "M" mark'a düşer (dark panel için glassy varyant).
 ---------------------------------------------- */
@@ -674,22 +664,16 @@ function DesktopBrandMark() {
     );
   }
 
+  /* Logo çerçevesiz: beyaz yuvarlatılmış kutu, glow ve gölge YOK;
+     doğrudan koyu panel üzerinde. Yükseklik 72 → 96px, genişlik orana
+     göre (kırpma/esnetme yok, geniş logoda üst sınır). */
   return (
-    <div
-      className="w-[72px] h-[72px] rounded-2xl overflow-hidden flex items-center justify-center"
-      style={{
-        background: "rgba(255, 255, 255, 0.98)",
-        boxShadow:
-          "0 24px 48px -16px rgba(2, 6, 23, 0.6), 0 0 0 1px rgba(125, 211, 252, 0.18), 0 0 32px -4px rgba(125, 211, 252, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
-      }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={getAdminLogoUrl(logoVersion)}
-        alt="Admin"
-        onError={() => setImgFailed(true)}
-        className="w-full h-full object-contain"
-      />
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getAdminLogoUrl(logoVersion)}
+      alt="KalkanDigital"
+      onError={() => setImgFailed(true)}
+      className="block h-24 w-auto max-w-[320px] object-contain"
+    />
   );
 }
