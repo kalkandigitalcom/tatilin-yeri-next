@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   getAdminLogoUrl,
@@ -886,6 +886,48 @@ function AdminShell({
     await signOut();
   };
 
+  /* ---------------------------------------------
+     🔥 KULLANICI MENÜSÜ (sağ üst avatar dropdown)
+     - Ad: oturumdaki admin kaydı (useAdmin → full_name, yoksa email).
+     - "Kullanıcı Ayarları": YALNIZ `users` izni varsa render edilir.
+       Kaynak sidebar ile AYNI: `admin.sidebar_permissions` (DB
+       admin_users.sidebar_permissions). Sayfanın kendisi ayrıca
+       server'da `AdminSectionGuard need="users"` ile korunur (değişmedi).
+     - "Çıkış Yap": mevcut handleLogout → useAdmin().signOut()
+       (signOutAdmin + giriş ekranına yönlendirme).
+     - Dışarı tıklama / Escape / ikon tekrar tıklaması → kapanır.
+  ---------------------------------------------- */
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const canManageUsers =
+    !!admin &&
+    Array.isArray(admin.sidebar_permissions) &&
+    admin.sidebar_permissions.includes("users");
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(e.target as Node)
+      ) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [userMenuOpen]);
+
+
   /* 🛡️ ACTIVE STATE — longest prefix match.
      Eski koşul: `pathname === href || pathname.startsWith(href + "/")`
      üç noktada (currentItem / currentGroup / sidebar item active) ayrı
@@ -965,18 +1007,13 @@ function AdminShell({
             className="flex flex-col items-center text-center max-w-full transition-opacity duration-200 hover:opacity-90"
           >
             <AdminBrandMark />
-            <span className="admin-brand-text mt-4 max-w-full">
-              <span
-                className="admin-brand-name block break-words"
-                style={{ fontSize: 23, lineHeight: 1.15 }}
-              >
-                KalkanDigital
-              </span>
+            {/* Marka adı logonun içinde → yalnız alt başlık. */}
+            <span className="admin-brand-text mt-3.5 max-w-full">
               <span
                 className="admin-brand-sub block"
                 /* paddingLeft = harf aralığı → son harften sonraki boşluk
                    dengelenir, satır optik olarak ortalanır. */
-                style={{ fontSize: 9.5, letterSpacing: "0.34em", paddingLeft: "0.34em", marginTop: 6 }}
+                style={{ fontSize: 9.5, letterSpacing: "0.34em", paddingLeft: "0.34em", marginTop: 0 }}
               >
                 Admin · CRM
               </span>
@@ -1121,16 +1158,69 @@ function AdminShell({
             {/* Notification — unified center (preview + persistent log) */}
             <NotificationBell />
 
-            {/* Avatar — initial admin adı/emailden */}
-            <div
-              className="admin-avatar"
-              title={
-                admin
-                  ? `${admin.full_name || ""} (${admin.email})`
-                  : ""
-              }
-            >
-              {adminInitial}
+            {/* Avatar — initial admin adı/emailden; tıklayınca kullanıcı menüsü */}
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="admin-avatar cursor-pointer border-0 p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-accent)]/50 focus-visible:ring-offset-2"
+                title={
+                  admin
+                    ? `${admin.full_name || ""} (${admin.email})`
+                    : ""
+                }
+                aria-label="Kullanıcı menüsü"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+              >
+                {adminInitial}
+              </button>
+
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label="Kullanıcı menüsü"
+                  className="absolute right-0 top-full mt-2 z-50 w-60 max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--admin-border)] bg-white py-1.5 shadow-[0_12px_32px_-12px_rgb(15_23_42_/_0.25)]"
+                >
+                  {admin && (
+                    <div className="px-4 pt-2 pb-2.5 border-b border-[var(--admin-border)]">
+                      <p className="text-[13px] font-semibold text-[var(--admin-text)] truncate leading-tight">
+                        {admin.full_name || admin.email}
+                      </p>
+                      {admin.full_name && (
+                        <p className="text-[11.5px] text-[var(--admin-muted-2)] truncate mt-0.5">
+                          {admin.email}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className="pt-1.5">
+                    {canManageUsers && (
+                      <Link
+                        href="/maki-admin/users"
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-[13px] text-[var(--admin-muted)] hover:bg-slate-50 hover:text-[var(--admin-text)] transition-colors"
+                      >
+                        <Users size={15} className="shrink-0" />
+                        Kullanıcı Ayarları
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        void handleLogout();
+                      }}
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-[13px] text-[var(--admin-muted)] hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                    >
+                      <LogOut size={15} className="shrink-0" />
+                      Çıkış Yap
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
