@@ -566,44 +566,36 @@ export default function AdminLayout({
 }
 
 /* ---------------------------------------------
-   🔥 AdminBrandMark — admin-logo.webp varsa render eder;
-   <img onError> → "M" hardcoded fallback'a düşer.
-   Hem sidebar Logo Link'i hem de mobil drawer için aynı mark.
-   storage'a hiç logo yüklenmemişse UI bozulmaz; "M" rozeti kalır.
+   🔥 AdminBrandMark — sidebar marka alanının logosu (admin-logo.webp).
+   Çerçevesiz: kutu/arka plan/kenarlık/köşe/gölge YOK; doğrudan koyu
+   lacivert zemin üzerinde. Yükseklik 76px, genişlik orana göre (en
+   fazla 180px) — kırpma/esnetme yok. Logo yüklenemezse (<img onError>)
+   aynı çerçevesiz dilde serif "K" monogramı gösterilir.
+   Yalnız sidebar'da kullanılır; giriş ekranı logoları ayrı bileşenler.
 ---------------------------------------------- */
 function AdminBrandMark() {
   const [imgFailed, setImgFailed] = useState(false);
   /* 🛡️ R2 versiyonu (server layout'tan) → logo değişince URL değişir. */
   const { logo: logoVersion } = useAdminBrandingVersions();
   if (imgFailed) {
-    return <span className="admin-brand-mark">M</span>;
+    return (
+      <span
+        aria-hidden="true"
+        className="admin-brand-name block leading-none"
+        style={{ fontSize: 56, letterSpacing: "-0.03em" }}
+      >
+        K
+      </span>
+    );
   }
   return (
-    <span
-      className="admin-brand-mark"
-      style={{
-        padding: 0,
-        overflow: "hidden",
-        background: "transparent",
-        /* Yalnız sidebar logosu: 42 → 52px ("M" yedeği ve giriş
-           ekranı logoları ETKİLENMEZ). */
-        width: 52,
-        height: 52,
-      }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={getAdminLogoUrl(logoVersion)}
-        alt="Admin"
-        onError={() => setImgFailed(true)}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-          display: "block",
-        }}
-      />
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getAdminLogoUrl(logoVersion)}
+      alt="KalkanDigital"
+      onError={() => setImgFailed(true)}
+      className="block h-[76px] w-auto max-w-[180px] object-contain"
+    />
   );
 }
 
@@ -964,18 +956,35 @@ function AdminShell({
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
       >
-        {/* Logo */}
-        <div className="px-5 pt-6 pb-5 flex items-center justify-between">
-          <Link href="/maki-admin" className="admin-brand">
+        {/* Marka alanı — logo üstte, altında iki satırlı marka metni;
+            tek, ortalanmış blok. Mobil kapatma butonu sağ üst köşede
+            (akış dışı) → marka bloğu ortada kalır. */}
+        <div className="relative px-5 pt-8 pb-6 flex justify-center">
+          <Link
+            href="/maki-admin"
+            className="flex flex-col items-center text-center max-w-full transition-opacity duration-200 hover:opacity-90"
+          >
             <AdminBrandMark />
-            <span className="admin-brand-text">
-              <span className="admin-brand-name block">KalkanDigital</span>
-              <span className="admin-brand-sub block">Admin · CRM</span>
+            <span className="admin-brand-text mt-4 max-w-full">
+              <span
+                className="admin-brand-name block break-words"
+                style={{ fontSize: 23, lineHeight: 1.15 }}
+              >
+                KalkanDigital
+              </span>
+              <span
+                className="admin-brand-sub block"
+                /* paddingLeft = harf aralığı → son harften sonraki boşluk
+                   dengelenir, satır optik olarak ortalanır. */
+                style={{ fontSize: 9.5, letterSpacing: "0.34em", paddingLeft: "0.34em", marginTop: 6 }}
+              >
+                Admin · CRM
+              </span>
             </span>
           </Link>
           <button
             onClick={() => setOpen(false)}
-            className="md:hidden text-[var(--admin-sidebar-text)] hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition"
+            className="md:hidden absolute top-3 right-3 text-[var(--admin-sidebar-text)] hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition"
             aria-label="Kapat"
           >
             <X size={18} />
