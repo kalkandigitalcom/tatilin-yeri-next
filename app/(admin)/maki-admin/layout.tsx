@@ -991,7 +991,7 @@ function AdminShell({
       <aside
         className={`
           admin-sidebar
-          fixed md:static inset-y-0 left-0 z-50
+          fixed md:sticky md:top-0 md:h-screen inset-y-0 left-0 z-50
           w-72 md:w-[260px] shrink-0
           flex flex-col
           transition-transform duration-300
@@ -1001,14 +1001,14 @@ function AdminShell({
         {/* Marka alanı — logo üstte, altında iki satırlı marka metni;
             tek, ortalanmış blok. Mobil kapatma butonu sağ üst köşede
             (akış dışı) → marka bloğu ortada kalır. */}
-        <div className="relative px-5 pt-8 pb-6 flex justify-center">
+        <div className="relative shrink-0 px-5 pt-8 pb-6 flex justify-center">
           <Link
             href="/maki-admin"
             className="flex flex-col items-center text-center max-w-full transition-opacity duration-200 hover:opacity-90"
           >
             <AdminBrandMark />
             {/* Marka adı logonun içinde → yalnız alt başlık. */}
-            <span className="admin-brand-text mt-3.5 max-w-full">
+            <span className="admin-brand-text max-w-full" style={{ marginTop: 0 }}>
               <span
                 className="admin-brand-sub block"
                 /* paddingLeft = harf aralığı → son harften sonraki boşluk
@@ -1032,7 +1032,7 @@ function AdminShell({
         <div className="mx-5 border-t border-[var(--admin-sidebar-border)]" />
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6">
+        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-5 space-y-6">
           {/* 🛡️ NavBadge pulse/ring — .admin-nav-badge-ring default
              opacity:0 (hareketsiz); animasyon SADECE
              prefers-reduced-motion: no-preference altında çalışır. */}
@@ -1088,7 +1088,7 @@ function AdminShell({
         </nav>
 
         {/* Footer — admin info + logout */}
-        <div className="px-3 py-4 border-t border-[var(--admin-sidebar-border)] space-y-2">
+        <div className="shrink-0 px-3 py-4 border-t border-[var(--admin-sidebar-border)] space-y-2">
           {admin && (
             <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/5">
               <p className="text-[12px] font-semibold text-[var(--admin-sidebar-text)] truncate leading-tight">
@@ -1125,13 +1125,20 @@ function AdminShell({
         {/* TOPBAR */}
         <header className="admin-topbar h-16 flex items-center justify-between px-5 md:px-8 sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setOpen(true)}
-              className="md:hidden admin-icon-btn -ml-2"
-              aria-label="Menü"
-            >
-              <Menu size={18} />
-            </button>
+            {/* 🛡️ Responsive görünürlük SARMALAYICIDA: `.admin-icon-btn`
+                (globals.css, katmansız) `display: inline-flex` verir ve
+                Tailwind v4'ün @layer utilities içindeki `md:hidden`'ını
+                ezer → buton masaüstünde de görünüyordu. Özel sınıf
+                taşımayan sarmalayıcıda `md:hidden` sorunsuz çalışır. */}
+            <div className="md:hidden -ml-2 shrink-0">
+              <button
+                onClick={() => setOpen(true)}
+                className="admin-icon-btn"
+                aria-label="Menü"
+              >
+                <Menu size={18} />
+              </button>
+            </div>
 
             <div className="min-w-0">
               <p className="admin-page-eyebrow leading-none">
@@ -1145,15 +1152,19 @@ function AdminShell({
 
           <div className="flex items-center gap-2 md:gap-3">
             {/* Siteyi Görüntüle — public site, yeni sekme (arama kutusu kaldırıldı) */}
-            <a
-              href="/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden md:inline-flex items-center gap-2 admin-btn-ghost"
-            >
-              <Eye size={15} />
-              Siteyi Görüntüle
-            </a>
+            {/* 🛡️ Aynı sebep: `.admin-btn-ghost` display'i `hidden`'ı ezer →
+                görünürlük sarmalayıcıda (mobilde gizli, md+ görünür). */}
+            <span className="hidden md:inline-flex">
+              <a
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="items-center gap-2 admin-btn-ghost"
+              >
+                <Eye size={15} />
+                Siteyi Görüntüle
+              </a>
+            </span>
 
             {/* Notification — unified center (preview + persistent log) */}
             <NotificationBell />
