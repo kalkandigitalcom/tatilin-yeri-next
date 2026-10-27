@@ -1,5 +1,5 @@
 /* ===============================================================
-   🛡️ KTB SORGU SAYFASI AYRIŞTIRICISI (bakanlikbelgelikonutlardemo.aspx)
+   🛡️ KTB SORGU SAYFASI AYRIŞTIRICISI (bakanlikbelgelikonutlar.aspx)
    ===============================================================
    GERÇEK production yanıtlarına dayanır (tests/fixtures/ktb/):
      ktb_07-6195.html      → kayıt var
@@ -12,7 +12,9 @@
    SAYFA YAPISI (doğrulanan işaretler):
      1) Sorgu yankısı — form action sorgulanan numarayı taşır:
           <form method="post"
-                action="/genel/bakanlikbelgelikonutlardemo.aspx?belgeno=07-6195" …>
+                action="/genel/bakanlikbelgelikonutlar.aspx?belgeno=07-6195" …>
+        (sayfa adı 2026-10'da `…demo.aspx`'ten değişti; yol tek kaynaktan,
+        `KTB_LICENSE_QUERY_PATH` — istek URL'i ile yankı hep aynı)
      2) Sonuç verisi sayfaya gömülü TEK bir JS atamasıdır (client-side
         grid bunu okur; ayrı XHR/API yok):
           var jsondata = [ … ];filtrele();
@@ -42,6 +44,7 @@
         ambiguous_result    kayıt var ama birebir eşleşme yok
 =============================================================== */
 
+import { KTB_LICENSE_QUERY_PATH } from "./ktb-document-number";
 import type { LicenseCheckResult } from "./license-state";
 
 /** Gerçek KTB örnekleriyle doğrulandı (tests/fixtures/ktb). */
@@ -98,7 +101,7 @@ export function parseKtbLicensePage(
   if (typeof html !== "string" || html.length === 0) return checkFailed("html_changed");
 
   /* 1) Yanıt bu sorguya mı ait? (form action yankısı) */
-  const echo = `action="/genel/bakanlikbelgelikonutlardemo.aspx?belgeno=${normalizedDocumentNumber}"`;
+  const echo = `action="${KTB_LICENSE_QUERY_PATH}?belgeno=${normalizedDocumentNumber}"`;
   if (!html.includes(echo)) return checkFailed("query_mismatch");
 
   /* 2) Gömülü sonuç dizisi. */

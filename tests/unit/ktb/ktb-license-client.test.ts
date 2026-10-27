@@ -16,7 +16,7 @@ describe("fetchKtbLicensePage", () => {
     expect(out).toMatchObject({ ok: true, httpStatus: 200, body: "<html>ok</html>" });
     if (out.ok) expect(out.sha256).toMatch(/^[0-9a-f]{64}$/);
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://www.ktb.gov.tr/genel/bakanlikbelgelikonutlardemo.aspx?belgeno=07-6195");
+    expect(url).toBe("https://www.ktb.gov.tr/genel/bakanlikbelgelikonutlar.aspx?belgeno=07-6195");
     expect(init.redirect).toBe("manual");
     expect(init.cache).toBe("no-store");
     expect((init.headers as Record<string, string>)["User-Agent"]).toContain("Mozilla/5.0");
@@ -28,6 +28,9 @@ describe("fetchKtbLicensePage", () => {
     ["500 → retryable", async () => html("x", 500), { reason: "http_5xx", retryable: true, stopRun: false }],
     ["302 → yapısal", async () => new Response(null, { status: 302, headers: { location: "https://evil.example/" } }), { reason: "redirect", structural: true }],
     ["404 → yapısal", async () => html("x", 404), { reason: "http_404", structural: true }],
+    /* KTB eski `…demo.aspx` adresinin gerçek davranışı (2026-10-27): 200 +
+       boş gövde, content-type yok → yapısal hata, ASLA başarılı sayılmaz. */
+    ["200 + boş gövde, content-type yok → yapısal", async () => new Response("", { status: 200 }), { reason: "unexpected_content_type", structural: true }],
     ["JSON → yapısal", async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }), { reason: "unexpected_content_type", structural: true }],
     ["büyük yanıt", async () => html("x", 200, { "content-length": String(5 * 1024 * 1024) }), { reason: "response_too_large" }],
     ["DNS/ağ hatası", async () => { throw new TypeError("fetch failed"); }, { reason: "network_error", retryable: true }],

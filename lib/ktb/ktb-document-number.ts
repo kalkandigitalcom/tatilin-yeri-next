@@ -15,9 +15,15 @@
    Bu dosya server/client ortak (UI "KTB'de Aç" linki de buradan).
 =============================================================== */
 
-/** Resmi KTB sorgu sayfası (sabit host — string birleştirme YOK). */
-export const KTB_LICENSE_QUERY_URL =
-  "https://www.ktb.gov.tr/genel/bakanlikbelgelikonutlardemo.aspx";
+/** Resmi KTB sorgu sayfası (sabit host — string birleştirme YOK).
+ *  🛡️ KTB sayfayı `bakanlikbelgelikonutlardemo.aspx` → `bakanlikbelgelikonutlar.aspx`
+ *  olarak yeniden adlandırdı (canlı doğrulama 2026-10-27). Eski adres artık
+ *  belgeno ile HTTP 200 + BOŞ gövde (content-type yok), belgeno'suz 404
+ *  döndürüyor → tarama `unexpected_content_type` ×3 ile "sayfa yapısı
+ *  beklenenden farklı" diye duruyordu. Sayfa yapısı (form action yankısı,
+ *  `var jsondata = […];filtrele();`, 9 kayıt alanı) değişmedi. */
+export const KTB_LICENSE_QUERY_PATH = "/genel/bakanlikbelgelikonutlar.aspx";
+export const KTB_LICENSE_QUERY_URL = `https://www.ktb.gov.tr${KTB_LICENSE_QUERY_PATH}`;
 export const KTB_LICENSE_QUERY_HOST = "www.ktb.gov.tr";
 export const KTB_LICENSE_QUERY_PARAM = "belgeno";
 

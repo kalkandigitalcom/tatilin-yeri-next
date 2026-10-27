@@ -53,6 +53,10 @@ describe("KTB parser — gerçek fixture'lar", () => {
       expect(parseKtbLicensePage(VALID_HTML, "07-6196")).toMatchObject({ status: "CHECK_FAILED", reason: "query_mismatch", structural: true });
       expect(parseKtbLicensePage(NOT_FOUND_HTML, "07-6195")).toMatchObject({ status: "CHECK_FAILED", reason: "query_mismatch" });
     });
+    it("eski sayfa adının (…demo.aspx) yankısı → query_mismatch (VALID sayılmaz)", () => {
+      const old = VALID_HTML.split("/genel/bakanlikbelgelikonutlar.aspx").join("/genel/bakanlikbelgelikonutlardemo.aspx");
+      expect(parseKtbLicensePage(old, "07-6195")).toMatchObject({ status: "CHECK_FAILED", reason: "query_mismatch", structural: true });
+    });
   });
 
   describe("tanınmayan yapılar → CHECK_FAILED", () => {

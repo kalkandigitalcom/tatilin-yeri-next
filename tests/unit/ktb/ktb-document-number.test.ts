@@ -44,7 +44,7 @@ describe("KTB URL — sabit host + searchParams", () => {
   it("resmi sorgu URL'i", () => {
     const u = buildKtbLicenseUrl("07-6195");
     expect(u.toString()).toBe(
-      "https://www.ktb.gov.tr/genel/bakanlikbelgelikonutlardemo.aspx?belgeno=07-6195"
+      "https://www.ktb.gov.tr/genel/bakanlikbelgelikonutlar.aspx?belgeno=07-6195"
     );
     expect(u.hostname).toBe(KTB_LICENSE_QUERY_HOST);
   });
