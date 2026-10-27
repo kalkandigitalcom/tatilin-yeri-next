@@ -14,6 +14,7 @@ import {
   Layers,
   Ban,
   Trash2,
+  RotateCcw,
 } from "lucide-react";
 
 import {
@@ -23,6 +24,7 @@ import {
   countInactiveEventsForSourceAction as countInactiveEventsForSource,
 } from "./external-reservations.action";
 import {
+  activateExternalCalendarEvent,
   deactivateExternalCalendarEvent,
   purgeInactiveEventsForSource,
   type ExternalCalendarKpi,
@@ -337,6 +339,44 @@ export default function ExternalReservationList() {
     }
   }
 
+  /* 🛡️ Admin "Aktifleştir" — handleDeactivate'ın tersi. Yalnız elle
+     pasifleştirilmiş satırda görünür; route is_active=true +
+     manually_deactivated=false yazar (sync sweep artık kapatmaz).
+     Aynı busy state paylaşılır → bir satırda aynı anda tek toggle. */
+  async function handleActivate(
+    eventId: string,
+    sourceName: string | null,
+    when: string
+  ) {
+    if (deactivateBusyId) return;
+    setDeactivateBusyId(eventId);
+    try {
+      const res = await activateExternalCalendarEvent(eventId);
+      if (!res.ok) {
+        toast.error("Event aktifleştirilemedi", {
+          id: `ext-act-${eventId}`,
+          description: res.error,
+        });
+        return;
+      }
+      toast.success(
+        res.alreadyActive
+          ? "Event zaten aktifti"
+          : `${sourceName || "Event"} aktifleştirildi · ${when}`,
+        { id: `ext-act-${eventId}` }
+      );
+      await Promise.all([loadKpi(), loadEvents(false)]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Bilinmeyen hata";
+      toast.error("Event aktifleştirilemedi", {
+        id: `ext-act-${eventId}`,
+        description: msg,
+      });
+    } finally {
+      setDeactivateBusyId(null);
+    }
+  }
+
   /* Source bazlı sync — sync endpoint'i FAZ 56B'den. Event mutate
      etmez; yalnız son sync günceller. */
   async function handleSyncSource(sourceId: string, sourceName: string) {
@@ -622,6 +662,13 @@ export default function ExternalReservationList() {
                   `${row.start_date} → ${row.end_date}`
                 )
               }
+              onActivate={() =>
+                handleActivate(
+                  row.id,
+                  row.source?.source_name ?? null,
+                  `${row.start_date} → ${row.end_date}`
+                )
+              }
             />
           ))}
         </div>
@@ -667,12 +714,14 @@ function ExternalEventRow({
   deactivating,
   onSync,
   onDeactivate,
+  onActivate,
 }: {
   row: ExternalEventListItem;
   syncing: boolean;
   deactivating: boolean;
   onSync: () => void;
   onDeactivate: () => void;
+  onActivate: () => void;
 }) {
   const nights = calculateNights(row.start_date, row.end_date);
   const tone = sourceBadgeTone(row.source?.source_name);
@@ -777,6 +826,25 @@ function ExternalEventRow({
                 <Ban size={13} />
               )}
               Pasifleştir
+            </button>
+          )}
+          {/* Pasif + elle pasifleştirilmiş → geri açılabilir. Sync'in
+              stale-pasifleştirdiği (feed'den düşen) satırda buton YOK. */}
+          {!row.is_active && row.manually_deactivated === true && (
+            <button
+              type="button"
+              onClick={onActivate}
+              disabled={deactivating}
+              className="admin-btn-ghost"
+              aria-label="Bu event'i tekrar aktifleştir"
+              title="Bu event'i tekrar aktifleştir — takvimde yeniden bloke eder"
+            >
+              {deactivating ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <RotateCcw size={13} />
+              )}
+              Aktifleştir
             </button>
           )}
           {row.source?.id && row.is_active && (

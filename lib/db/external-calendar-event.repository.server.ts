@@ -71,6 +71,37 @@ export const externalCalendarEventServerRepository = {
       .maybeSingle();
   },
 
+  /** Activate route — event existence + state fetch. Deactivate'ın
+   *  aksine `manually_deactivated` GEREKİR (yalnız admin'in elle
+   *  pasifleştirdiği satır geri açılabilir; kolon migration 032). */
+  async findByIdForActivate(id: string) {
+    return await dbAdmin
+      .from("external_calendar_events")
+      .select(
+        "id, villa_id, source_id, external_uid, start_date, end_date, summary, is_active, manually_deactivated"
+      )
+      .eq("id", id)
+      .maybeSingle();
+  },
+
+  /** 🛡️ Activate — admin'in elle pasifleştirdiği satırı geri açar:
+   *  is_active=true + manually_deactivated=false. WHERE zinciri
+   *  `manually_deactivated=true` içerir → sync'in stale-pasifleştirdiği
+   *  (feed'den düşen) satırlara ASLA dokunmaz (yarış güvenliği).
+   *  Etkilenen id'leri döner (.select("id")); 0 satır = koşul tutmadı. */
+  async reactivateManualById(id: string, updatedAt: string) {
+    return await dbAdmin
+      .from("external_calendar_events")
+      .update({
+        is_active: true,
+        manually_deactivated: false,
+        updated_at: updatedAt,
+      })
+      .eq("id", id)
+      .eq("manually_deactivated", true)
+      .select("id");
+  },
+
   /** Update by id — generic patch (deactivate payload caller'da kurulur:
    *  is_active/manually_deactivated/updated_at). `.select()` YOK. */
   async updateById(id: string, patch: Record<string, unknown>) {

@@ -74,7 +74,7 @@ export const externalCalendarEventRepository = {
       .select(
         `id, villa_id, source_id, external_uid,
          start_date, end_date, summary, status, is_active,
-         last_seen_at, created_at,
+         manually_deactivated, last_seen_at, created_at,
          source:source_id ( id, source_name, is_active,
                             last_success_at, last_error ),
          villa:villa_id ( id, title, slug )`,

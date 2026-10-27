@@ -29,6 +29,9 @@ export type ExternalEventListItem = {
   summary: string | null;
   status: string | null;
   is_active: boolean;
+  /** Admin elle pasifleştirdiyse true (migration 032). Yalnız bu
+   *  satırlar "Aktifleştir" ile geri açılabilir. */
+  manually_deactivated?: boolean;
   last_seen_at: string;
   created_at: string;
   source: {
@@ -155,6 +158,46 @@ export async function deactivateExternalCalendarEvent(
       id: json.id || id,
       alreadyInactive: !!json.already_inactive,
     };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Bilinmeyen hata";
+    return { ok: false, error: msg };
+  }
+}
+
+/* ===============================================================
+   🛡️ ACTIVATE EVENT (admin soft toggle — deactivate'ın tersi)
+   ===============================================================
+   Route (POST .../events/:id/activate) service-role ile UPDATE atar:
+   is_active=true + manually_deactivated=false. Yalnız admin'in elle
+   pasifleştirdiği, geçmişte kalmamış satır açılır; feed'den düştüğü
+   için sync'in pasifleştirdiği satır 409 döner (açılsa bile bir
+   sonraki sync tekrar kapatırdı). IDEMPOTENT: zaten aktifse
+   `already_active:true`. Activity log route içinde.
+=============================================================== */
+export type ActivateExternalEventResult =
+  | { ok: true; id: string; alreadyActive: boolean }
+  | { ok: false; error: string };
+
+export async function activateExternalCalendarEvent(
+  eventId: string
+): Promise<ActivateExternalEventResult> {
+  const id = (eventId || "").toString().trim();
+  if (!id) return { ok: false, error: "event id gerekli" };
+  try {
+    const res = await adminFetch(
+      `/api/admin/external-calendars/events/${encodeURIComponent(id)}/activate`,
+      { method: "POST" }
+    );
+    const json = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      id?: string;
+      already_active?: boolean;
+      error?: string;
+    };
+    if (!res.ok || !json.ok) {
+      return { ok: false, error: json.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, id: json.id || id, alreadyActive: !!json.already_active };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Bilinmeyen hata";
     return { ok: false, error: msg };

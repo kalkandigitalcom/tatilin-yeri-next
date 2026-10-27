@@ -362,9 +362,10 @@ describe("C) her admin API handler'ı izin kontrolü içerir", () => {
   ]);
 
   /* +3: villa-license-checks (özet/tarama, tick, tek villa kontrolü).
-     +1: villas/[id]/gallery/upload-url (galeri direct-to-R2 imzalı URL). */
-  it("taranan dosya sayısı (59 admin API dosyası)", () => {
-    expect(files.length).toBe(59);
+     +1: villas/[id]/gallery/upload-url (galeri direct-to-R2 imzalı URL).
+     +1: external-calendars/events/[id]/activate (iCal event tekrar aktifleştir). */
+  it("taranan dosya sayısı (60 admin API dosyası)", () => {
+    expect(files.length).toBe(60);
   });
 
   for (const f of files) {
