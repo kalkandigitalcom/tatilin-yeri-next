@@ -224,7 +224,7 @@ export const villaAdminRepository = {
     return await dbAdmin
       .from("villa")
       .select(
-        "deposit, cleaning_fee, cleaning_currency, cleaning_limit, custom_prepayment_rate, minimum_stay_nights, pool_heating_fee, pool_heating_currency, pool_heating_months"
+        "deposit, deposit_currency, cleaning_fee, cleaning_currency, cleaning_limit, custom_prepayment_rate, minimum_stay_nights, pool_heating_fee, pool_heating_currency, pool_heating_months"
       )
       .eq("id", id)
       .maybeSingle();
@@ -1537,7 +1537,7 @@ export const villaAdminRepository = {
     return await dbAdmin
       .from("villa")
       .select(
-        "id, title, cleaning_fee, cleaning_currency, cleaning_limit, custom_prepayment_rate, deposit, pool_heating_fee, pool_heating_currency, pool_heating_months"
+        "id, title, cleaning_fee, cleaning_currency, cleaning_limit, custom_prepayment_rate, deposit, deposit_currency, pool_heating_fee, pool_heating_currency, pool_heating_months"
       )
       .eq("id", id)
       .single();

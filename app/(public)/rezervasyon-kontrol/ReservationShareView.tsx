@@ -47,6 +47,17 @@ const formatShareAmount = (v: number | null, locale: Locale): string =>
     ? "—"
     : `${Math.round(v).toLocaleString(LOCALE_BCP47[locale])} TL`;
 
+/* 🛡️ Migration 099 — depozito kendi para biriminde. TRY → formatShareAmount
+   ile BİREBİR ("… TL"); yabancı → aynı sayı biçimi + kod ("500 EUR"). */
+const formatShareDeposit = (
+  v: number | null,
+  currency: string | null | undefined,
+  locale: Locale
+): string =>
+  v === null || !currency || currency === "TRY"
+    ? formatShareAmount(v, locale)
+    : `${Math.round(v).toLocaleString(LOCALE_BCP47[locale])} ${currency}`;
+
 /** TR: "21 Eylül 2026, Pazartesi" — gün adı tarihten dinamik türetilir. */
 function formatShareDate(iso: string | null, locale: Locale): string {
   if (!iso) return "—";
@@ -326,7 +337,11 @@ export default async function ReservationShareView({
                     {dict.shareDeposit}
                   </dt>
                   <dd className="text-[15px] font-semibold text-[var(--color-stone-900)] tabular-nums">
-                    {TL(data.damageDeposit)}
+                    {formatShareDeposit(
+                      data.damageDeposit,
+                      data.damageDepositCurrency,
+                      locale
+                    )}
                   </dd>
                 </div>
                 <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-stone-400)]">

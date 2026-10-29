@@ -4,7 +4,7 @@ import Row from "./shared/Row";
 
 import {
   shouldDisplayDamageDeposit,
-  formatDamageDepositTRY,
+  formatDamageDeposit,
   DAMAGE_DEPOSIT_NOTE,
 } from "@/lib/damage-deposit.helper";
 
@@ -440,7 +440,12 @@ export default function PriceStep({
             Hasar Depozitosu
           </p>
           <p className="font-display text-lg text-[var(--color-stone-900)] mt-1 tabular-nums">
-            {formatDamageDepositTRY(selectedVilla?.deposit)}
+            {/* 🛡️ Migration 099 — villanın kendi para biriminde
+                (NULL → TRY; TRY'de formatDamageDepositTRY ile aynı). */}
+            {formatDamageDeposit(
+              selectedVilla?.deposit,
+              selectedVilla?.deposit_currency
+            )}
           </p>
           <p className="text-[11px] text-[var(--color-stone-500)] mt-1">
             {DAMAGE_DEPOSIT_NOTE}

@@ -1,4 +1,5 @@
 import type { ReservationCreateInput } from "../types";
+import { normalizeDepositCurrency } from "@/lib/damage-deposit.helper";
 
 /* ===============================================================
    🛡️ FAZ 2 — buildCreateReservationPayload (PURE)
@@ -183,6 +184,21 @@ export function buildCreateReservationPayload(
     // dahil değil; ayrı kolon).
     ...(data.damage_deposit !== undefined
       ? { damage_deposit: Number(data.damage_deposit) || 0 }
+      : {}),
+
+    // 🛡️ Migration 099 — depozitonun orijinal tutarı / para birimi.
+    // Sadece tanımlıysa yazılır (eski payload'lar BYTE-IDENTICAL).
+    // Para birimi allowlist'e normalize edilir (bilinmeyen → TRY).
+    ...(data.original_damage_deposit !== undefined
+      ? { original_damage_deposit: Number(data.original_damage_deposit) || 0 }
+      : {}),
+
+    ...(data.original_damage_deposit_currency !== undefined
+      ? {
+          original_damage_deposit_currency: normalizeDepositCurrency(
+            data.original_damage_deposit_currency
+          ),
+        }
       : {}),
 
     // 🛡️ COMMISSION AMOUNT — accounting snapshot

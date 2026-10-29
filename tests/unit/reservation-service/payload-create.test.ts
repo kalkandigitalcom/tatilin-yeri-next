@@ -246,3 +246,66 @@ describe("buildCreateReservationPayload — payment_method_id ?? null", () => {
     expect(p.payment_method_id).toBe("pm-1");
   });
 });
+
+/* 🛡️ Migration 099 — depozito orijinal tutar / para birimi (additive). */
+describe("buildCreateReservationPayload — depozito para birimi", () => {
+  it("original_damage_deposit(_currency) tanımsızsa payload'a YAZILMAZ", () => {
+    const p = buildCreateReservationPayload({
+      data: { ...minimalInput, damage_deposit: 5000 },
+      reservationCommissionAmount: 0,
+    });
+    expect("original_damage_deposit" in p).toBe(false);
+    expect("original_damage_deposit_currency" in p).toBe(false);
+    expect(p.damage_deposit).toBe(5000);
+  });
+
+  it("tanımlıysa yazılır; para birimi allowlist'e normalize edilir", () => {
+    const p = buildCreateReservationPayload({
+      data: {
+        ...minimalInput,
+        damage_deposit: 17550,
+        original_damage_deposit: 500,
+        original_damage_deposit_currency: "eur",
+      },
+      reservationCommissionAmount: 0,
+    });
+    expect(p.damage_deposit).toBe(17550);
+    expect(p.original_damage_deposit).toBe(500);
+    expect(p.original_damage_deposit_currency).toBe("EUR");
+  });
+
+  it("desteklenmeyen para birimi → TRY", () => {
+    const p = buildCreateReservationPayload({
+      data: {
+        ...minimalInput,
+        original_damage_deposit: 100,
+        original_damage_deposit_currency: "JPY",
+      },
+      reservationCommissionAmount: 0,
+    });
+    expect(p.original_damage_deposit_currency).toBe("TRY");
+  });
+
+  it("depozito alanları toplam / ödeme alanlarını DEĞİŞTİRMEZ", () => {
+    const base = buildCreateReservationPayload({
+      data: { ...minimalInput, prepayment_amount: 10000, remaining_payment: 40000 },
+      reservationCommissionAmount: 0,
+    });
+    const withDeposit = buildCreateReservationPayload({
+      data: {
+        ...minimalInput,
+        prepayment_amount: 10000,
+        remaining_payment: 40000,
+        damage_deposit: 17550,
+        original_damage_deposit: 500,
+        original_damage_deposit_currency: "EUR",
+      },
+      reservationCommissionAmount: 0,
+    });
+    for (const k of ["total_price", "prepayment_amount", "remaining_payment", "paid_amount"] as const) {
+      expect((withDeposit as Record<string, unknown>)[k]).toEqual(
+        (base as Record<string, unknown>)[k]
+      );
+    }
+  });
+});

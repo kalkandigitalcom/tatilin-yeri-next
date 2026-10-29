@@ -63,6 +63,7 @@ import { applyRateLimit } from "@/lib/rate-limit";
      {
        config: {
          deposit: number | null,
+         deposit_currency: string | null,
          cleaning_fee: number | null,
          cleaning_currency: string | null,
          cleaning_limit: number | null,
@@ -100,6 +101,8 @@ import { applyRateLimit } from "@/lib/rate-limit";
 
 type VillaConfig = {
   deposit: number | null;
+  /* 🛡️ Migration 099 — depozito para birimi. NULL → TRY (client). */
+  deposit_currency: string | null;
   cleaning_fee: number | null;
   cleaning_currency: string | null;
   cleaning_limit: number | null;
@@ -124,6 +127,7 @@ type ResponseShape = {
 
 const EMPTY_CONFIG: VillaConfig = {
   deposit: null,
+  deposit_currency: null,
   cleaning_fee: null,
   cleaning_currency: null,
   cleaning_limit: null,
@@ -183,6 +187,10 @@ export async function GET(
       ? {
           deposit:
             typeof raw.deposit === "number" ? raw.deposit : null,
+          deposit_currency:
+            typeof raw.deposit_currency === "string"
+              ? raw.deposit_currency
+              : null,
           cleaning_fee:
             typeof raw.cleaning_fee === "number"
               ? raw.cleaning_fee

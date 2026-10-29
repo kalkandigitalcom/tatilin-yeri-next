@@ -18,8 +18,8 @@ import {
 } from "@/lib/payment.helper";
 
 import {
-  shouldDisplayDamageDeposit,
-  formatDamageDepositTRY,
+  shouldDisplayReservationDamageDeposit,
+  formatReservationDamageDeposit,
 } from "@/lib/damage-deposit.helper";
 
 import { formatTRY } from "@/lib/format";
@@ -123,6 +123,9 @@ type VoucherReservationRow = {
   id: string;
   reservation_no: string | null;
   damage_deposit: number | null;
+  /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi (NULL → TRY). */
+  original_damage_deposit?: number | null;
+  original_damage_deposit_currency?: string | null;
   name: string | null;
   phone: string | null;
   /** 🛡️ İkinci telefon — eski rezervasyonlarda null → satır basılmaz. */
@@ -235,8 +238,8 @@ export async function buildVoucherData(
 
     villaTitle,
 
-    damageDepositDisplay: shouldDisplayDamageDeposit(r.damage_deposit)
-      ? formatDamageDepositTRY(r.damage_deposit)
+    damageDepositDisplay: shouldDisplayReservationDamageDeposit(r)
+      ? formatReservationDamageDeposit(r)
       : null,
 
     startDate: formatDateTr(r.start_date),

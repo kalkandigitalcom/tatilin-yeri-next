@@ -36,6 +36,7 @@ import {
 import { getVillaReviewStatsBatch } from "./villa-review.service";
 import type { NotFoundSuggestionVilla } from "@/app/components/not-found/NotFoundContent";
 import { normalizeYouTubeVideos } from "@/lib/youtube.helper";
+import { normalizeDepositCurrency } from "@/lib/damage-deposit.helper";
 import { resolveVillaImageUrl } from "@/lib/storage.helpers";
 /* 🛡️ Kart "…'den başlayan" fiyatı — villa_prices içindeki MIN nightly
    (getStartingPrice mevcut, min hesaplar). Eskiden villa_prices[0]
@@ -78,6 +79,9 @@ export type Villa = {
   bathrooms: number;
 
   deposit?: number;
+
+  /* 🛡️ Migration 099 — depozito para birimi. NULL → TRY. */
+  deposit_currency?: string | null;
 
   cleaning_fee?: number;
 
@@ -224,6 +228,9 @@ export type VillaDTO = {
   bathrooms: number;
 
   deposit: number;
+
+  /* 🛡️ Migration 099 — depozito para birimi (NULL → "TRY"). */
+  deposit_currency: string;
 
   cleaning_fee: number;
 
@@ -428,6 +435,9 @@ function mapVilla(
 
     deposit:
       villa.deposit ?? 0,
+
+    deposit_currency:
+      normalizeDepositCurrency(villa.deposit_currency),
 
     cleaning_fee:
       villa.cleaning_fee ?? 0,

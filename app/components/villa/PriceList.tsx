@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Calendar, Moon, ShieldCheck, Info } from "lucide-react";
 
 import { convertPrice, formatCurrency } from "@/lib/currency";
+import { normalizeDepositCurrency } from "@/lib/damage-deposit.helper";
 import { useCurrency } from "@/app/context/CurrencyContext";
 import { formatDateForLocale, parseLocalDate, formatLocalDate } from "@/lib/date-format";
 import { applyDiscountToDailyPrice, type DiscountRange } from "@/lib/price.engine";
@@ -241,6 +242,7 @@ export default function PriceList({
   prices,
   minimumStayNights = null,
   deposit = null,
+  depositCurrency = null,
   discounts = null,
   locale,
 }: {
@@ -251,6 +253,8 @@ export default function PriceList({
   /* Villa-level depozito (TRY). null/0 → Bilgi panelinde satır yok.
      Optional + default null → eski caller'lar backward-compat çalışır. */
   deposit?: number | null;
+  /* 🛡️ Migration 099 — depozito para birimi. null → TRY (eski davranış). */
+  depositCurrency?: string | null;
   /* 🛡️ YENİ (bu tur) — villa_discounts kayıtları (aynı `DiscountRange`
      şekli, lib/price.engine.ts; homepage/VillaCard'ın zaten kullandığı
      TİP). Verilmezse/null ise (eski caller'lar, örn. /v/[token] paylaşım
@@ -285,7 +289,12 @@ export default function PriceList({
     typeof deposit === "number" && Number.isFinite(deposit) && deposit > 0;
 
   const convertedDeposit = hasDeposit
-    ? convertPrice(deposit as number, "TRY", currency, rates)
+    ? convertPrice(
+        deposit as number,
+        normalizeDepositCurrency(depositCurrency),
+        currency,
+        rates
+      )
     : 0;
 
   const hasInfo = hasMinStay || hasDeposit;

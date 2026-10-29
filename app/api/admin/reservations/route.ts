@@ -10,6 +10,7 @@ import {
   updateReservationStatus,
 } from "@/app/services/reservation.service";
 import { reservationServerRepository } from "@/lib/db/reservation.repository.server";
+import { resolveAuthoritativeDamageDeposit } from "@/app/services/reservation/_helpers/deposit-verify";
 import type {
   ReservationCreateInput,
   ReservationStatusLegacy,
@@ -113,6 +114,18 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
+    /* 🛡️ Migration 099 — depozito villanın kendi kaydından (tutar +
+       para birimi + TRY karşılığı) yazılır; client değerleri ezilir.
+       Yabancı para birimli depozito için kur yoksa throw → 400.
+       Toplam / ödeme alanlarına DOKUNULMAZ. */
+    if (body?.villa_id) {
+      const deposit = await resolveAuthoritativeDamageDeposit(body.villa_id);
+      body.damage_deposit = deposit.damage_deposit;
+      body.original_damage_deposit = deposit.original_damage_deposit;
+      body.original_damage_deposit_currency =
+        deposit.original_damage_deposit_currency;
+    }
+
     const created = await createReservation(body, {
       insertRepository: reservationServerRepository,
     });

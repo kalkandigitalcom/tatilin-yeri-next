@@ -34,6 +34,7 @@ export type VillaCreateAuditAfter = {
   bedrooms: VillaFormData["bedrooms"];
   bathrooms: VillaFormData["bathrooms"];
   deposit: VillaFormData["deposit"];
+  deposit_currency: VillaFormData["deposit_currency"];
   cleaning_fee: VillaFormData["cleaning_fee"];
   cleaning_currency: VillaFormData["cleaning_currency"];
   minimum_stay_nights: VillaFormData["minimum_stay_nights"];
@@ -83,6 +84,7 @@ export function buildVillaCreateAuditAfter(
     bedrooms: form.bedrooms,
     bathrooms: form.bathrooms,
     deposit: form.deposit,
+    deposit_currency: form.deposit_currency,
     cleaning_fee: form.cleaning_fee,
     cleaning_currency: form.cleaning_currency,
     minimum_stay_nights: form.minimum_stay_nights,
@@ -127,6 +129,7 @@ export type VillaUpdateAuditSnapshot = {
   bedrooms: VillaFormData["bedrooms"];
   bathrooms: VillaFormData["bathrooms"];
   deposit: VillaFormData["deposit"];
+  deposit_currency: VillaFormData["deposit_currency"];
   cleaning_fee: VillaFormData["cleaning_fee"];
   cleaning_currency: VillaFormData["cleaning_currency"];
   minimum_stay_nights: VillaFormData["minimum_stay_nights"];
@@ -201,6 +204,7 @@ function buildSnapshot(
     bedrooms: form.bedrooms,
     bathrooms: form.bathrooms,
     deposit: form.deposit,
+    deposit_currency: form.deposit_currency,
     cleaning_fee: form.cleaning_fee,
     cleaning_currency: form.cleaning_currency,
     minimum_stay_nights: form.minimum_stay_nights,

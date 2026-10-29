@@ -17,8 +17,9 @@ import {
 } from "@/lib/payment.helper";
 
 import {
-  shouldDisplayDamageDeposit,
-  formatDamageDepositTRY,
+  shouldDisplayReservationDamageDeposit,
+  formatReservationDamageDeposit,
+  type ReservationDamageDepositFields,
 } from "@/lib/damage-deposit.helper";
 
 import { formatTRY, formatMoney } from "@/lib/format";
@@ -176,12 +177,10 @@ export async function POST(req: Request) {
       paymentPreferenceLabel: paymentPreferenceLbl,
       payNowDisplay,
 
-      damageDepositDisplay: shouldDisplayDamageDeposit(
-        (r as { damage_deposit?: number | null }).damage_deposit
+      damageDepositDisplay: shouldDisplayReservationDamageDeposit(
+        r as ReservationDamageDepositFields
       )
-        ? formatDamageDepositTRY(
-            (r as { damage_deposit?: number | null }).damage_deposit
-          )
+        ? formatReservationDamageDeposit(r as ReservationDamageDepositFields)
         : null,
 
       guestName: r.name || "Misafir",

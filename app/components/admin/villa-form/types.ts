@@ -26,6 +26,9 @@ export type VillaFormShape = {
   bedrooms?: number;
   bathrooms?: number;
   deposit?: number;
+  /* 🛡️ Migration 099 — depozito para birimi (TRY/USD/EUR/GBP).
+   *  NULL/undefined → TRY (payload'da normalize edilir). */
+  deposit_currency?: string | null;
 
   cleaning_fee?: number;
   cleaning_currency?: string;

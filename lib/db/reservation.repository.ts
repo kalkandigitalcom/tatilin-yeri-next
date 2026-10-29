@@ -213,12 +213,16 @@ export const reservationRepository = {
 
      🛡️ SEC-06 F4 — `deposit` EKLENDİ (8-field). Public create'te
         damage_deposit client'tan değil villanın kendi kaydından
-        yazılır (tek call site — price-verify.ts). */
+        yazılır (tek call site — price-verify.ts).
+
+     🛡️ Migration 099 — `deposit_currency` EKLENDİ (9-field). Depozito
+        snapshot'ı villanın kendi para biriminde + TRY karşılığı ile
+        server'da üretilir; kur yoksa rezervasyon reddedilir. */
   async findVillaCleaningConfig(villaId: string) {
     return await db
       .from("villa")
       .select(
-        "cleaning_fee, cleaning_currency, cleaning_limit, custom_prepayment_rate, pool_heating_fee, pool_heating_currency, pool_heating_months, deposit"
+        "cleaning_fee, cleaning_currency, cleaning_limit, custom_prepayment_rate, pool_heating_fee, pool_heating_currency, pool_heating_months, deposit, deposit_currency"
       )
       .eq("id", villaId)
       .maybeSingle();

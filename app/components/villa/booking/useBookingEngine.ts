@@ -66,6 +66,7 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
    payload aynen korunur. */
 import { useCurrency } from "@/app/context/CurrencyContext";
 import { convertPrice, formatCurrency } from "@/lib/currency";
+import { normalizeDepositCurrency } from "@/lib/damage-deposit.helper";
 
 import { getPublicSettingsAction as getPublicSettings } from "@/app/services/settings.action";
 
@@ -143,6 +144,9 @@ export type UseBookingEngineInput = {
      discounts=null → indirimsiz mevcut davranış). */
   discounts?: DiscountRange[] | null;
   deposit?: number;
+  /* 🛡️ Migration 099 — depozito para birimi. Opsiyonel; verilmezse /
+     NULL ise "TRY" (eski davranış BYTE-IDENTICAL). */
+  deposit_currency?: string | null;
   cleaning_fee?: number;
   cleaning_currency?: string;
   cleaning_limit?: number;
@@ -315,6 +319,7 @@ export function useBookingEngine(
     prices,
     discounts = null,
     deposit = 0,
+    deposit_currency = null,
     cleaning_fee = 0,
     cleaning_currency = "TRY",
     cleaning_limit = 0,
@@ -1067,7 +1072,14 @@ export function useBookingEngine(
       )
     : 0;
 
-  const convertedDeposit = convertPrice(deposit, "TRY", currency, rates);
+  /* 🛡️ Migration 099 — depozito villanın kendi para biriminden çevrilir
+     (NULL → TRY). Yalnız gösterim; toplam/ön ödeme hesabına girmez. */
+  const convertedDeposit = convertPrice(
+    deposit,
+    normalizeDepositCurrency(deposit_currency),
+    currency,
+    rates
+  );
 
   const startingPrice = formatCurrency(
     convertPrice(

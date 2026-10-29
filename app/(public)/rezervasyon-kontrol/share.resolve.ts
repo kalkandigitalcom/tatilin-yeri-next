@@ -1,6 +1,7 @@
 import "server-only";
 
 import { reservationShareRepository } from "@/lib/db/reservation-share.repository.server";
+import { resolveReservationDamageDeposit } from "@/lib/damage-deposit.helper";
 import { hashShareToken } from "@/lib/reservation-share.helper";
 import { resolveVillaImageUrl } from "@/lib/storage.helpers";
 import { getPaymentDisplayValues } from "@/lib/payment.helper";
@@ -70,6 +71,9 @@ export type ReservationShareDTO = {
   /** Bilgilendirme (TRY snapshot) — total/remaining hesabına KATILMAZ.
    *  Değer yoksa null → satır gösterilmez. */
   damageDeposit: number | null;
+  /** 🛡️ Migration 099 — damageDeposit'in para birimi. Eski / TRY
+   *  kayıtlarda "TRY" (görünüm BİREBİR eski "… TL" biçimi). */
+  damageDepositCurrency: string;
   cleaningFee: number | null;
   /** 🔥 HAVUZ ISITMA — uçtan uca tamamlama turu. cleaningFee ile AYNI
    *  desen: yalnız seçiliyse ve TRY snapshot > 0 ise dolu, aksi halde
@@ -165,6 +169,8 @@ export async function resolveReservationShare(
           remaining_payment: number | null;
           original_currency: string | null;
           damage_deposit: number | null;
+          original_damage_deposit?: number | null;
+          original_damage_deposit_currency?: string | null;
           cleaning_fee_try: number | null;
           pool_heating_selected: boolean | null;
           pool_heating_total_try: number | null;
@@ -229,7 +235,15 @@ export async function resolveReservationShare(
 
   /* Bilgilendirme snapshot'ları (TRY) — hesaba KATILMAZ. Yalnız > 0 ise
      DTO'ya konur; aksi halde null → view satırı hiç göstermez. */
-  const damageDepositVal = num(row.damage_deposit);
+  /* 🛡️ Migration 099 — yabancı para birimli snapshot varsa orijinal
+     tutar + para birimi; aksi halde (eski kayıt / TRY) BİREBİR eski
+     TRY değeri. */
+  const depositResolved = resolveReservationDamageDeposit(row);
+  const damageDepositCurrency = depositResolved.currency;
+  const damageDepositVal =
+    damageDepositCurrency === "TRY"
+      ? num(row.damage_deposit)
+      : depositResolved.amount;
   const cleaningFeeVal = num(row.cleaning_fee_try);
   /* 🔥 HAVUZ ISITMA — yalnız pool_heating_selected=true VE snapshot>0
      iken gösterilir; eski (pool_heating_selected=false/NULL) rezervasyon
@@ -301,6 +315,7 @@ export async function resolveReservationShare(
       prepayment: prepay > 0 ? prepay : null,
       isFullPayment,
       damageDeposit: damageDepositVal > 0 ? damageDepositVal : null,
+      damageDepositCurrency,
       cleaningFee: cleaningFeeVal > 0 ? cleaningFeeVal : null,
       poolHeatingFee: poolHeatingFeeVal > 0 ? poolHeatingFeeVal : null,
       paymentMethodLabel,

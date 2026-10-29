@@ -16,8 +16,8 @@ import {
 } from "@/lib/payment.helper";
 
 import {
-  shouldDisplayDamageDeposit,
-  formatDamageDepositTRY,
+  shouldDisplayReservationDamageDeposit,
+  formatReservationDamageDeposit,
 } from "@/lib/damage-deposit.helper";
 
 import { formatTRY } from "@/lib/format";
@@ -53,6 +53,9 @@ type PaymentLinkReservationRow = {
   name: string | null;
   email: string | null;
   damage_deposit?: number | null;
+  /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi. */
+  original_damage_deposit?: number | null;
+  original_damage_deposit_currency?: string | null;
   start_date: string | null;
   end_date: string | null;
   total_price: number | null;
@@ -193,8 +196,8 @@ export async function POST(req: Request) {
       isFullPayment: payment.isFullPayment,
       payNowDisplay: formatTRY(payment.payNow),
 
-      damageDepositDisplay: shouldDisplayDamageDeposit(r.damage_deposit)
-        ? formatDamageDepositTRY(r.damage_deposit)
+      damageDepositDisplay: shouldDisplayReservationDamageDeposit(r)
+        ? formatReservationDamageDeposit(r)
         : null,
 
       paymentLink,

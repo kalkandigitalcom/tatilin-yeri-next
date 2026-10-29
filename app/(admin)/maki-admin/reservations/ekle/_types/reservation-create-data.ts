@@ -70,6 +70,9 @@ export type SelectedVillaCreate = {
    *  damage_deposit snapshot olarak yazılır (informational).
    *  null/undefined → 0 fallback (mevcut davranış). */
   deposit?: number | null;
+  /** 🛡️ Migration 099 — depozito para birimi (findContextById).
+   *  NULL → TRY. Snapshot server'da (admin route) üretilir. */
+  deposit_currency?: string | null;
   /** 🔥 HAVUZ ISITMA — uçtan uca tamamlama turu. villaAdminRepository
    *  findContextById'nin (villa.repository.server.ts) `/api/admin/villas/[id]`
    *  GET response'unda zaten döndüğü alanlar (Step 8'de eklendi) — create

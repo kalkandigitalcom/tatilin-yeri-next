@@ -303,7 +303,7 @@ describe("buildVillaCorePayload — delegated normalizers", () => {
 });
 
 describe("buildVillaCorePayload — key set invariant", () => {
-  it("returns EXACTLY 44 expected keys (regression guard)", () => {
+  it("returns EXACTLY 45 expected keys (regression guard)", () => {
     /* Bu test payload object'in key set'inin sabit kaldığını
        garantiler. Yeni alan eklenirse buradaki sayı + listenin
        bilinçli güncellenmesi gerekir. DB write surface kontrolü. */
@@ -329,6 +329,7 @@ describe("buildVillaCorePayload — key set invariant", () => {
       "commission_rate",
       "custom_prepayment_rate",
       "deposit",
+      "deposit_currency",
       "description",
       "guests",
       "indoor_pool",
@@ -366,7 +367,39 @@ describe("buildVillaCorePayload — key set invariant", () => {
        owner_id (property owners) — listeye eklendi. Anahtar SİLİNMEDİ;
        `toEqual(EXPECTED)` tam-küme kontrolü AYNEN duruyor, yani guard
        gevşemedi. Üretim kodu DEĞİŞMEDİ. */
-    expect(keys.length).toBe(44);
+    expect(keys.length).toBe(45);
     expect(keys).toEqual(EXPECTED);
+  });
+});
+
+/* 🛡️ Migration 099 — depozito para birimi. */
+describe("buildVillaCorePayload — deposit_currency", () => {
+  const build = (deposit_currency: unknown) =>
+    buildVillaCorePayload({
+      form: { ...minimalForm, deposit: 500, deposit_currency } as VillaForm,
+      mapData: coordsMap,
+      slug: "v",
+    });
+
+  it("tanımsız / NULL / boş → TRY (eski kayıtlar, create varsayılanı)", () => {
+    expect(build(undefined).deposit_currency).toBe("TRY");
+    expect(build(null).deposit_currency).toBe("TRY");
+    expect(build("").deposit_currency).toBe("TRY");
+  });
+
+  it("desteklenen para birimleri korunur", () => {
+    for (const c of ["TRY", "USD", "EUR", "GBP"]) {
+      expect(build(c).deposit_currency).toBe(c);
+    }
+    expect(build("eur").deposit_currency).toBe("EUR");
+  });
+
+  it("desteklenmeyen değer → TRY (server-side allowlist)", () => {
+    expect(build("JPY").deposit_currency).toBe("TRY");
+    expect(build("<script>").deposit_currency).toBe("TRY");
+  });
+
+  it("deposit tutarı para biriminden bağımsız aynen yazılır", () => {
+    expect(build("EUR").deposit).toBe(500);
   });
 });

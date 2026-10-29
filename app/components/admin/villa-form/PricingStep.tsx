@@ -121,17 +121,41 @@ export default function PricingStep({
             (< md) grid-cols-1 korunduğu için mevcut tek-sütun davranış
             AYNEN devam eder. */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          {/* 🛡️ DEPOZİTO — migration 099. Temizlik ücreti ile AYNI
+              desen: tutar + para birimi. NULL/boş para birimi → TRY
+              (eski kayıtlar). Depozito toplam/ön ödeme hesaplarına
+              dahil DEĞİLDİR (bilgi amaçlı). */}
           <div className="space-y-2">
             <Label>Depozito</Label>
-            <input
-              type="number"
-              placeholder="₺"
-              className="input"
-              value={form.deposit || ""}
-              onChange={(e) =>
-                setForm({ ...form, deposit: Number(e.target.value) })
-              }
-            />
+            <div className="grid grid-cols-[1fr_88px] gap-1.5">
+              <input
+                type="number"
+                min={0}
+                placeholder="Tutar"
+                className="input !px-2"
+                value={form.deposit || ""}
+                onChange={(e) =>
+                  setForm({ ...form, deposit: Number(e.target.value) })
+                }
+              />
+
+              <select
+                aria-label="Depozito para birimi"
+                value={form.deposit_currency || "TRY"}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    deposit_currency: e.target.value,
+                  })
+                }
+                className="input !pl-2 text-xs"
+              >
+                <option value="TRY">₺ TRY</option>
+                <option value="USD">$ USD</option>
+                <option value="EUR">€ EUR</option>
+                <option value="GBP">£ GBP</option>
+              </select>
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Temizlik ücreti</Label>

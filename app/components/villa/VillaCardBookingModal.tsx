@@ -131,6 +131,8 @@ type Props = {
 /* API response shape — /api/public/villas/[id]/availability. */
 type VillaConfig = {
   deposit: number | null;
+  /* 🛡️ Migration 099 — depozito para birimi. NULL → TRY. */
+  deposit_currency: string | null;
   cleaning_fee: number | null;
   cleaning_currency: string | null;
   cleaning_limit: number | null;
@@ -146,6 +148,7 @@ type VillaConfig = {
 
 const EMPTY_CONFIG: VillaConfig = {
   deposit: null,
+  deposit_currency: null,
   cleaning_fee: null,
   cleaning_currency: null,
   cleaning_limit: null,
@@ -235,6 +238,10 @@ export default function VillaCardBookingModal({
           deposit:
             typeof data?.config?.deposit === "number"
               ? data.config.deposit
+              : null,
+          deposit_currency:
+            typeof data?.config?.deposit_currency === "string"
+              ? data.config.deposit_currency
               : null,
           cleaning_fee:
             typeof data?.config?.cleaning_fee === "number"
@@ -456,6 +463,7 @@ function ModalContent({
     villaId,
     prices: apiData.prices,
     deposit: apiData.config.deposit ?? 0,
+    deposit_currency: apiData.config.deposit_currency,
     cleaning_fee: apiData.config.cleaning_fee ?? 0,
     cleaning_currency: apiData.config.cleaning_currency ?? "TRY",
     cleaning_limit: apiData.config.cleaning_limit ?? 0,

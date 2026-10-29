@@ -47,6 +47,9 @@ export type ReservationShareRow = {
   /* Bilgilendirme snapshot'ları (TRY) — hesaba KATILMAZ (total/kalan
      ödeme değişmez). Yalnız müşteriye gösterilir. */
   damage_deposit: number | null;
+  /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi (NULL → TRY). */
+  original_damage_deposit: number | null;
+  original_damage_deposit_currency: string | null;
   cleaning_fee_try: number | null;
   /* 🛡️ `id` + `name` ADDITIVE: görünen ödeme yöntemi etiketi artık
      CANONICAL `payment_methods.name` (+ `payment_method_translations`
@@ -169,6 +172,8 @@ export const reservationShareRepository = {
          remaining_payment,
          original_currency,
          damage_deposit,
+         original_damage_deposit,
+         original_damage_deposit_currency,
          cleaning_fee_try,
          pool_heating_selected,
          pool_heating_total_try,

@@ -18,6 +18,9 @@ export type VillaForm = {
   bedrooms?: number | string;
   bathrooms?: number | string;
   deposit?: number | string;
+  /* 🛡️ Migration 099 — depozito para birimi. NULL/undefined/desteklenmeyen
+   *  değer → "TRY" (normalizeDepositCurrency). */
+  deposit_currency?: string | null;
   cleaning_fee?: number | string;
   cleaning_currency?: string;
   cleaning_limit?: number | string;

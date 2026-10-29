@@ -49,6 +49,8 @@ export interface VillaRow {
   bedrooms: number | null;
   bathrooms: number | null;
   deposit: number | null;
+  /* 🛡️ Migration 099 — depozito para birimi. NULL → TRY. */
+  deposit_currency: string | null;
   cleaning_fee: number | null;
   cleaning_currency: string | null;
   cleaning_limit: number | null;
@@ -347,6 +349,10 @@ export interface ReservationRow {
   payment_link_status: string | null;
   payment_link_sent_at: string | null;
   damage_deposit: number | null;
+  /* 🛡️ Migration 099 — depozito snapshot'ı villanın kendi para
+   *  biriminde. damage_deposit TRY karşılığıdır. Eski kayıtlarda NULL. */
+  original_damage_deposit: number | null;
+  original_damage_deposit_currency: string | null;
   created_at: string | null;
 }
 

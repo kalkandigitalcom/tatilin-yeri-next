@@ -16,7 +16,7 @@ import {
 =============================================================== */
 
 describe("buildVillaCreateAuditAfter", () => {
-  it("returns 18 expected keys (regression guard — key-set lock)", () => {
+  it("returns 19 expected keys (regression guard — key-set lock)", () => {
     const after = buildVillaCreateAuditAfter({
       newId: "v-new",
       form: { ...initialVillaFormData("create"), title: "Test", description: "Hello" },
@@ -38,6 +38,7 @@ describe("buildVillaCreateAuditAfter", () => {
       "bedrooms",
       "bathrooms",
       "deposit",
+      "deposit_currency",
       "cleaning_fee",
       "cleaning_currency",
       "minimum_stay_nights",
@@ -146,11 +147,12 @@ describe("buildVillaUpdateAudit{Before,After}", () => {
      Testin ASIL invariant'ı — before/after şekil SİMETRİSİ — zaten
      geçiyordu ve AYNEN korunuyor; yalnız bayat regression sayısı
      gerçek anahtar sayısına hizalandı. Üretim kodu DEĞİŞMEDİ. */
-  it("before + after have IDENTICAL shape (22 keys)", () => {
+  /* 🛡️ Migration 099 — deposit_currency eklendi (22 → 23). */
+  it("before + after have IDENTICAL shape (23 keys)", () => {
     const before = buildVillaUpdateAuditBefore(input);
     const after = buildVillaUpdateAuditAfter(input);
     expect(Object.keys(before).sort()).toEqual(Object.keys(after).sort());
-    expect(Object.keys(before).length).toBe(22);
+    expect(Object.keys(before).length).toBe(23);
   });
 
   it("counts are NOT filtered (update asimetrisi vs create)", () => {

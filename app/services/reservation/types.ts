@@ -115,7 +115,11 @@ export type ReservationCreateInput = {
 
   // 🔥 DAMAGE DEPOSIT — villa.deposit'ten snapshot
   // Sadece tanımlıysa yazılır; eski rezervasyonlar etkilenmez.
+  // Migration 099 — damage_deposit TRY karşılığıdır.
   damage_deposit?: number;
+  // 🛡️ Migration 099 — villanın kendi para birimindeki depozito.
+  original_damage_deposit?: number;
+  original_damage_deposit_currency?: string;
 };
 
 /* ---------------- UPDATE INPUT ---------------- */

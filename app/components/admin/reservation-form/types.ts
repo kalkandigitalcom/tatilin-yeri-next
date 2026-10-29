@@ -125,6 +125,8 @@ export type SelectedVillaMeta = {
   cleaning_limit?: number | null;
   custom_prepayment_rate?: number | string | null;
   deposit?: number | null;
+  /* 🛡️ Migration 099 — depozito para birimi. NULL → TRY. */
+  deposit_currency?: string | null;
   pool_heating_fee?: number | null;
   pool_heating_currency?: string | null;
   /* 🛡️ Migration 076 — sezonluk ay kısıtı. NULL = kısıtlama yok. */

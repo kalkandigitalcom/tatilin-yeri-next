@@ -88,6 +88,8 @@ type Props = {
   /* Public-safe villa_discounts (villa-discount.service.ts). */
   discounts?: DiscountRange[];
   deposit?: number;
+  /* 🛡️ Migration 099 — depozito para birimi (NULL → TRY). */
+  deposit_currency?: string | null;
   cleaning_fee?: number;
   cleaning_currency?: string;
   cleaning_limit?: number;
@@ -158,6 +160,7 @@ export default function BookingSidebar({
   prices,
   discounts = [],
   deposit = 0,
+  deposit_currency = null,
   cleaning_fee = 0,
   cleaning_currency = "TRY",
   cleaning_limit = 0,
@@ -183,6 +186,7 @@ export default function BookingSidebar({
     prices,
     discounts,
     deposit,
+    deposit_currency,
     cleaning_fee,
     cleaning_currency,
     cleaning_limit,

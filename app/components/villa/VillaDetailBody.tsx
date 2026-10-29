@@ -254,6 +254,7 @@ export default function VillaDetailBody({
                         prices={prices}
                         minimumStayNights={villa.minimum_stay_nights ?? null}
                         deposit={villa.deposit ?? null}
+                        depositCurrency={villa.deposit_currency ?? null}
                         discounts={discounts}
                         locale={locale}
                       />
@@ -335,6 +336,7 @@ export default function VillaDetailBody({
                 prices={prices}
                 discounts={discounts}
                 deposit={villa.deposit}
+                deposit_currency={villa.deposit_currency}
                 cleaning_fee={villa.cleaning_fee}
                 cleaning_currency={villa.cleaning_currency}
                 cleaning_limit={villa.cleaning_limit}

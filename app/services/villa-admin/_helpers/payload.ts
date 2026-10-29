@@ -9,6 +9,7 @@ import {
   normalizePoolHeatingFee,
   normalizePoolHeatingMonths,
 } from "./normalizers";
+import { normalizeDepositCurrency } from "@/lib/damage-deposit.helper";
 
 /* 🛡️ Rich text description — KAYIT anında XSS-güvenli sanitize
    (defense-in-depth; render'da tekrar sanitize edilir). */
@@ -39,7 +40,8 @@ import type { VillaForm, VillaMapData } from "../types";
      Basic           : title, description
      Relation pointer: location_id
      Counts          : guests, bedrooms, bathrooms
-     Pricing meta    : deposit, cleaning_fee, cleaning_currency, cleaning_limit
+     Pricing meta    : deposit, deposit_currency (migration 099), cleaning_fee,
+                       cleaning_currency, cleaning_limit
      Pool heating    : pool_heating_fee, pool_heating_currency (migration 074 —
                         3. adım, sadece veri modeli; hesaplama YAPILMAZ)
      Visual badge    : badge
@@ -80,6 +82,8 @@ export type VillaCorePayload = {
   bedrooms: number;
   bathrooms: number;
   deposit: number;
+  /* 🛡️ Migration 099 — depozito para birimi (TRY/USD/EUR/GBP). */
+  deposit_currency: string;
   cleaning_fee: number;
   cleaning_currency: string;
   cleaning_limit: number;
@@ -162,6 +166,9 @@ export function buildVillaCorePayload(
 
     deposit:
       Number(form.deposit) || 0,
+
+    /* 🛡️ Migration 099 — allowlist; boş/desteklenmeyen → "TRY". */
+    deposit_currency: normalizeDepositCurrency(form.deposit_currency),
 
     cleaning_fee:
       Number(form.cleaning_fee) || 0,

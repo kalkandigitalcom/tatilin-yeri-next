@@ -47,6 +47,7 @@ const baseDTO: ReservationShareDTO = {
   prepayment: 4000,
   isFullPayment: false,
   damageDeposit: null,
+  damageDepositCurrency: "TRY",
   cleaningFee: 3500,
   poolHeatingFee: null,
   paymentMethodLabel: null,
@@ -95,3 +96,18 @@ describe("ReservationShareView — havuz ısıtma gösterimi (müşteri paylaş�
    (bkz. poolHeatingFeeVal > 0 ? poolHeatingFeeVal : null). Bu, mevcut
    cleaningFee davranışıyla BİREBİR tutarlı — component'i 0 değeriyle
    çağırmak gerçek kullanım akışında hiç olmaz. */
+
+/* 🛡️ Migration 099 — depozito kendi para biriminde. */
+describe("ReservationShareView — depozito para birimi", () => {
+  it("TRY depozito (eski kayıt) → '… TL' biçimi BİREBİR", async () => {
+    await renderShareView({ damageDeposit: 7500, damageDepositCurrency: "TRY" });
+    expect(screen.getByText("7.500 TL")).toBeInTheDocument();
+  });
+
+  it("EUR depozito → '500 EUR'; toplam tutar değişmez", async () => {
+    await renderShareView({ damageDeposit: 500, damageDepositCurrency: "EUR" });
+    expect(screen.getByText("500 EUR")).toBeInTheDocument();
+    expect(screen.queryByText("500 TL")).not.toBeInTheDocument();
+    expect(screen.getByText("28.500 TL")).toBeInTheDocument();
+  });
+});

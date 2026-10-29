@@ -16,8 +16,8 @@ import {
 } from "@/lib/payment.helper";
 
 import {
-  shouldDisplayDamageDeposit,
-  formatDamageDepositTRY,
+  shouldDisplayReservationDamageDeposit,
+  formatReservationDamageDeposit,
 } from "@/lib/damage-deposit.helper";
 
 import { normalizePaymentLinkStatus } from "@/lib/payment-link.helper";
@@ -52,6 +52,9 @@ type ReservationRow = {
   name: string | null;
   email: string | null;
   damage_deposit?: number | null;
+  /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi. */
+  original_damage_deposit?: number | null;
+  original_damage_deposit_currency?: string | null;
   start_date: string | null;
   end_date: string | null;
   total_price: number | null;
@@ -198,8 +201,8 @@ export async function POST(req: Request) {
       paidDisplay: formatTRY(payment.paidTRY),
       remainingDisplay: formatTRY(payment.remainingFromPaid),
 
-      damageDepositDisplay: shouldDisplayDamageDeposit(r.damage_deposit)
-        ? formatDamageDepositTRY(r.damage_deposit)
+      damageDepositDisplay: shouldDisplayReservationDamageDeposit(r)
+        ? formatReservationDamageDeposit(r)
         : null,
     });
 

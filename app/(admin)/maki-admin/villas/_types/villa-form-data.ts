@@ -68,6 +68,9 @@ export type VillaFormData = VillaFormShape & {
   bedrooms: number;
   bathrooms: number;
   deposit: number;
+  /* 🛡️ Migration 099 — depozito para birimi. Edit modunda DB değeri
+     (NULL olabilir → UI/payload TRY kabul eder) spread ile gelir. */
+  deposit_currency?: string | null;
 
   /* Cleaning */
   cleaning_fee: number;
@@ -157,6 +160,8 @@ export function initialVillaFormData(
     bedrooms: 0,
     bathrooms: 0,
     deposit: 0,
+    /* 🛡️ Migration 099 — DEFAULT 'TRY' ile tutarlı. */
+    deposit_currency: "TRY",
 
     cleaning_fee: 0,
     /* 🔥 cleaning_currency — edit page'iyle birebir parity.

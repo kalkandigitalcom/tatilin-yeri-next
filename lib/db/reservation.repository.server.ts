@@ -178,6 +178,8 @@ export const reservationServerRepository = {
          payment_preference,
          payment_link,
          damage_deposit,
+         original_damage_deposit,
+         original_damage_deposit_currency,
          villa:villa_id ( title )`
       )
       .eq("id", id)
@@ -195,6 +197,8 @@ export const reservationServerRepository = {
          payment_preference,
          payment_link_status,
          damage_deposit,
+         original_damage_deposit,
+         original_damage_deposit_currency,
          villa:villa_id ( title )`
       )
       .eq("id", id)
@@ -212,6 +216,8 @@ export const reservationServerRepository = {
          prepayment_amount, paid_amount,
          payment_preference,
          damage_deposit,
+         original_damage_deposit,
+         original_damage_deposit_currency,
          villa:villa_id ( title )`
       )
       .eq("id", id)
@@ -267,6 +273,8 @@ export const reservationServerRepository = {
          paid_amount, prepayment_amount, remaining_payment,
          payment_preference,
          damage_deposit,
+         original_damage_deposit,
+         original_damage_deposit_currency,
          exchange_rate,
          villa:villa_id ( title ),
          payment_method:payment_method_id ( name, type )`
@@ -343,6 +351,8 @@ export const reservationServerRepository = {
          paid_amount,
          payment_preference,
          damage_deposit,
+         original_damage_deposit,
+         original_damage_deposit_currency,
          status, created_at,
          villa:villa_id (
            title,

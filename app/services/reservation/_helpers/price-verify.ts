@@ -36,6 +36,9 @@ import { getVillaDiscounts } from "@/app/services/villa-discount.service";
 /* 🛡️ FİYAT KAPSAMI — rezervasyon UYGUNLUĞU kuralı (takvim / form ile
    BİREBİR aynı helper). Fiyat HESABINA dokunmaz. */
 import { rangeHasUnpricedDay } from "@/lib/price-coverage";
+/* 🛡️ Migration 099 — depozito snapshot'ı (villanın para birimi + TRY
+   karşılığı). Saf helper; toplam/ödeme hesaplarına DOKUNMAZ. */
+import { computeDamageDepositSnapshot } from "@/lib/damage-deposit.helper";
 
 /* ===============================================================
    🛡️ PUBLIC RESERVATION — SERVER-SIDE PRICE VERIFY
@@ -138,8 +141,12 @@ export type ServerPriceResult = {
   stayDiscountAmountTry: number | null;
   /* 🛡️ SEC-06 F4 — hasar depozitosu villanın KENDİ kaydından
      (`villa.deposit`, TRY). Client formülüyle BİREBİR:
-     `Number(villa.deposit) || 0` (buildPublicReservationPayload). */
+     `Number(villa.deposit) || 0` (buildPublicReservationPayload).
+     🛡️ Migration 099 — artık TRY KARŞILIĞI (TRY depozitoda formül
+     BİREBİR aynı). Orijinal tutar/para birimi ayrı alanlarda. */
   damageDeposit: number;
+  originalDamageDeposit: number;
+  originalDamageDepositCurrency: string;
   /* 🛡️ SEC-06 F3 — hesapta GERÇEKTEN kullanılan ama geçerli kuru
      (finite, > 0) bulunmayan para birimleri. Boş değilse `convertPrice`
      bu dövizleri sessizce 1:1 çevirmiştir → sonuç GEÇERSİZ sayılır. */
@@ -157,7 +164,10 @@ export type ServerPriceResult = {
      - O gece aktif "fixed" özel fiyatın para birimi, gecenin para
        biriminden farklıysa (`getActiveDiscount` — motorun kuralı),
      - Tahsil edilen temizlik ücreti (> 0) para birimi,
-     - Tahsil edilen havuz ısıtma ücreti (> 0) para birimi.
+     - Tahsil edilen havuz ısıtma ücreti (> 0) para birimi,
+     - Pozitif hasar depozitosunun para birimi (migration 099 —
+       depozito tahsil edilmez ama TRY karşılığı snapshot'a yazılır;
+       kur yoksa rezervasyon REDDEDİLİR).
    TRY kur gerektirmez. Kur geçerliliği `resolveRate` ile AYNI ölçüt
    (finite ve > 0). Hesaplanan TUTARLARA dokunulmaz. */
 function findMissingRates(input: {
@@ -445,6 +455,14 @@ export async function recomputePublicReservationPrice(input: {
   const discountValue = discountSnapshot.discount_value;
   const discountCurrency = discountSnapshot.discount_currency;
 
+  /* 🛡️ Migration 099 — depozito snapshot'ı. Toplam / ön ödeme / kalan
+     ödeme YUKARIDA hesaplandı; depozito bunlara HİÇBİR ŞEKİLDE girmez. */
+  const depositSnapshot = computeDamageDepositSnapshot(
+    villaRow?.deposit,
+    villaRow?.deposit_currency,
+    rates
+  );
+
   /* 🛡️ SEC-06 F3 — yalnız TESPİT; yukarıdaki hiçbir tutar değişmez.
      Eksik gece varsa (priceAvailable=false) zaten reddedilir → atlanır. */
   const missingRates = snapshot.priceAvailable
@@ -463,6 +481,10 @@ export async function recomputePublicReservationPrice(input: {
             amount: poolHeatingSnapshot.original_pool_heating_total,
             currency: poolHeatingSnapshot.original_pool_heating_currency,
           },
+          {
+            amount: depositSnapshot.original_damage_deposit,
+            currency: depositSnapshot.original_damage_deposit_currency,
+          },
         ],
       })
     : [];
@@ -470,7 +492,10 @@ export async function recomputePublicReservationPrice(input: {
   return {
     // 🛡️ SEC-06 F3 / F4
     missingRates,
-    damageDeposit: Number(villaRow?.deposit) || 0,
+    damageDeposit: depositSnapshot.damage_deposit,
+    originalDamageDeposit: depositSnapshot.original_damage_deposit,
+    originalDamageDepositCurrency:
+      depositSnapshot.original_damage_deposit_currency,
     /* 🛡️ Motorun kapsama kararı AYNEN taşınır (yeni hesap YOK). */
     priceAvailable: snapshot.priceAvailable,
     /* 🛡️ FİYAT KAPSAMI — aynı `prices` ile, ayrı uygunluk kontrolü. */
@@ -604,7 +629,10 @@ export type PublicReservationAuthoritativeSnapshot = {
   original_stay_total_try: number | null;
   stay_discount_amount_try: number | null;
   // 🛡️ SEC-06 F4 — villa.deposit snapshot (client değeri YOK SAYILIR).
+  // Migration 099 — TRY karşılığı + villanın kendi para birimi.
   damage_deposit: number;
+  original_damage_deposit: number;
+  original_damage_deposit_currency: string;
 };
 
 export type PublicReservationServerVerification = {
@@ -753,6 +781,9 @@ export async function verifyPublicReservationPrice(
         stay_discount_amount_try: server.stayDiscountAmountTry,
         // 🛡️ SEC-06 F4
         damage_deposit: server.damageDeposit,
+        original_damage_deposit: server.originalDamageDeposit,
+        original_damage_deposit_currency:
+          server.originalDamageDepositCurrency,
       },
     };
   } catch (err) {

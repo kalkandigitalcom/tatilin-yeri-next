@@ -26,8 +26,8 @@
 =============================================================== */
 
 import {
-  shouldDisplayDamageDeposit,
-  formatDamageDepositTRY,
+  shouldDisplayReservationDamageDeposit,
+  formatReservationDamageDepositWithTry,
   DAMAGE_DEPOSIT_NOTE,
 } from "@/lib/damage-deposit.helper";
 
@@ -438,13 +438,15 @@ export default function PriceCard({
 
       {/* 🔥 DAMAGE DEPOSIT — readonly info kartı; accounting'e dahil değil
           Snapshot reservations.damage_deposit'ten okunur */}
-      {shouldDisplayDamageDeposit(data?.damage_deposit) && (
+      {/* 🛡️ Migration 099 — yabancı para birimli snapshot varsa orijinal
+          tutar + "(≈ ₺…)" TRY karşılığı; eski kayıt / TRY → ₺ (aynı). */}
+      {shouldDisplayReservationDamageDeposit(data) && (
         <div className="mt-4 rounded-2xl border border-[var(--color-stone-100)] bg-white px-4 py-3">
           <p className="text-[11px] tracking-[0.16em] uppercase font-semibold text-[var(--color-stone-400)]">
             Hasar Depozitosu
           </p>
           <p className="font-display text-lg text-[var(--color-stone-900)] mt-1 tabular-nums">
-            {formatDamageDepositTRY(data?.damage_deposit)}
+            {formatReservationDamageDepositWithTry(data)}
           </p>
           <p className="text-[11px] text-[var(--color-stone-500)] mt-1">
             {DAMAGE_DEPOSIT_NOTE}
