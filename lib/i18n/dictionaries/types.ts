@@ -980,6 +980,24 @@ export type Dictionary = {
       termsPrivacyLink: string;
       /** Checkbox işaretlenmeden gönderim denenirse gösterilen hata. */
       termsRequired: string;
+      /* 🛡️ ALAN ETİKETLERİ + ZORUNLULUK GÖSTERGELERİ — görünür kısa
+         etiketler (placeholder'lar örnek olarak kalır). Zorunlu alanlar
+         `*` ile, isteğe bağlılar `optionalTag` ile işaretlenir. */
+      nameLabel: string;
+      emailLabel: string;
+      identityLabel: string;
+      countryLabel: string;
+      cityLabel: string;
+      addressLabel: string;
+      noteLabel: string;
+      /** Küçük, soluk "İsteğe bağlı" etiketi. */
+      optionalTag: string;
+      /** Formun başındaki açıklama — `*` işaretinden SONRA gelen metin. */
+      requiredLegend: string;
+      /** Sunucu bir alanı reddettiğinde (ör. telefon) genel uyarı. */
+      errorCheckFields: string;
+      /** HTTP 429 — çok fazla deneme. */
+      errorRateLimited: string;
     };
     validation: {
       nameRequired: string;

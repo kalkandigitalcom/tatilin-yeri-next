@@ -31,7 +31,7 @@ import { isValidInternationalPhone } from "@/lib/phone.helper";
      - email (regex)     → "Geçerli email gir"
                            regex: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
      - identity (req)    → "TC zorunlu"
-     - identity (regex)  → "11 haneli TC gir"
+     - identity (regex)  → "11 haneli TC veya geçerli pasaport no gir"
                            ⚠️ ARTIK TC **veya** PASAPORT kabul edilir
                            (bkz. isValidIdentityOrPassport). TC kuralı
                            /^\d{11}$/ AYNEN korundu; pasaport EK bir

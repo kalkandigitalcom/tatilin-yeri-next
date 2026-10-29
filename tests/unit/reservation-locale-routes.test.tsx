@@ -886,17 +886,27 @@ function mockReservationPost(
    kendisi, placeholder'ları, ülke kodu select'i ve ZORUNLULUK mantığı
    AYNEN duruyor.
 =============================================================== */
-describe("ReservationForm — telefon üst label'ları kaldırıldı", () => {
-  it.each(LOCALES)("9-10-%s) 'Telefon 1' / 'Telefon 2' üst label'ı RENDER EDİLMEZ", (locale) => {
+/* 🛡️ ZORUNLU ALAN GÖSTERGELERİ — telefon alanları artık diğer zorunlu
+   alanlarla AYNI kısa görünür etiketi taşır (`FieldLabel`): metin +
+   aria-hidden `*`. Etiket input'a htmlFor ile bağlıdır. */
+describe("ReservationForm — telefon etiketleri", () => {
+  it.each(LOCALES)("9-10-%s) 'Telefon 1' / 'Telefon 2' görünür etiketi input'a bağlı, `*` aria-hidden", (locale) => {
     const d = getDictionary(locale).reservation;
     renderForm(locale);
-    /* Görünür bir <label> elementi olarak bulunmamalı. */
-    for (const text of [d.form.phoneLabel, d.form.phone2Label]) {
-      const visible = screen.queryAllByText(
+    for (const [text, key] of [
+      [d.form.phoneLabel, "phone"],
+      [d.form.phone2Label, "phone2"],
+    ] as const) {
+      const labels = screen.queryAllByText(
         (_c, el) =>
           el?.tagName === "LABEL" && el.textContent?.trim().startsWith(text) === true
       );
-      expect(visible).toHaveLength(0);
+      expect(labels).toHaveLength(1);
+      expect(labels[0].getAttribute("for")).toBe(`reservation-${key}`);
+      const star = labels[0].querySelector('[aria-hidden="true"]');
+      expect(star?.textContent).toBe("*");
+      const input = document.getElementById(`reservation-${key}`);
+      expect(input?.getAttribute("aria-required")).toBe("true");
     }
   });
 
@@ -964,15 +974,24 @@ describe("ReservationForm — telefon üst label'ları kaldırıldı", () => {
     fireEvent.click(screen.getAllByRole("radio")[0]);
     acceptTerms();
 
-    /* phone2 boş olduğu için gönderim kapısı AÇILMAZ (isFormValid) —
-       mevcut davranış; label kaldırma bunu DEĞİŞTİRMEDİ. */
+    /* 🛡️ Buton artık eksik alan varken de TIKLANABİLİR: tıklama
+       validasyonu çalıştırır, hata ilgili alanın ALTINDA görünür ve
+       POST YAPILMAZ (zorunluluk kuralı DEĞİŞMEDİ). */
     const submit = screen
       .getByText(d.form.submit)
       .closest("button") as HTMLButtonElement;
     expect(submit).toBeTruthy();
-    expect(submit.disabled).toBe(true);
+    expect(submit.disabled).toBe(false);
 
     fireEvent.click(submit);
+    await waitFor(() =>
+      expect(screen.getByText(d.validation.phone2Required)).toBeInTheDocument()
+    );
+    const phone2Input = document.getElementById("reservation-phone2");
+    expect(phone2Input?.getAttribute("aria-invalid")).toBe("true");
+    expect(phone2Input?.getAttribute("aria-describedby")).toBe(
+      "reservation-phone2-error"
+    );
     const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } })
       .mock.calls;
     expect(
@@ -1024,12 +1043,12 @@ describe("ReservationForm — sunucu hata metni SIZMAZ", () => {
     }
   );
 
-  it.each(LOCALES)("46) %s — 429 'Too many requests' SIZMAZ", async (locale) => {
+  it.each(LOCALES)("46) %s — 429 'Too many requests' SIZMAZ (locale'e uygun 'çok fazla deneme')", async (locale) => {
     mockReservationPost(429, { ok: false, error: "Too many requests" });
     await fillAndSubmit(locale);
     const d = getDictionary(locale).reservation.form;
     await waitFor(() =>
-      expect(screen.getByText(d.errorGeneric)).toBeInTheDocument()
+      expect(screen.getByText(d.errorRateLimited)).toBeInTheDocument()
     );
     expect(screen.queryByText("Too many requests")).toBeNull();
   });

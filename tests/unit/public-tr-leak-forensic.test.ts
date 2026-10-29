@@ -190,6 +190,15 @@ const INTENTIONAL_TR: Record<string, string[]> = {
      `value={startDate ? dateLabel : ""}` ile onu HİÇ render etmez
      (bkz. HeroSearchPanel.tsx). */
   "app/components/ui/hero/_helpers/date-label.ts": ['"Tarih seç"'],
+  /* SUNUCU MESAJI EŞLEŞTİRİCİSİ: `POST /api/public/reservations`'ın
+     sabit TR hata metinleriyle KARŞILAŞTIRMA yapılır; bu metinler ASLA
+     render edilmez — eşleşen tür, aktif locale'in dictionary mesajına
+     çevrilir (bkz. resolvePublicReservationServerError.ts). */
+  "app/components/reservation/_helpers/resolvePublicReservationServerError.ts": [
+    "PHONE_MESSAGE =",
+    "PHONE2_MESSAGE =",
+    '"Bu tarihler artık müsait değil"',
+  ],
 };
 
 function isAllowed(file: string, line: string): boolean {

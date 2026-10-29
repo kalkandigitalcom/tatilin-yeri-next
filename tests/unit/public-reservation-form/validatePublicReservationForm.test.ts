@@ -180,7 +180,7 @@ describe("validatePublicReservationForm — identity (TC) regex", () => {
       start: "2026-06-01",
       end: "2026-06-08",
     });
-    expect(errors.identity).toBe("11 haneli TC gir");
+    expect(errors.identity).toBe("11 haneli TC veya geçerli pasaport no gir");
   });
 
   it("flags 12 digits", () => {
@@ -189,7 +189,7 @@ describe("validatePublicReservationForm — identity (TC) regex", () => {
       start: "2026-06-01",
       end: "2026-06-08",
     });
-    expect(errors.identity).toBe("11 haneli TC gir");
+    expect(errors.identity).toBe("11 haneli TC veya geçerli pasaport no gir");
   });
 
   it("flags non-digit characters", () => {
@@ -198,7 +198,7 @@ describe("validatePublicReservationForm — identity (TC) regex", () => {
       start: "2026-06-01",
       end: "2026-06-08",
     });
-    expect(errors.identity).toBe("11 haneli TC gir");
+    expect(errors.identity).toBe("11 haneli TC veya geçerli pasaport no gir");
   });
 });
 

@@ -64,7 +64,7 @@ describe("1-2) TC Kimlik", () => {
   for (const [label, v] of BAD_TC) {
     it(`2) geçersiz TC — ${label} → RED (mevcut davranış)`, () => {
       expect(isValidIdentityOrPassport(v)).toBe(false);
-      expect(check(v).identity).toBe("11 haneli TC gir");
+      expect(check(v).identity).toBe("11 haneli TC veya geçerli pasaport no gir");
     });
   }
 
@@ -145,7 +145,7 @@ describe("6-8) reddedilen değerler", () => {
   for (const [label, v] of BAD) {
     it(`7-8) ${label} → RED`, () => {
       expect(isValidIdentityOrPassport(v)).toBe(false);
-      expect(check(v).identity).toBe("11 haneli TC gir");
+      expect(check(v).identity).toBe("11 haneli TC veya geçerli pasaport no gir");
     });
   }
 });

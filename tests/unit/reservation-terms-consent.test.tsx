@@ -2,8 +2,8 @@
    🛡️ REZERVASYON — SÖZLEŞME ONAY CHECKBOX'I
    ===============================================================
    KURALLAR:
-     • Başlangıçta İŞARETSİZ, submit butonu DEVRE DIŞI.
-     • İşaretlenmeden gönderim yapılamaz (buton + defansif guard).
+     • Başlangıçta İŞARETSİZ; onaysız gönderimde uyarı checkbox altında.
+     • İşaretlenmeden gönderim yapılamaz (handleSubmit guard).
      • İşaretliyse MEVCUT rezervasyon akışı aynen çalışır.
      • Üç link aktif locale'i taşır (`localeHref`):
          tr → /p/...      en → /en/p/...      de → /de/p/...
