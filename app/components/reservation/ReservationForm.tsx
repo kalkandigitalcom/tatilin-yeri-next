@@ -41,6 +41,7 @@ import {
 import { validatePublicReservationForm } from "./_helpers/validatePublicReservationForm";
 import { buildPublicReservationPayload } from "./_helpers/buildPublicReservationPayload";
 import { dispatchPublicReservationRequestMail } from "./_helpers/dispatchPublicReservationRequestMail";
+import { resolvePublicReservationServerError } from "./_helpers/resolvePublicReservationServerError";
 
 /* 🛡️ Başarı sayfası — modal yerine tam sayfa redirect.
    `/rezervasyon/basarili?ref=<id>&villa=<slug>` rotasına yönlendirir.
@@ -92,6 +93,58 @@ function loadCountryStateModule(): Promise<CountryStateModule> {
   return countryStateModulePromise;
 }
 
+/* ===============================================================
+   🛡️ HATA GÖSTERİMİ — yardımcılar
+   ===============================================================
+   - `ReservationSubmitError`: handleSubmit'in KENDİ ürettiği, zaten
+     dictionary'den gelen kullanıcı mesajları. catch yalnız bunların
+     metnini gösterir; ağ hatası (TypeError "Failed to fetch") vb. HAM
+     metinler generic mesaja düşer.
+   - `FIELD_ORDER`: ekrandaki alan sırası — ilk hatalı alana odaklanma.
+   - `fieldId`: input id'leri (label htmlFor + aria-describedby). */
+class ReservationSubmitError extends Error {}
+
+const FIELD_ORDER = [
+  "name",
+  "email",
+  "identity",
+  "phone",
+  "phone2",
+  "payment_method_id",
+] as const;
+
+const fieldId = (key: string) => `reservation-${key}`;
+const errorId = (key: string) => `reservation-${key}-error`;
+
+function focusElementById(id: string) {
+  if (typeof window === "undefined") return;
+  const run = () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (typeof (el as HTMLElement).focus === "function") {
+      (el as HTMLElement).focus({ preventScroll: true });
+    }
+  };
+  /* State güncellemesi DOM'a yansısın diye bir kare beklenir. */
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(run);
+  } else {
+    run();
+  }
+}
+
+function focusFirstInvalidField(errors: Record<string, string>) {
+  const first = FIELD_ORDER.find((k) => !!errors[k]);
+  if (first) {
+    focusElementById(fieldId(first));
+    return;
+  }
+  if (errors.date) focusElementById("reservation-submit-feedback");
+}
+
 export default function ReservationForm({
   villa,
   prices,
@@ -120,14 +173,28 @@ export default function ReservationForm({
   const [loading, setLoading] = useState(false);
   const [prepaymentRate, setPrepaymentRate] = useState(20);
   /* 🛡️ Modern feedback layer — alert() yerine state-driven UI.
-     submitError: form üstünde inline error banner mesajı (null → gizli).
+     submitError: gönder butonunun üstündeki inline banner mesajı (null → gizli).
      Başarı durumu artık tam sayfa redirect ile gösterilir
      (`/rezervasyon/basarili?ref=...&villa=...`); modal state YOK. */
   const [submitError, setSubmitError] = useState<string | null>(null);
-  /* 🛡️ SÖZLEŞME ONAYI — başlangıçta İŞARETSİZ. Gönderim butonunun
-     mevcut `isFormValid` kapısına EK bir koşul olarak bağlanır;
-     mevcut alan validasyonlarının hiçbiri değişmez. */
+  /* 🛡️ SÖZLEŞME ONAYI — başlangıçta İŞARETSİZ. handleSubmit'te alan
+     validasyonundan SONRA kontrol edilir; mevcut alan validasyonlarının
+     hiçbiri değişmez. */
   const [termsAccepted, setTermsAccepted] = useState(false);
+  /* 🛡️ Onaysız gönderim → checkbox'ın HEMEN ALTINDA uyarı. */
+  const [termsError, setTermsError] = useState(false);
+  /* 🛡️ Çift gönderim kilidi — state güncellemesi beklenmeden ikinci
+     tıklamanın ikinci bir POST üretmesini engeller. */
+  const submittingRef = useRef(false);
+  /* 🛡️ Sunucu/genel hata banner'ı görünür olunca ona kaydırılır. */
+  const feedbackRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!submitError) return;
+    const el = feedbackRef.current;
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [submitError]);
   const [paymentMethods, setPaymentMethods] = useState<PublicPaymentMethodOption[]>([]);
   const [errors, setErrors] = useState<PublicReservationFormErrors>({});
 
@@ -503,18 +570,13 @@ export default function ReservationForm({
       !!end &&
       rangeHasUnpricedDay(parseLocalDate(start), parseLocalDate(end), prices));
 
-  const isFormValid =
-    form.name &&
-    form.phone &&
-    /* 🛡️ İkinci telefon da zorunlu — mevcut isFormValid deseni aynen. */
-    form.phone2 &&
-    form.email &&
-    form.identity &&
-    form.payment_method_id &&
-    start &&
-    end &&
-    /* Geçersiz fiyatla gönderim engellenir; sunucu da ayrıca reddeder. */
-    !priceUnavailable;
+  /* 🛡️ GÖNDER BUTONU — artık yalnız gönderim sürerken veya fiyat
+     hesaplanamıyorken (ayrı uyarı zaten görünür) pasif. Eskiden eksik
+     alan varken de pasifti; tıklama olayı oluşmadığı için kullanıcı
+     hangi alanın eksik olduğunu HİÇ göremiyordu. Artık tıklama
+     `validatePublicReservationForm`'u çalıştırır ve tüm hatalar alan
+     altında gösterilir. */
+  const submitBlocked = loading || priceUnavailable;
 
   const handleSubmit = async () => {
     /* 🛡️ FAZ 2 — validation helper-driven; mesaj + regex'ler birebir. */
@@ -525,28 +587,32 @@ export default function ReservationForm({
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      setSubmitError(null);
+      focusFirstInvalidField(newErrors);
       return;
     }
 
     /* 🛡️ SÖZLEŞME ONAYI — GÖNDERİM KAPISI (alan validasyonlarından SONRA).
        Onay verilmeden gönderim YAPILMAZ: fonksiyon burada erken döner,
-       API'ye POST atılmaz ve MEVCUT inline hata banner'ı (submitError)
-       nedenini gösterir — yeni bildirim sistemi YOK.
+       API'ye POST atılmaz; uyarı checkbox'ın HEMEN ALTINDA gösterilir ve
+       checkbox'a odaklanılır.
 
        ⚠️ SIRA BİLİNÇLİ: `validatePublicReservationForm` handleSubmit'in
        İLK çağrısı olmaya devam eder (mevcut orkestrasyon sözleşmesi ve
        onu kilitleyen testler DEĞİŞMEDİ); kullanıcı önce eksik alanlarını,
-       sonra eksik onayı görür.
-
-       ⚠️ `isFormValid` KASITLI OLARAK DEĞİŞTİRİLMEDİ: butonu disable
-       etmek yerine guard kullanılır, çünkü disabled buton tıklama olayı
-       ÜRETMEZ → kullanıcı NEDEN ilerleyemediğini göremezdi. Bu yol hem
-       gönderimi engeller hem de anlaşılır bir mesaj verir. */
+       sonra eksik onayı görür. */
     if (!termsAccepted) {
-      setSubmitError(dict.form.termsRequired);
+      setTermsError(true);
+      setSubmitError(null);
+      focusElementById("reservation-terms-accept");
       return;
     }
 
+    /* 🛡️ Çift gönderim kilidi. */
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    setSubmitError(null);
     setLoading(true);
 
     try {
@@ -600,10 +666,25 @@ export default function ReservationForm({
            GÖSTERİM locale-aware dictionary metnine çevrildi.
            TEK İSTİSNA: HTTP 409 = "tarihler dolu" — kullanıcı için
            anlamlı olduğundan kendi dictionary mesajını alır. */
-        throw new Error(
-          res.status === 409
+        /* 🛡️ Bilinen sunucu durumları kendi dictionary mesajını alır;
+           telefon hataları ilgili ALANIN altında gösterilir. Ham sunucu
+           metni hiçbir dalda ekrana basılmaz. */
+        const kind = resolvePublicReservationServerError(res.status, json);
+        if (kind === "phone" || kind === "phone2") {
+          const fieldMessage =
+            kind === "phone"
+              ? dictionary.reservation.validation.phoneInvalid
+              : dictionary.reservation.validation.phone2Invalid;
+          setErrors((prev) => ({ ...prev, [kind]: fieldMessage }));
+          focusElementById(fieldId(kind));
+          throw new ReservationSubmitError(dict.form.errorCheckFields);
+        }
+        throw new ReservationSubmitError(
+          kind === "dates"
             ? dict.form.errorDatesUnavailable
-            : dict.form.errorGeneric
+            : kind === "rateLimited"
+              ? dict.form.errorRateLimited
+              : dict.form.errorGeneric
         );
       }
 
@@ -646,13 +727,18 @@ export default function ReservationForm({
 
       console.error(err);
 
+      /* 🛡️ Yalnız handleSubmit'in kendi (dictionary) mesajları gösterilir;
+         ağ hatası gibi HAM metinler ("Failed to fetch") generic'e düşer. */
       const msg =
-        err instanceof Error ? err.message : dict.form.errorGeneric;
+        err instanceof ReservationSubmitError
+          ? err.message
+          : dict.form.errorGeneric;
       /* 🛡️ Modern error — alert() yerine inline banner state. */
       setSubmitError(msg);
 
     } finally {
 
+      submittingRef.current = false;
       setLoading(false);
 
     }
@@ -921,43 +1007,54 @@ export default function ReservationForm({
           (adımlar, inputlar, state, handler'lar, validation) BİREBİR
           AYNI. */}
       <div className="card-premium p-6 md:p-8 space-y-9">
-        {/* 🛡️ INLINE ERROR BANNER — submitError null değilse görünür.
-           alert() yerine modern inline feedback. */}
-        {submitError && (
-          <div
-            role="alert"
-            className="
-              rounded-2xl border border-red-200 bg-red-50
-              px-4 py-3 text-[13.5px] text-red-700
-              flex items-start gap-3
-            "
-          >
-            <span aria-hidden className="mt-0.5">⚠️</span>
-            <span className="flex-1 leading-relaxed">{submitError}</span>
-            <button
-              type="button"
-              onClick={() => setSubmitError(null)}
-              aria-label={dict.form.errorDismissAriaLabel}
-              className="text-red-500 hover:text-red-700 transition-colors shrink-0"
-            >
-              ✕
-            </button>
-          </div>
-        )}
         {/* CONTACT SECTION */}
         <Section
           eyebrow={dict.form.step1Eyebrow}
           title={dict.form.step1Title}
           subtitle={dict.form.step1Subtitle}
         >
+          {/* 🛡️ ZORUNLU ALAN AÇIKLAMASI — düşük görsel ağırlık. */}
+          <p className="-mt-2 mb-4 text-[11.5px] text-[var(--color-stone-400)]">
+            <span aria-hidden="true" className="mr-0.5 text-[var(--color-champagne-600)]">*</span>
+            {dict.form.requiredLegend}
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { key: "name", placeholder: dict.form.namePlaceholder },
-              { key: "email", placeholder: dict.form.emailPlaceholder },
-              { key: "identity", placeholder: dict.form.identityPlaceholder },
+              {
+                key: "name",
+                label: dict.form.nameLabel,
+                placeholder: dict.form.namePlaceholder,
+                type: "text",
+                autoComplete: "name",
+              },
+              {
+                key: "email",
+                label: dict.form.emailLabel,
+                placeholder: dict.form.emailPlaceholder,
+                type: "email",
+                autoComplete: "email",
+              },
+              {
+                key: "identity",
+                label: dict.form.identityLabel,
+                placeholder: dict.form.identityPlaceholder,
+                type: "text",
+                autoComplete: "off",
+              },
             ].map((field) => (
               <div key={field.key}>
+                <FieldLabel htmlFor={fieldId(field.key)} required>
+                  {field.label}
+                </FieldLabel>
                 <input
+                  id={fieldId(field.key)}
+                  type={field.type}
+                  autoComplete={field.autoComplete}
+                  aria-required="true"
+                  aria-invalid={errors[field.key] ? true : undefined}
+                  aria-describedby={
+                    errors[field.key] ? errorId(field.key) : undefined
+                  }
                   value={(form as any)[field.key]}
                   placeholder={field.placeholder}
                   onChange={(e) => {
@@ -971,7 +1068,7 @@ export default function ReservationForm({
                     }`}
                 />
                 {errors[field.key] && (
-                  <p className="text-xs text-red-500 mt-1.5">
+                  <p id={errorId(field.key)} className="text-xs text-red-600 mt-1.5">
                     {errors[field.key]}
                   </p>
                 )}
@@ -1002,12 +1099,12 @@ export default function ReservationForm({
               ]
             ).map((f) => (
               <div key={f.key}>
-                {/* 🛡️ GÖRÜNÜR ÜST LABEL KALDIRILDI ("Telefon 1 *" /
-                    "Telefon 2 *"). Diğer alanlarla (Ad/E-posta/TC) aynı
-                    şekilde yalnız placeholder gösterilir. `f.label`
-                    SİLİNMEDİ: select ve input'un aria-label'ında kalır →
-                    ekran okuyucu hangi telefon olduğunu bilmeye devam
-                    eder. Zorunluluk mantığı DEĞİŞMEDİ. */}
+                {/* 🛡️ Görünür kısa etiket + `*` (diğer zorunlu alanlarla aynı
+                    FieldLabel). Input'un aria-label'ı korunur; ekran
+                    okuyucu adı aynı kalır, zorunluluk aria-required ile. */}
+                <FieldLabel htmlFor={fieldId(f.key)} required>
+                  {f.label}
+                </FieldLabel>
                 <div className="flex items-stretch gap-2">
                   <select
                     aria-label={`${f.label} — ${dict.form.phoneCountryAriaLabel}`}
@@ -1032,8 +1129,11 @@ export default function ReservationForm({
                     ))}
                   </select>
                   <input
-                    id={`reservation-${f.key}`}
+                    id={fieldId(f.key)}
                     aria-label={f.label}
+                    aria-required="true"
+                    aria-invalid={errors[f.key] ? true : undefined}
+                    aria-describedby={errors[f.key] ? errorId(f.key) : undefined}
                     type="tel"
                     inputMode="tel"
                     autoComplete={f.key === "phone" ? "tel" : "tel-national"}
@@ -1054,7 +1154,9 @@ export default function ReservationForm({
                   />
                 </div>
                 {errors[f.key] && (
-                  <p className="text-xs text-red-500 mt-1.5">{errors[f.key]}</p>
+                  <p id={errorId(f.key)} className="text-xs text-red-600 mt-1.5">
+                    {errors[f.key]}
+                  </p>
                 )}
               </div>
             ))}
@@ -1068,7 +1170,12 @@ export default function ReservationForm({
           subtitle={dict.form.step2Subtitle}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+            <FieldLabel htmlFor="reservation-country" optionalText={dict.form.optionalTag}>
+              {dict.form.countryLabel}
+            </FieldLabel>
             <select
+              id="reservation-country"
               value={form.country || ""}
               onChange={(e) => handleCountryChange(e.target.value)}
               className={`${inputBase} ${inputOk}`}
@@ -1084,8 +1191,14 @@ export default function ReservationForm({
                 </option>
               ))}
             </select>
+            </div>
 
+            <div>
+            <FieldLabel htmlFor="reservation-city" optionalText={dict.form.optionalTag}>
+              {dict.form.cityLabel}
+            </FieldLabel>
             <select
+              id="reservation-city"
               value={form.city ?? ""}
               onChange={(e) => setForm({ ...form, city: e.target.value })}
               disabled={!form.country}
@@ -1102,22 +1215,36 @@ export default function ReservationForm({
                 </option>
               ))}
             </select>
+            </div>
 
-            <input
-              value={form.address}
-              placeholder={dict.form.addressPlaceholder}
-              className={`md:col-span-2 ${inputBase} ${inputOk}`}
-              onChange={(e) =>
-                setForm({ ...form, address: e.target.value })
-              }
-            />
+            <div className="md:col-span-2">
+              <FieldLabel htmlFor="reservation-address" optionalText={dict.form.optionalTag}>
+                {dict.form.addressLabel}
+              </FieldLabel>
+              <input
+                id="reservation-address"
+                autoComplete="street-address"
+                value={form.address}
+                placeholder={dict.form.addressPlaceholder}
+                className={`${inputBase} ${inputOk}`}
+                onChange={(e) =>
+                  setForm({ ...form, address: e.target.value })
+                }
+              />
+            </div>
 
-            <input
-              value={form.note}
-              placeholder={dict.form.notePlaceholder}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-              className={`md:col-span-2 ${inputBase} ${inputOk}`}
-            />
+            <div className="md:col-span-2">
+              <FieldLabel htmlFor="reservation-note" optionalText={dict.form.optionalTag}>
+                {dict.form.noteLabel}
+              </FieldLabel>
+              <input
+                id="reservation-note"
+                value={form.note}
+                placeholder={dict.form.notePlaceholder}
+                onChange={(e) => setForm({ ...form, note: e.target.value })}
+                className={`${inputBase} ${inputOk}`}
+              />
+            </div>
           </div>
         </Section>
 
@@ -1152,6 +1279,9 @@ export default function ReservationForm({
             <div className="space-y-2.5">
               <p className="text-[12px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-500)]">
                 {dict.form.otherGuests}
+                <span className="ml-2 normal-case tracking-normal text-[11px] font-normal text-[var(--color-stone-400)]">
+                  {dict.form.optionalTag}
+                </span>
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {guestNames.map((g, i) => (
@@ -1180,14 +1310,27 @@ export default function ReservationForm({
           eyebrow={dict.form.step4Eyebrow}
           title={dict.form.step4Title}
           subtitle={dict.form.step4Subtitle}
+          titleId="reservation-payment-title"
+          required
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            role="radiogroup"
+            aria-labelledby="reservation-payment-title"
+            aria-required="true"
+            aria-invalid={errors.payment_method_id ? true : undefined}
+            aria-describedby={
+              errors.payment_method_id ? errorId("payment_method_id") : undefined
+            }
+            className={`grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl ${
+              errors.payment_method_id ? "ring-1 ring-red-300 ring-offset-4 ring-offset-white" : ""
+            }`}
+          >
             {paymentMethods.length === 0 && (
               <p className="text-sm text-[var(--color-stone-400)] italic">
                 {dict.form.noPaymentMethod}
               </p>
             )}
-            {paymentMethods.map((p) => {
+            {paymentMethods.map((p, pIndex) => {
               const checked = form.payment_method_id === p.id;
               return (
                 <label
@@ -1203,10 +1346,14 @@ export default function ReservationForm({
                 >
                   <input
                     type="radio"
+                    name="reservation-payment-method"
+                    /* İlk seçenek: ilk hatalı alana odaklanma hedefi. */
+                    id={pIndex === 0 ? fieldId("payment_method_id") : undefined}
                     checked={checked}
-                    onChange={() =>
-                      setForm({ ...form, payment_method_id: p.id })
-                    }
+                    onChange={() => {
+                      setForm({ ...form, payment_method_id: p.id });
+                      setErrors((prev) => ({ ...prev, payment_method_id: "" }));
+                    }}
                     className="!w-4 !h-4 accent-[var(--color-champagne-500)]"
                   />
                   <CreditCard
@@ -1225,7 +1372,7 @@ export default function ReservationForm({
             })}
           </div>
           {errors.payment_method_id && (
-            <p className="text-xs text-red-500 mt-2">
+            <p id={errorId("payment_method_id")} className="text-xs text-red-600 mt-2">
               {errors.payment_method_id}
             </p>
           )}
@@ -1300,7 +1447,8 @@ export default function ReservationForm({
               checkbox'ı toggle ETMEZ ve doldurulmuş form kaybolmaz.
             • Mevcut typography/spacing/renk token'ları; yeni global
               CSS veya yeni component YOK. */}
-        <div className="flex items-start gap-3 mb-4">
+        <div className="mb-4">
+        <div className="flex items-start gap-3">
           <input
             id="reservation-terms-accept"
             type="checkbox"
@@ -1308,11 +1456,12 @@ export default function ReservationForm({
             onChange={(e) => {
               setTermsAccepted(e.target.checked);
               /* Onay verilince eksik-onay uyarısı kendiliğinden kalkar;
-                 diğer submitError mesajlarına DOKUNULMAZ. */
-              if (e.target.checked && submitError === dict.form.termsRequired) {
-                setSubmitError(null);
-              }
+                 diğer hata mesajlarına DOKUNULMAZ. */
+              if (e.target.checked) setTermsError(false);
             }}
+            aria-required="true"
+            aria-invalid={termsError ? true : undefined}
+            aria-describedby={termsError ? "reservation-terms-error" : undefined}
             className="!w-4 !h-4 mt-0.5 shrink-0 accent-[var(--color-champagne-500)]"
           />
           <label
@@ -1361,17 +1510,63 @@ export default function ReservationForm({
                   );
                 });
             })()}
+            <span aria-hidden="true" className="ml-0.5 text-[var(--color-champagne-600)]">*</span>
           </label>
+        </div>
+        {termsError && (
+          <p
+            id="reservation-terms-error"
+            role="alert"
+            className="text-xs text-red-600 mt-1.5 pl-7"
+          >
+            {dict.form.termsRequired}
+          </p>
+        )}
+        </div>
+
+        {/* 🛡️ INLINE ERROR BANNER — submitError null değilse görünür.
+            Gönder butonunun HEMEN ÜSTÜNDE: kullanıcı mesajı tıkladığı
+            yerde görür (eskiden formun en üstündeydi, ekran dışında
+            kalıyordu). Görünür olunca kendisine kaydırılır. */}
+        <div id="reservation-submit-feedback" ref={feedbackRef} tabIndex={-1} className="outline-none">
+          {errors.date && (
+            <p role="alert" className="mb-3 text-xs text-red-600">
+              {errors.date}
+            </p>
+          )}
+          {submitError && (
+            <div
+              role="alert"
+              className="
+                mb-4 rounded-2xl border border-red-200 bg-red-50
+                px-4 py-3 text-[13.5px] text-red-700
+                flex items-start gap-3
+              "
+            >
+              <span aria-hidden className="mt-0.5">⚠️</span>
+              <span className="flex-1 leading-relaxed">{submitError}</span>
+              <button
+                type="button"
+                onClick={() => setSubmitError(null)}
+                aria-label={dict.form.errorDismissAriaLabel}
+                className="text-red-500 hover:text-red-700 transition-colors shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
 
         {/* SUBMIT */}
         <button
+          type="button"
           onClick={handleSubmit}
-          disabled={!isFormValid || loading}
+          disabled={submitBlocked}
+          aria-busy={loading || undefined}
           className={`
             w-full inline-flex items-center justify-center gap-2
             py-4 rounded-xl font-semibold text-base transition
-            ${isFormValid && !loading
+            ${!submitBlocked
               ? "btn-primary"
               : "bg-[var(--color-stone-100)] text-[var(--color-stone-400)] cursor-not-allowed"
             }
@@ -1401,22 +1596,74 @@ function Section({
   title,
   subtitle,
   children,
+  titleId,
+  required = false,
 }: {
   eyebrow: string;
   title: string;
   subtitle: string;
   children: React.ReactNode;
+  /** Başlık id'si — radiogroup gibi gruplar aria-labelledby ile bağlanır. */
+  titleId?: string;
+  /** Bölümün kendisi zorunlu bir seçimse başlığa küçük `*` eklenir. */
+  required?: boolean;
 }) {
   return (
     <section>
       <p className="eyebrow">{eyebrow}</p>
-      <h2 className="font-display text-2xl text-[var(--color-stone-900)] mt-1.5 tracking-[-0.015em]">
+      <h2
+        id={titleId}
+        className="font-display text-2xl text-[var(--color-stone-900)] mt-1.5 tracking-[-0.015em]"
+      >
         {title}
+        {required && (
+          <span
+            aria-hidden="true"
+            className="ml-1 align-top text-base text-[var(--color-champagne-600)]"
+          >
+            *
+          </span>
+        )}
       </h2>
       <p className="text-sm text-[var(--color-stone-500)] mt-1.5 mb-5">
         {subtitle}
       </p>
       {children}
     </section>
+  );
+}
+
+/* 🛡️ ALAN ETİKETİ — kısa, sakin etiket. Zorunlu alanda tasarım vurgu
+   renginde küçük `*` (görsel; ekran okuyucuya zorunluluk input'taki
+   `aria-required` ile iletilir, `*` aria-hidden). İsteğe bağlı alanda
+   küçük, soluk "İsteğe bağlı" metni. */
+function FieldLabel({
+  htmlFor,
+  children,
+  required = false,
+  optionalText,
+}: {
+  htmlFor: string;
+  children: React.ReactNode;
+  required?: boolean;
+  optionalText?: string;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="mb-1.5 flex items-baseline gap-1 text-[12.5px] font-medium text-[var(--color-stone-600)]"
+    >
+      <span>{children}</span>
+      {required && (
+        <span aria-hidden="true" className="text-[var(--color-champagne-600)]">
+          *
+        </span>
+      )}
+      {!required && optionalText && (
+        <span className="ml-1 text-[11px] font-normal text-[var(--color-stone-400)]">
+          {optionalText}
+        </span>
+      )}
+    </label>
   );
 }

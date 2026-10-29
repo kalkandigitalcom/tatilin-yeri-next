@@ -718,6 +718,18 @@ export const de: Dictionary = {
       termsDistanceSalesLink: "Fernabsatzvertrag",
       termsPrivacyLink: "Datenschutzerklärung",
       termsRequired: "Sie müssen die Bedingungen akzeptieren, um fortzufahren.",
+      nameLabel: "Vor- und Nachname",
+      emailLabel: "E-Mail",
+      identityLabel: "Ausweis- / Reisepassnummer",
+      countryLabel: "Land",
+      cityLabel: "Stadt",
+      addressLabel: "Adresse",
+      noteLabel: "Notiz",
+      optionalTag: "Optional",
+      requiredLegend: "Pflichtfeld",
+      errorCheckFields: "Bitte prüfen Sie die markierten Felder.",
+      errorRateLimited:
+        "Zu viele Versuche. Bitte versuchen Sie es in einigen Minuten erneut.",
     },
     validation: {
       nameRequired: "Name ist erforderlich",
@@ -728,7 +740,8 @@ export const de: Dictionary = {
       emailRequired: "E-Mail ist erforderlich",
       emailInvalid: "Geben Sie eine gültige E-Mail ein",
       identityRequired: "Ausweisnummer ist erforderlich",
-      identityInvalid: "Geben Sie eine 11-stellige Ausweisnummer ein",
+      identityInvalid:
+        "Geben Sie eine 11-stellige Ausweisnummer oder eine gültige Reisepassnummer ein",
       paymentMethodRequired: "Zahlungsmethode wählen",
       dateRequired: "Bitte Termine auswählen",
     },
