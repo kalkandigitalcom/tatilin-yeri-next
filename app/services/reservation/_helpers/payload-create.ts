@@ -186,6 +186,12 @@ export function buildCreateReservationPayload(
       ? { damage_deposit: Number(data.damage_deposit) || 0 }
       : {}),
 
+    // 🛡️ Migration 100 — NUMERIC TRY karşılığı (cleaning_fee_try ile
+    // aynı: kuruşlu, YUVARLANMADAN). Sadece tanımlıysa yazılır.
+    ...(data.damage_deposit_try !== undefined
+      ? { damage_deposit_try: Number(data.damage_deposit_try) || 0 }
+      : {}),
+
     // 🛡️ Migration 099 — depozitonun orijinal tutarı / para birimi.
     // Sadece tanımlıysa yazılır (eski payload'lar BYTE-IDENTICAL).
     // Para birimi allowlist'e normalize edilir (bilinmeyen → TRY).

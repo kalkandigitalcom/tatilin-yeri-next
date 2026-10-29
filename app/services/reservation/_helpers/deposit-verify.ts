@@ -16,8 +16,10 @@ import {
    - Villa'nın KENDİ `deposit` + `deposit_currency` değerinden
      snapshot üretilir; client'ın gönderdiği damage_deposit alanları
      YOK SAYILIR.
-   - TRY (veya NULL para birimi) → damage_deposit = Number(deposit) || 0
-     (eski client formülüyle BİREBİR). Kur okunmaz.
+   - TRY (veya NULL para birimi) → damage_deposit = damage_deposit_try =
+     Number(deposit) || 0 (eski client formülüyle BİREBİR). Kur okunmaz.
+   - Yabancı para birimi → damage_deposit_try = convertPrice (kuruşlu,
+     NUMERIC kolon — cleaning_fee_try deseni); damage_deposit (INTEGER) 0.
    - Yabancı para birimi + pozitif tutar → güncel kur okunur. Kur yoksa
      `DamageDepositRateUnavailableError` → route rezervasyonu REDDEDER.
    - Toplam / ön ödeme / kalan ödeme alanlarına DOKUNMAZ.
@@ -34,6 +36,7 @@ export class DamageDepositRateUnavailableError extends Error {
 
 export type AuthoritativeDamageDeposit = {
   damage_deposit: number;
+  damage_deposit_try: number;
   original_damage_deposit: number;
   original_damage_deposit_currency: string;
 };
@@ -66,6 +69,7 @@ export async function resolveAuthoritativeDamageDeposit(
 
   return {
     damage_deposit: snap.damage_deposit,
+    damage_deposit_try: snap.damage_deposit_try,
     original_damage_deposit: snap.original_damage_deposit,
     original_damage_deposit_currency: snap.original_damage_deposit_currency,
   };

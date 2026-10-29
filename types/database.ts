@@ -353,6 +353,10 @@ export interface ReservationRow {
    *  biriminde. damage_deposit TRY karşılığıdır. Eski kayıtlarda NULL. */
   original_damage_deposit: number | null;
   original_damage_deposit_currency: string | null;
+  /* 🛡️ Migration 100 — depozitonun NUMERIC TRY karşılığı (cleaning_fee_try
+   *  ile aynı desen). damage_deposit INTEGER kolonu yalnız TRY depozitoda
+   *  dolu. Eski kayıtlarda NULL. */
+  damage_deposit_try: number | null;
   created_at: string | null;
 }
 

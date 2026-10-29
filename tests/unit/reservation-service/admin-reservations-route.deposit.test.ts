@@ -69,7 +69,8 @@ beforeEach(() => {
 describe("POST /api/admin/reservations — depozito", () => {
   it("server snapshot'ı body'yi ezer; toplam/ödeme alanları aynen kalır", async () => {
     resolveAuthoritativeDamageDeposit.mockResolvedValue({
-      damage_deposit: 17550,
+      damage_deposit: 0,
+      damage_deposit_try: 17550.5,
       original_damage_deposit: 500,
       original_damage_deposit_currency: "EUR",
     });
@@ -77,7 +78,8 @@ describe("POST /api/admin/reservations — depozito", () => {
     expect(res.status).toBe(200);
     expect(resolveAuthoritativeDamageDeposit).toHaveBeenCalledWith("villa-1");
     const sent = createReservation.mock.calls[0][0];
-    expect(sent.damage_deposit).toBe(17550);
+    expect(sent.damage_deposit).toBe(0);
+    expect(sent.damage_deposit_try).toBe(17550.5);
     expect(sent.original_damage_deposit).toBe(500);
     expect(sent.original_damage_deposit_currency).toBe("EUR");
     expect(sent.total_price).toBe(40000);

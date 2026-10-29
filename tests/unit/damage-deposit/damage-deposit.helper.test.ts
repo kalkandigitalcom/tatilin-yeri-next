@@ -45,9 +45,10 @@ describe("formatDamageDeposit", () => {
 });
 
 describe("computeDamageDepositSnapshot", () => {
-  it("TRY → damage_deposit = Number(deposit) || 0 (eski formül), kur gerekmez", () => {
+  it("TRY → damage_deposit = damage_deposit_try = Number(deposit) || 0 (eski formül), kur gerekmez", () => {
     expect(computeDamageDepositSnapshot(7500, "TRY", {})).toEqual({
       damage_deposit: 7500,
+      damage_deposit_try: 7500,
       original_damage_deposit: 7500,
       original_damage_deposit_currency: "TRY",
       rateMissing: false,
@@ -55,18 +56,31 @@ describe("computeDamageDepositSnapshot", () => {
     expect(computeDamageDepositSnapshot("5000", null, null).damage_deposit).toBe(5000);
     expect(computeDamageDepositSnapshot(null, undefined, null).damage_deposit).toBe(0);
   });
-  it("EUR → TRY karşılığı convertPrice (amount × kur)", () => {
+  it("EUR → kuruşlu TRY karşılığı damage_deposit_try'da (convertPrice), INTEGER alan 0", () => {
     const s = computeDamageDepositSnapshot(500, "EUR", RATES);
-    expect(s.damage_deposit).toBe(17550);
+    expect(s.damage_deposit_try).toBe(17550);
+    expect(s.damage_deposit).toBe(0);
     expect(s.original_damage_deposit).toBe(500);
     expect(s.original_damage_deposit_currency).toBe("EUR");
     expect(s.rateMissing).toBe(false);
   });
-  it("yabancı para birimi + kur yok / 0 / NaN → rateMissing, damage_deposit 0", () => {
+  it.each([
+    ["EUR", 200, 11104.82],
+    ["USD", 150, 7468.38],
+    ["GBP", 120, 7972.67],
+  ])("küsuratlı kur: %s %d → %d (yuvarlama yok, temizlik ile aynı 2 hane)", (code, amount, expected) => {
+    const live = { USD: 49.7892, EUR: 55.5241, GBP: 66.4389 };
+    const s = computeDamageDepositSnapshot(amount, code, live);
+    expect(s.damage_deposit_try).toBe(expected);
+    expect(s.damage_deposit).toBe(0);
+    expect(Number.isInteger(s.damage_deposit)).toBe(true);
+  });
+  it("yabancı para birimi + kur yok / 0 / NaN → rateMissing, TRY alanları 0", () => {
     for (const rates of [{}, { EUR: 0 }, { EUR: Number.NaN }, null]) {
       const s = computeDamageDepositSnapshot(500, "EUR", rates as never);
       expect(s.rateMissing).toBe(true);
       expect(s.damage_deposit).toBe(0);
+      expect(s.damage_deposit_try).toBe(0);
       expect(s.original_damage_deposit_currency).toBe("EUR");
     }
   });
@@ -74,6 +88,7 @@ describe("computeDamageDepositSnapshot", () => {
     const s = computeDamageDepositSnapshot(0, "EUR", {});
     expect(s.rateMissing).toBe(false);
     expect(s.damage_deposit).toBe(0);
+    expect(s.damage_deposit_try).toBe(0);
   });
 });
 
@@ -89,23 +104,27 @@ describe("resolveReservationDamageDeposit / format", () => {
     expect(formatReservationDamageDepositWithTry(row)).toBe(formatDamageDepositTRY(5000));
     expect(shouldDisplayReservationDamageDeposit(row)).toBe(true);
   });
-  it("yeni EUR kaydı → orijinal tutar + para birimi; admin'de ₺ karşılığı", () => {
+  it("yeni EUR kaydı → orijinal tutar + para birimi; admin'de ₺ karşılığı (damage_deposit_try)", () => {
     const row = {
-      damage_deposit: 17550,
-      original_damage_deposit: 500,
+      damage_deposit: 0,
+      damage_deposit_try: 11104.82,
+      original_damage_deposit: 200,
       original_damage_deposit_currency: "EUR",
     };
     expect(resolveReservationDamageDeposit(row)).toEqual({
-      amount: 500,
+      amount: 200,
       currency: "EUR",
-      tryAmount: 17550,
+      tryAmount: 11104.82,
     });
-    expect(formatReservationDamageDeposit(row)).toBe("€500");
-    expect(formatReservationDamageDepositWithTry(row)).toBe("€500 (≈ ₺17.550)");
+    expect(shouldDisplayReservationDamageDeposit(row)).toBe(true);
+    expect(formatReservationDamageDeposit(row)).toBe("€200");
+    /* Yuvarlama YALNIZ gösterimde. */
+    expect(formatReservationDamageDepositWithTry(row)).toBe("€200 (≈ ₺11.105)");
   });
   it("TRY snapshot'lı yeni kayıt eskisiyle aynı görünür", () => {
     const row = {
       damage_deposit: 7500,
+      damage_deposit_try: 7500,
       original_damage_deposit: 7500,
       original_damage_deposit_currency: "TRY",
     };

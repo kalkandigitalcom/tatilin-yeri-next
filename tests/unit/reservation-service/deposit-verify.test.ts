@@ -35,6 +35,7 @@ describe("resolveAuthoritativeDamageDeposit", () => {
     });
     await expect(resolveAuthoritativeDamageDeposit("v1")).resolves.toEqual({
       damage_deposit: 7500,
+      damage_deposit_try: 7500,
       original_damage_deposit: 7500,
       original_damage_deposit_currency: "TRY",
     });
@@ -49,16 +50,22 @@ describe("resolveAuthoritativeDamageDeposit", () => {
     const r = await resolveAuthoritativeDamageDeposit("v1");
     expect(r.original_damage_deposit_currency).toBe("TRY");
     expect(r.damage_deposit).toBe(3000);
+    expect(r.damage_deposit_try).toBe(3000);
   });
 
-  it("GBP → TRY karşılığı", async () => {
+  it("GBP → kuruşlu TRY karşılığı damage_deposit_try'da, INTEGER alan 0", async () => {
+    getExchangeRatesMap.mockResolvedValue({
+      rates: { USD: 49.7892, EUR: 55.5241, GBP: 66.4389 },
+      updatedAt: null,
+    });
     findVillaCleaningConfig.mockResolvedValue({
       data: { deposit: 200, deposit_currency: "GBP" },
       error: null,
     });
     const r = await resolveAuthoritativeDamageDeposit("v1");
     expect(r).toEqual({
-      damage_deposit: 8240,
+      damage_deposit: 0,
+      damage_deposit_try: 13287.78,
       original_damage_deposit: 200,
       original_damage_deposit_currency: "GBP",
     });

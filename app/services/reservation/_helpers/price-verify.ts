@@ -142,9 +142,11 @@ export type ServerPriceResult = {
   /* 🛡️ SEC-06 F4 — hasar depozitosu villanın KENDİ kaydından
      (`villa.deposit`, TRY). Client formülüyle BİREBİR:
      `Number(villa.deposit) || 0` (buildPublicReservationPayload).
-     🛡️ Migration 099 — artık TRY KARŞILIĞI (TRY depozitoda formül
-     BİREBİR aynı). Orijinal tutar/para birimi ayrı alanlarda. */
+     🛡️ Migration 100 — eski INTEGER kolon: YALNIZ TRY depozitoda tutar
+     (formül BİREBİR aynı), yabancı para biriminde 0. Kuruşlu TRY
+     karşılığı `damageDepositTry`'da (cleaningFeeTry ile aynı desen). */
   damageDeposit: number;
+  damageDepositTry: number;
   originalDamageDeposit: number;
   originalDamageDepositCurrency: string;
   /* 🛡️ SEC-06 F3 — hesapta GERÇEKTEN kullanılan ama geçerli kuru
@@ -493,6 +495,7 @@ export async function recomputePublicReservationPrice(input: {
     // 🛡️ SEC-06 F3 / F4
     missingRates,
     damageDeposit: depositSnapshot.damage_deposit,
+    damageDepositTry: depositSnapshot.damage_deposit_try,
     originalDamageDeposit: depositSnapshot.original_damage_deposit,
     originalDamageDepositCurrency:
       depositSnapshot.original_damage_deposit_currency,
@@ -629,8 +632,10 @@ export type PublicReservationAuthoritativeSnapshot = {
   original_stay_total_try: number | null;
   stay_discount_amount_try: number | null;
   // 🛡️ SEC-06 F4 — villa.deposit snapshot (client değeri YOK SAYILIR).
-  // Migration 099 — TRY karşılığı + villanın kendi para birimi.
+  // Migration 099/100 — damage_deposit (INTEGER, yalnız TRY depozito),
+  // damage_deposit_try (NUMERIC TRY karşılığı) + villanın para birimi.
   damage_deposit: number;
+  damage_deposit_try: number;
   original_damage_deposit: number;
   original_damage_deposit_currency: string;
 };
@@ -781,6 +786,7 @@ export async function verifyPublicReservationPrice(
         stay_discount_amount_try: server.stayDiscountAmountTry,
         // 🛡️ SEC-06 F4
         damage_deposit: server.damageDeposit,
+        damage_deposit_try: server.damageDepositTry,
         original_damage_deposit: server.originalDamageDeposit,
         original_damage_deposit_currency:
           server.originalDamageDepositCurrency,

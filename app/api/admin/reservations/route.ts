@@ -121,6 +121,7 @@ export async function POST(req: Request): Promise<Response> {
     if (body?.villa_id) {
       const deposit = await resolveAuthoritativeDamageDeposit(body.villa_id);
       body.damage_deposit = deposit.damage_deposit;
+      body.damage_deposit_try = deposit.damage_deposit_try;
       body.original_damage_deposit = deposit.original_damage_deposit;
       body.original_damage_deposit_currency =
         deposit.original_damage_deposit_currency;

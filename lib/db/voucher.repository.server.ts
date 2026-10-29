@@ -35,7 +35,7 @@ export const voucherRepository = {
       .from("reservations")
       .select(
         `id, reservation_no, damage_deposit,
-       original_damage_deposit, original_damage_deposit_currency,
+       original_damage_deposit, original_damage_deposit_currency, damage_deposit_try,
        name, phone, phone2, email, identity_number, country, city, address,
        guests, guest_names, note, status, created_at,
        start_date, end_date,

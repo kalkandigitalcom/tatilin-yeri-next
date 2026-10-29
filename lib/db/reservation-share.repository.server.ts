@@ -50,6 +50,8 @@ export type ReservationShareRow = {
   /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi (NULL → TRY). */
   original_damage_deposit: number | null;
   original_damage_deposit_currency: string | null;
+  /* 🛡️ Migration 100 — NUMERIC TRY karşılığı (NULL → damage_deposit). */
+  damage_deposit_try: number | null;
   cleaning_fee_try: number | null;
   /* 🛡️ `id` + `name` ADDITIVE: görünen ödeme yöntemi etiketi artık
      CANONICAL `payment_methods.name` (+ `payment_method_translations`
@@ -174,6 +176,7 @@ export const reservationShareRepository = {
          damage_deposit,
          original_damage_deposit,
          original_damage_deposit_currency,
+         damage_deposit_try,
          cleaning_fee_try,
          pool_heating_selected,
          pool_heating_total_try,

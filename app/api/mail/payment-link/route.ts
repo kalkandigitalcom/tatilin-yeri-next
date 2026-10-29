@@ -56,6 +56,7 @@ type PaymentLinkReservationRow = {
   /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi. */
   original_damage_deposit?: number | null;
   original_damage_deposit_currency?: string | null;
+  damage_deposit_try?: number | null;
   start_date: string | null;
   end_date: string | null;
   total_price: number | null;

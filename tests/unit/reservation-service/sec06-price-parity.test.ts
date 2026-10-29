@@ -112,6 +112,7 @@ describe("SEC-06 — fiyat paritesi (düzeltme öncesi baseline ile birebir)", (
       expect(v.rateUnavailable).toBe(false);
       const {
         damage_deposit,
+        damage_deposit_try,
         original_damage_deposit,
         original_damage_deposit_currency,
         ...rest
@@ -119,7 +120,8 @@ describe("SEC-06 — fiyat paritesi (düzeltme öncesi baseline ile birebir)", (
       expect(rest).toEqual(before.authoritative);
       // Yeni alan: villa.deposit yok → 0 (client formülü: Number(x) || 0).
       expect(damage_deposit).toBe(0);
-      // 🛡️ Migration 099 — deposit_currency yok → TRY, tutar 0.
+      // 🛡️ Migration 099/100 — deposit_currency yok → TRY, tutar 0.
+      expect(damage_deposit_try).toBe(0);
       expect(original_damage_deposit).toBe(0);
       expect(original_damage_deposit_currency).toBe("TRY");
     });
@@ -131,11 +133,13 @@ describe("SEC-06 — fiyat paritesi (düzeltme öncesi baseline ile birebir)", (
     const v = await verifyPublicReservationPrice(payload(s));
     const {
       damage_deposit,
+      damage_deposit_try,
       original_damage_deposit,
       original_damage_deposit_currency,
       ...rest
     } = v.authoritative!;
     expect(damage_deposit).toBe(7500);
+    expect(damage_deposit_try).toBe(7500);
     expect(original_damage_deposit).toBe(7500);
     expect(original_damage_deposit_currency).toBe("TRY");
     expect(rest).toEqual(BASELINE[s.name].authoritative);

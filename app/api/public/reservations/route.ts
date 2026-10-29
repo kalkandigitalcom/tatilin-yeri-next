@@ -197,9 +197,12 @@ export async function POST(req: Request): Promise<Response> {
     /* 🛡️ SEC-06 F4 — hasar depozitosu villanın kendi kaydından
        (client formülüyle aynı: Number(villa.deposit) || 0). */
     body.damage_deposit = verification.authoritative.damage_deposit;
-    /* 🛡️ Migration 099 — depozitonun villanın kendi para birimindeki
-       snapshot'ı (server-authoritative; client değeri YOK SAYILIR).
-       damage_deposit yukarıda TRY karşılığıdır. */
+    /* 🛡️ Migration 099/100 — depozito snapshot'ı temizlik ücreti ile
+       AYNI model (server-authoritative; client değeri YOK SAYILIR):
+       orijinal tutar + para birimi + NUMERIC TRY karşılığı. Yukarıdaki
+       damage_deposit (INTEGER) yalnız TRY depozitoda dolu. */
+    body.damage_deposit_try =
+      verification.authoritative.damage_deposit_try;
     body.original_damage_deposit =
       verification.authoritative.original_damage_deposit;
     body.original_damage_deposit_currency =

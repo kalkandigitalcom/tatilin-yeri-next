@@ -171,6 +171,7 @@ export async function resolveReservationShare(
           damage_deposit: number | null;
           original_damage_deposit?: number | null;
           original_damage_deposit_currency?: string | null;
+          damage_deposit_try?: number | null;
           cleaning_fee_try: number | null;
           pool_heating_selected: boolean | null;
           pool_heating_total_try: number | null;

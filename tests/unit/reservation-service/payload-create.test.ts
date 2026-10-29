@@ -256,6 +256,7 @@ describe("buildCreateReservationPayload — depozito para birimi", () => {
     });
     expect("original_damage_deposit" in p).toBe(false);
     expect("original_damage_deposit_currency" in p).toBe(false);
+    expect("damage_deposit_try" in p).toBe(false);
     expect(p.damage_deposit).toBe(5000);
   });
 
@@ -263,14 +264,17 @@ describe("buildCreateReservationPayload — depozito para birimi", () => {
     const p = buildCreateReservationPayload({
       data: {
         ...minimalInput,
-        damage_deposit: 17550,
-        original_damage_deposit: 500,
+        damage_deposit: 0,
+        damage_deposit_try: 11104.82,
+        original_damage_deposit: 200,
         original_damage_deposit_currency: "eur",
       },
       reservationCommissionAmount: 0,
     });
-    expect(p.damage_deposit).toBe(17550);
-    expect(p.original_damage_deposit).toBe(500);
+    expect(p.damage_deposit).toBe(0);
+    /* Kuruşlu TRY karşılığı YUVARLANMADAN yazılır (cleaning_fee_try gibi). */
+    expect(p.damage_deposit_try).toBe(11104.82);
+    expect(p.original_damage_deposit).toBe(200);
     expect(p.original_damage_deposit_currency).toBe("EUR");
   });
 
@@ -296,7 +300,8 @@ describe("buildCreateReservationPayload — depozito para birimi", () => {
         ...minimalInput,
         prepayment_amount: 10000,
         remaining_payment: 40000,
-        damage_deposit: 17550,
+        damage_deposit: 0,
+        damage_deposit_try: 17550.5,
         original_damage_deposit: 500,
         original_damage_deposit_currency: "EUR",
       },

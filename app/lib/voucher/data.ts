@@ -126,6 +126,7 @@ type VoucherReservationRow = {
   /* 🛡️ Migration 099 — depozito orijinal tutar/para birimi (NULL → TRY). */
   original_damage_deposit?: number | null;
   original_damage_deposit_currency?: string | null;
+  damage_deposit_try?: number | null;
   name: string | null;
   phone: string | null;
   /** 🛡️ İkinci telefon — eski rezervasyonlarda null → satır basılmaz. */
