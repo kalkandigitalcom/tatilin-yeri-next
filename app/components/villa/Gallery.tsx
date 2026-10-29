@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Play } from "lucide-react";
+import NextImage from "next/image";
+import { ChevronLeft, ChevronRight, Play, X } from "lucide-react";
 import WatermarkOverlay from "./WatermarkOverlay";
 import VillaVideoModal from "./VillaVideoModal";
 import type { WatermarkPosition } from "@/app/services/settings.types";
@@ -86,39 +87,138 @@ export default function Gallery({
   const safeVideos = videos ?? [];
   const hasVideo = safeVideos.length > 0;
 
-  /* 🛡️ MOBILE SWIPE — native touch handler (zero dependency).
-     Lightbox modal içinde parmakla sağa-sola sürükleme ile prev/next.
-     Masaüstü mouse/click davranışı, klavye ← → Esc, lightbox dış-tıkla
-     kapatma, thumbnail tap → AYNEN korunur (touch event'leri yalnız
-     touchscreen cihazlarda tetiklenir; mouse event'leriyle çakışmaz). */
-  const touchStartX = useRef<number | null>(null);
-  const SWIPE_THRESHOLD = 50;
+  /* 🛡️ LIGHTBOX — tam ekrana yakın görüntüleyici (durum + yardımcılar)
+     ===============================================================
+     - `isOpen` yalnız açık/kapalı geçişlerinde değişir; açık kalırken
+       foto değişimi (activeIndex) kilit/odak efektlerini YENİDEN
+       çalıştırmaz.
+     - `returnFocusRef`: galeriyi açan öğe (kolaj karesi / "Tüm
+       Fotoğraflar"); kapanınca odak buraya döner. */
+  const isOpen = activeIndex !== null;
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  /* Aşağı kaydırarak kapatma sırasında taşınan foto katmanı. */
+  const dragLayerRef = useRef<HTMLDivElement | null>(null);
 
   /* 🛡️ THUMBNAIL FILMSTRIP — lightbox aktif thumbnail referansları.
      scrollIntoView ile aktif thumb görünür alanda tutulur. Yalnız
      lightbox açıkken render edilir → LCP etkisi yok. */
   const thumbRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // 🔥 scroll lock
-  useEffect(() => {
-    if (activeIndex !== null) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-  }, [activeIndex]);
+  function openAt(index: number, opener?: HTMLElement | null) {
+    returnFocusRef.current =
+      opener ??
+      (typeof document !== "undefined"
+        ? (document.activeElement as HTMLElement | null)
+        : null);
+    setActiveIndex(index);
+  }
 
-  // 🔥 keyboard controls
+  function close() {
+    setActiveIndex(null);
+  }
+
+  function next() {
+    setActiveIndex((prev) =>
+      prev !== null ? (prev + 1) % images.length : prev
+    );
+  }
+
+  function prev() {
+    setActiveIndex((prev) =>
+      prev !== null ? (prev - 1 + images.length) % images.length : prev
+    );
+  }
+
+  /* 🔒 KAYDIRMA KİLİDİ — yalnız lightbox AÇIKKEN. `body` ve `html`
+     overflow değerleri kaydedilir ve kapanınca/unmount'ta AYNEN geri
+     yüklenir (video/harita modal'larındaki desenle aynı; mount'ta
+     `overflow: auto` YAZILMAZ). */
   useEffect(() => {
+    if (!isOpen) return;
+    const body = document.body;
+    const html = document.documentElement;
+    const prevBody = body.style.overflow;
+    const prevHtml = html.style.overflow;
+    body.style.overflow = "hidden";
+    html.style.overflow = "hidden";
+    return () => {
+      body.style.overflow = prevBody;
+      html.style.overflow = prevHtml;
+    };
+  }, [isOpen]);
+
+  /* 🎯 ODAK — açılınca kapatma düğmesine; kapanınca açan öğeye. */
+  useEffect(() => {
+    if (!isOpen) return;
+    closeButtonRef.current?.focus({ preventScroll: true });
+    return () => {
+      const el = returnFocusRef.current;
+      returnFocusRef.current = null;
+      if (el && typeof el.focus === "function" && document.contains(el)) {
+        el.focus({ preventScroll: true });
+      }
+    };
+  }, [isOpen]);
+
+  /* ⌨️ KLAVYE — dinleyici YALNIZ lightbox açıkken bağlı (kapalıyken ok
+     tuşları galeriyi AÇMAZ, sayfadaki kontrollere karışmaz). Form
+     alanlarında / düzenlenebilir içerikte kısayollar çalışmaz. Tab
+     odağı dialog içinde tutulur. */
+  useEffect(() => {
+    if (!isOpen) return;
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setActiveIndex(null);
-      if (e.key === "ArrowRight") next();
-      if (e.key === "ArrowLeft") prev();
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isTyping =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        !!target?.isContentEditable;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (e.key === "Tab") {
+        const root = dialogRef.current;
+        if (!root) return;
+        const focusables = Array.from(
+          root.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        const inside = !!active && root.contains(active);
+        if (e.shiftKey && (active === first || !inside)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !inside)) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+      if (isTyping) return;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        next();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prev();
+      }
     }
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [activeIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, images.length]);
 
   /* 🛡️ Aktif thumbnail'i görünür alana kaydır (lightbox açılışında +
      her next/prev/klavye/swipe navigasyonunda). Sayfa scroll-lock
@@ -127,7 +227,7 @@ export default function Gallery({
   useEffect(() => {
     if (activeIndex === null) return;
     const el = thumbRefs.current[activeIndex];
-    if (el) {
+    if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({
         behavior: "smooth",
         inline: "center",
@@ -136,42 +236,134 @@ export default function Gallery({
     }
   }, [activeIndex]);
 
-  function next() {
-    setActiveIndex((prev) =>
-      prev !== null ? (prev + 1) % images.length : 0
-    );
+  /* ⚡ ÖN YÜKLEME — sonraki/önceki fotoğraf tarayıcı önbelleğine alınır
+     (mevcut görsel altyapısı; yeni sistem YOK). */
+  useEffect(() => {
+    if (activeIndex === null || images.length < 2) return;
+    if (typeof window === "undefined" || typeof window.Image !== "function") return;
+    const neighbours = new Set([
+      (activeIndex + 1) % images.length,
+      (activeIndex - 1 + images.length) % images.length,
+    ]);
+    neighbours.forEach((i) => {
+      if (i === activeIndex || !images[i]) return;
+      const img = new window.Image();
+      img.decoding = "async";
+      img.src = images[i];
+    });
+  }, [activeIndex, images]);
+
+  /* 🛡️ DOKUNMATİK — sağa/sola kaydırma ile foto değiştirme + aşağı
+     kaydırarak kapatma. Eksen, hareketin ilk ~10px'inde KİLİTLENİR;
+     yatay hareket asla kapatmayı, dikey hareket asla foto değişimini
+     tetiklemez. Çoklu parmak (pinch) hareketi iptal eder. Kapatma için
+     belirgin bir aşağı hareket gerekir (CLOSE_THRESHOLD). */
+  const SWIPE_THRESHOLD = 50;
+  const CLOSE_THRESHOLD = 120;
+  const AXIS_LOCK = 10;
+  const gestureRef = useRef<{
+    x: number;
+    y: number;
+    axis: "x" | "y" | null;
+  } | null>(null);
+
+  function resetDrag() {
+    const layer = dragLayerRef.current;
+    if (layer) {
+      layer.style.transform = "";
+      layer.style.transition = "";
+    }
+    const dialog = dialogRef.current;
+    if (dialog) dialog.style.backgroundColor = "";
   }
 
-  function prev() {
-    setActiveIndex((prev) =>
-      prev !== null ? (prev - 1 + images.length) % images.length : 0
-    );
+  function applyDrag(dy: number) {
+    const layer = dragLayerRef.current;
+    if (layer) {
+      layer.style.transition = "none";
+      layer.style.transform = `translate3d(0, ${dy}px, 0)`;
+    }
+    const dialog = dialogRef.current;
+    if (dialog) {
+      const alpha = Math.max(0.55, 0.95 - dy / 600);
+      dialog.style.backgroundColor = `rgba(0, 0, 0, ${alpha})`;
+    }
   }
 
-  /* 🛡️ Touch handlers — lightbox swipe gesture.
-     touchStart: ilk parmak teması X koordinatını sakla.
-     touchEnd: bırakılan X ile delta hesapla; SWIPE_THRESHOLD aşılırsa
-     yön bazında next/prev tetikle. Çoklu parmak (pinch) durumunda
-     sessizce bypass. */
   function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
     if (e.touches.length !== 1) {
-      touchStartX.current = null;
+      gestureRef.current = null;
+      resetDrag();
       return;
     }
-    touchStartX.current = e.touches[0].clientX;
+    gestureRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      axis: null,
+    };
+  }
+
+  function handleTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    const g = gestureRef.current;
+    if (!g) return;
+    if (e.touches.length !== 1) {
+      gestureRef.current = null;
+      resetDrag();
+      return;
+    }
+    const dx = e.touches[0].clientX - g.x;
+    const dy = e.touches[0].clientY - g.y;
+    if (!g.axis) {
+      if (Math.abs(dx) < AXIS_LOCK && Math.abs(dy) < AXIS_LOCK) return;
+      g.axis = Math.abs(dy) > Math.abs(dx) * 1.2 ? "y" : "x";
+    }
+    if (g.axis === "y") applyDrag(Math.max(0, dy));
   }
 
   function handleTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
-    const startX = touchStartX.current;
-    touchStartX.current = null;
-    if (startX === null) return;
-    const endX = e.changedTouches[0]?.clientX;
-    if (typeof endX !== "number") return;
-    const dx = endX - startX;
-    if (Math.abs(dx) < SWIPE_THRESHOLD) return;
-    if (dx < 0) next();
-    else prev();
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    if (!g) return;
+    const t = e.changedTouches[0];
+    if (!t) {
+      resetDrag();
+      return;
+    }
+    const dx = t.clientX - g.x;
+    const dy = t.clientY - g.y;
+    const axis =
+      g.axis ??
+      (Math.abs(dx) >= Math.abs(dy) ? "x" : Math.abs(dy) > Math.abs(dx) * 1.2 ? "y" : null);
+
+    if (axis === "y") {
+      resetDrag();
+      if (dy >= CLOSE_THRESHOLD) close();
+      return;
+    }
+    resetDrag();
+    if (axis === "x" && Math.abs(dx) >= SWIPE_THRESHOLD) {
+      if (dx < 0) next();
+      else prev();
+    }
   }
+
+  function handleTouchCancel() {
+    gestureRef.current = null;
+    resetDrag();
+  }
+
+  /* Kolaj kareleri — klavyeyle de açılabilir (Enter / Space); odak
+     kapanınca bu kareye döner. Görünüm DEĞİŞMEDİ. */
+  function handleTileKeyDown(
+    e: React.KeyboardEvent<HTMLDivElement>,
+    index: number
+  ) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openAt(index, e.currentTarget);
+    }
+  }
+
 
   if (!images || images.length === 0) {
     return (
@@ -248,7 +440,10 @@ export default function Gallery({
         <div className="grid md:hidden gap-2.5">
           <div
             className="group relative overflow-hidden rounded-[22px] cursor-pointer aspect-[4/3]"
-            onClick={() => setActiveIndex(0)}
+            role="button"
+            tabIndex={0}
+            onClick={(e) => openAt(0, e.currentTarget)}
+            onKeyDown={(e) => handleTileKeyDown(e, 0)}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -263,7 +458,10 @@ export default function Gallery({
             <div className="grid grid-cols-2 gap-2.5">
               <div
                 className="group relative overflow-hidden rounded-[16px] cursor-pointer aspect-[4/3]"
-                onClick={() => setActiveIndex(1)}
+                role="button"
+                tabIndex={0}
+                onClick={(e) => openAt(1, e.currentTarget)}
+                onKeyDown={(e) => handleTileKeyDown(e, 1)}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -277,7 +475,10 @@ export default function Gallery({
               {images.length >= 3 && (
                 <div
                   className="group relative overflow-hidden rounded-[16px] cursor-pointer aspect-[4/3]"
-                  onClick={() => setActiveIndex(2)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => openAt(2, e.currentTarget)}
+                  onKeyDown={(e) => handleTileKeyDown(e, 2)}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -305,7 +506,10 @@ export default function Gallery({
                 ? "col-span-2 row-span-2"
                 : "col-span-3 row-span-2")
             }
-            onClick={() => setActiveIndex(0)}
+            role="button"
+            tabIndex={0}
+            onClick={(e) => openAt(0, e.currentTarget)}
+            onKeyDown={(e) => handleTileKeyDown(e, 0)}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -323,7 +527,10 @@ export default function Gallery({
                 "group relative overflow-hidden rounded-2xl cursor-pointer col-start-3 " +
                 (images.length >= 3 ? "row-start-1" : "row-span-2")
               }
-              onClick={() => setActiveIndex(1)}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => openAt(1, e.currentTarget)}
+              onKeyDown={(e) => handleTileKeyDown(e, 1)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -339,7 +546,10 @@ export default function Gallery({
           {images.length >= 3 && (
             <div
               className="group relative overflow-hidden rounded-2xl cursor-pointer col-start-3 row-start-2"
-              onClick={() => setActiveIndex(2)}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => openAt(2, e.currentTarget)}
+              onKeyDown={(e) => handleTileKeyDown(e, 2)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -360,7 +570,7 @@ export default function Gallery({
         {images.length > 3 && (
           <button
             type="button"
-            onClick={() => setActiveIndex(0)}
+            onClick={(e) => openAt(0, e.currentTarget)}
             aria-label={formatDictionaryString(
               dict.gallery.viewAllPhotosAriaLabel,
               { count: images.length }
@@ -396,92 +606,183 @@ export default function Gallery({
         )}
       </div>
 
-      {/* 🔥 LIGHTBOX */}
+      {/* 🔥 LIGHTBOX — TAM EKRANA YAKIN GÖRÜNTÜLEYİCİ
+          ===============================================================
+          • SABİT SAHNE: dialog tüm kullanılabilir ekranı (100dvh +
+            safe-area) kaplar; üst çubuk (sayaç + kapat), sahne ve alt
+            küçük resim şeridi SABİT yüksekliktedir → foto değişince
+            hiçbir kontrol yer değiştirmez (a47ae2f'teki "zıplama"
+            sorunu geri gelmez).
+          • KIRPMA YOK: foto `object-contain` mantığıyla sahneye sığdırılır
+            (max-width/max-height, en-boy oranı korunur).
+          • FİLİGRAN: fotoğrafın KENDİ boyutundaki sarmalayıcıya bağlı →
+            boş koyu alana taşmaz, konum/boyut fotoğrafa göre (%) kalır.
+          • Masaüstünde ve kısa (yatay telefon) ekranlarda üst çubuk
+            sahnenin üstüne biner; foto için yükseklik kazanılır.
+          • Ölçüler CSS değişkenleriyle: --gl-chrome (fotoğrafın dikeyde
+            paylaşmadığı yükseklik: mobil üst çubuk 48 + şerit 56, md+ ve
+            kısa ekranda yalnız şerit 56/68), --gl-gutter (masaüstünde
+            ‹ › için yan pay). */}
       {activeIndex !== null && (
         <div
-          className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center gap-3"
-          onClick={() => setActiveIndex(null)} // 🔥 dışa tıklayınca kapat
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="villa-gallery-dialog-title"
+          className="
+            fixed inset-0 z-[1100] flex h-[100dvh] w-full flex-col
+            bg-black/95 text-white
+            pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+            pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]
+            [--gl-chrome:104px] [--gl-gutter:0px]
+            md:[--gl-chrome:68px] md:[--gl-gutter:144px]
+            [@media(max-height:500px)]:[--gl-chrome:56px]
+          "
         >
-          {/* içerik tıklanınca kapanmasın
-              🛡️ onTouchStart/onTouchEnd — mobile swipe gesture; mouse
-              event'leriyle çakışmaz, masaüstü davranışı AYNEN korunur. */}
+          <h2 id="villa-gallery-dialog-title" className="sr-only">
+            {villaTitle
+              ? formatDictionaryString(dict.gallery.lightboxTitleWithTitle, {
+                  title: villaTitle,
+                })
+              : dict.gallery.lightboxTitle}
+          </h2>
+
+          {/* ÜST ÇUBUK — sayaç + kapat. Mobil dikey kullanımda kendi
+              satırındadır; masaüstünde (md+) ve kısa ekranlarda sahnenin
+              üstüne hafif bir gradyanla biner. Yeri her durumda SABİT. */}
           <div
-            className="relative"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
+            className="
+              relative z-20 flex h-12 shrink-0 items-center justify-between px-3
+              md:absolute md:inset-x-0 md:top-[env(safe-area-inset-top)]
+              md:h-14 md:px-5
+              md:bg-gradient-to-b md:from-black/50 md:to-transparent
+              [@media(max-height:500px)]:absolute
+              [@media(max-height:500px)]:inset-x-0
+              [@media(max-height:500px)]:top-[env(safe-area-inset-top)]
+              [@media(max-height:500px)]:bg-gradient-to-b
+              [@media(max-height:500px)]:from-black/60
+              [@media(max-height:500px)]:to-transparent
+            "
           >
-            {/* kapatma
-                🛡️ z-10 (kapatma / önceki / sonraki): DOM'da çerçeveden ÖNCE
-                geldikleri için konumlu fotoğraf çerçevesi üstlerini
-                örtüyordu (✕ ve ‹ görünmüyor/tıklanamıyordu). Konum ve
-                davranış AYNI; yalnız çerçevenin üstünde çizilirler. */}
-            <button
-              onClick={() => setActiveIndex(null)}
-              className="absolute top-5 right-5 z-10 text-white text-2xl"
+            <p
+              aria-hidden="true"
+              className="rounded-full bg-black/45 px-3 py-1 text-[13px] font-medium tabular-nums text-white ring-1 ring-white/15"
             >
-              ✕
-            </button>
-
-            {/* önceki */}
+              {activeIndex + 1} / {images.length}
+            </p>
+            <p className="sr-only" aria-live="polite" aria-atomic="true">
+              {formatDictionaryString(dict.gallery.photoCounterAriaLabel, {
+                index: activeIndex + 1,
+                total: images.length,
+              })}
+            </p>
             <button
-              onClick={prev}
-              className="absolute left-5 top-1/2 -translate-y-1/2 z-10 text-white text-3xl"
+              ref={closeButtonRef}
+              type="button"
+              onClick={close}
+              aria-label={dict.gallery.closeGalleryAriaLabel}
+              className="
+                inline-flex h-11 w-11 items-center justify-center rounded-full
+                bg-black/50 text-white ring-1 ring-white/25 backdrop-blur-sm
+                transition-colors hover:bg-black/70
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-white
+              "
             >
-              ‹
-            </button>
-
-            {/* görsel + watermark wrapper
-                🛡️ SABİT ÇERÇEVE — çerçeve ölçüsü fotoğrafın oranından/
-                çözünürlüğünden BAĞIMSIZ (yüklenmeden önce de aynı) →
-                fotoğraf değişince galeri büyüyüp küçülmez; butonlar,
-                filigran ve küçük resim şeridi yerinde kalır.
-                  • Mobil: 4:3 çerçeve, genişlik ~92vw, yükseklik genişliğe
-                    göre otomatik (en fazla 70svh → iOS adres çubuğu
-                    görünürken / yatay telefonda da sığar).
-                  • md+: 3:2 çerçeve, genişlik min(90vw, 78vh × 1.5)
-                    (eski 90vw / 78vh üst sınırlarıyla aynı alan).
-                Fotoğraf `object-cover` + merkez odak ile çerçeveyi
-                doldurur (gerekirse kenarlardan kırpılır). Filigran
-                çerçeveye bağlı → her karede aynı yerde. */}
-            <div className="relative w-[min(92vw,calc(70svh*4/3))] aspect-[4/3] md:w-[min(90vw,calc(78vh*1.5))] md:aspect-[3/2] overflow-hidden rounded-xl bg-white/5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images[activeIndex]}
-                alt={buildImageAlt(villaTitle, activeIndex, images.length, dict)}
-                className="absolute inset-0 h-full w-full object-cover object-center"
-              />
-              <WatermarkOverlay {...watermark} />
-            </div>
-
-            {/* sonraki */}
-            <button
-              onClick={next}
-              className="absolute right-5 top-1/2 -translate-y-1/2 z-10 text-white text-3xl"
-            >
-              ›
+              <X size={20} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
 
-          {/* 🛡️ THUMBNAIL FİLMSTRIP — ana görselin altında.
-              - Yalnız lightbox açıkken render (LCP etkisi yok).
-              - Mobilde overflow-x-auto ile yatay scroll; desktop'ta
-                w-max + mx-auto ile ortalanmış filmstrip (foto azsa
-                ortada, çoksa scroll).
-              - Thumbnail tıklaması mevcut activeIndex state'ini set eder.
-              - stopPropagation: şerit içi tıklama/scroll dış overlay'i
-                kapatmaz ve iç görselin swipe handler'larını tetiklemez.
-              - loading="lazy": 30-50 fotoğrafta toplu indirme önlenir. */}
+          {/* SAHNE — sabit alan. Boş alana tıklama kapatır; foto ve
+              butonlar kapatmaz. Dokunmatik: yatay kaydırma = foto
+              değiştir, aşağı kaydırma = kapat. `touch-action:
+              pinch-zoom` → tarayıcı yakınlaştırması açık, sayfa kaymaz. */}
           <div
-            className="max-w-[92vw] overflow-x-auto"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onTouchEnd={(e) => e.stopPropagation()}
+            className="relative min-h-0 flex-1 [touch-action:pinch-zoom]"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchCancel}
           >
-            <div className="flex gap-2 px-2 py-1 w-max mx-auto">
+            <div
+              ref={dragLayerRef}
+              className="absolute inset-0 flex items-center justify-center transition-transform duration-200 ease-out"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) close();
+              }}
+            >
+              {/* Foto boyutlu sarmalayıcı — filigran fotoğrafa bağlı. */}
+              <div className="relative overflow-hidden leading-[0]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={images[activeIndex]}
+                  alt={buildImageAlt(villaTitle, activeIndex, images.length, dict)}
+                  decoding="async"
+                  draggable={false}
+                  className="block h-auto w-auto select-none object-contain"
+                  style={{
+                    maxWidth:
+                      "calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--gl-gutter))",
+                    maxHeight:
+                      "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--gl-chrome))",
+                  }}
+                />
+                <WatermarkOverlay {...watermark} />
+              </div>
+            </div>
+
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={prev}
+                  aria-label={dict.gallery.prevPhotoAriaLabel}
+                  className="
+                    absolute left-2 top-1/2 z-10 -translate-y-1/2
+                    inline-flex h-11 w-11 items-center justify-center rounded-full
+                    bg-black/45 text-white ring-1 ring-white/25 backdrop-blur-sm
+                    shadow-[0_4px_16px_rgba(0,0,0,0.35)]
+                    transition-colors hover:bg-black/70
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-white
+                    md:left-4 md:h-12 md:w-12
+                  "
+                >
+                  <ChevronLeft size={24} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={next}
+                  aria-label={dict.gallery.nextPhotoAriaLabel}
+                  className="
+                    absolute right-2 top-1/2 z-10 -translate-y-1/2
+                    inline-flex h-11 w-11 items-center justify-center rounded-full
+                    bg-black/45 text-white ring-1 ring-white/25 backdrop-blur-sm
+                    shadow-[0_4px_16px_rgba(0,0,0,0.35)]
+                    transition-colors hover:bg-black/70
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-white
+                    md:right-4 md:h-12 md:w-12
+                  "
+                >
+                  <ChevronRight size={24} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* 🛡️ THUMBNAIL ŞERİDİ — kompakt (mobil 44px, md+ 56px, kısa
+              ekranda 44px). Yatay kaydırılır; seçili küçük resim beyaz
+              halka + tam opaklıkla ayırt edilir. Küçük resimler mevcut
+              next/image altyapısıyla (VillaCard ile aynı remotePatterns)
+              küçük boyutta istenir; hata olursa ham görsele düşer. */}
+          <div
+            className="shrink-0 overflow-x-auto py-1.5"
+            aria-label={dict.gallery.thumbnailsAriaLabel}
+            role="group"
+          >
+            <div className="mx-auto flex w-max gap-1.5 px-3 md:gap-2">
               {images.map((src, i) => (
                 <button
                   key={i}
+                  type="button"
                   ref={(el) => {
                     thumbRefs.current[i] = el;
                   }}
@@ -492,20 +793,15 @@ export default function Gallery({
                   )}
                   aria-current={i === activeIndex ? "true" : undefined}
                   className={
-                    "relative shrink-0 h-14 w-20 md:h-16 md:w-24 " +
-                    "overflow-hidden rounded-lg ring-2 transition " +
+                    "relative h-11 w-16 shrink-0 overflow-hidden rounded-md ring-2 transition " +
+                    "md:h-14 md:w-20 [@media(max-height:500px)]:h-11 [@media(max-height:500px)]:w-16 " +
+                    "focus:outline-none focus-visible:ring-white " +
                     (i === activeIndex
                       ? "ring-white opacity-100"
-                      : "ring-transparent opacity-50 hover:opacity-100")
+                      : "ring-transparent opacity-55 hover:opacity-100")
                   }
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={src}
-                    alt=""
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
+                  <GalleryThumb src={src} />
                 </button>
               ))}
             </div>
@@ -525,5 +821,37 @@ export default function Gallery({
         />
       )}
     </>
+  );
+}
+
+/* 🛡️ KÜÇÜK RESİM — mevcut next/image altyapısı (VillaCard ile aynı
+   remotePatterns) küçük boyut ister; optimizasyon hata verirse ham
+   görsele düşer (davranış eskisi gibi). Yeni thumbnail üretimi YOK. */
+function GalleryThumb({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+  return (
+    <NextImage
+      src={src}
+      alt=""
+      fill
+      sizes="(min-width: 768px) 80px, 64px"
+      loading="lazy"
+      draggable={false}
+      onError={() => setFailed(true)}
+      className="object-cover"
+    />
   );
 }

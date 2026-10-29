@@ -267,6 +267,18 @@ export type Dictionary = {
     photoAltWithTotal: string;
     /** template: {index} */
     photoAriaLabel: string;
+    /* 🛡️ Tam ekrana yakın lightbox (Gallery.tsx) — dialog başlığı,
+       kontrol etiketleri ve ekran okuyucu sayacı. Görsel sayaç
+       ("3 / 24") dil bağımsızdır. */
+    /** template: {title} */
+    lightboxTitleWithTitle: string;
+    lightboxTitle: string;
+    closeGalleryAriaLabel: string;
+    prevPhotoAriaLabel: string;
+    nextPhotoAriaLabel: string;
+    /** template: {index}, {total} */
+    photoCounterAriaLabel: string;
+    thumbnailsAriaLabel: string;
     /* 🛡️ PHASE 10G — VillaVideoModal.tsx */
     closeVideoAriaLabel: string;
     otherVideosAriaLabel: string;
