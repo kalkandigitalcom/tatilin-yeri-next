@@ -570,7 +570,7 @@ export default function Footer({
                   loading="lazy"
                   decoding="async"
                   onError={() => setCreditLogoFailed(true)}
-                  className="h-9 md:h-10 w-auto max-w-[160px] object-contain opacity-75 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:transition-none"
+                  className="h-6 w-auto max-w-[160px] object-contain opacity-75 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:transition-none"
                 />
               ) : (
                 <span className="font-semibold tracking-[0.02em] text-[var(--color-stone-600)] group-hover:text-[#ED7926] transition-colors duration-300 motion-reduce:transition-none">
