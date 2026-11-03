@@ -1170,16 +1170,6 @@ export type Dictionary = {
     emptyEyebrow: string;
     emptyTitle: string;
     emptyBody: string;
-    aboutEyebrow: string;
-    /** Başlık 2 satır: lead + (gri) accent — `<br />` ile ayrılır. */
-    aboutTitleLead: string;
-    aboutTitleAccent: string;
-    aboutParagraph1: string;
-    aboutParagraph2: string;
-    /** 3. paragraf link etrafında 3 parçaya bölünür (lead + link + trail). */
-    aboutParagraph3Lead: string;
-    aboutParagraph3LinkLabel: string;
-    aboutParagraph3Trail: string;
   };
 
   /* ===============================================================

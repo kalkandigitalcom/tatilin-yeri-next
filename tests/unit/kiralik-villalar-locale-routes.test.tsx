@@ -28,7 +28,6 @@ import path from "node:path";
 import { tr } from "@/lib/i18n/dictionaries/tr";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { de } from "@/lib/i18n/dictionaries/de";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
 import { getLocaleSwitchTargets } from "@/lib/i18n/locale-switch.helper";
 import { PUBLIC_SORT_LABELS } from "@/lib/pagination";
 
@@ -364,7 +363,8 @@ describe("`villasArchive` namespace bütünlüğü", () => {
     const trPaths = leafPaths(tr.villasArchive).sort();
     expect(leafPaths(en.villasArchive).sort()).toEqual(trPaths);
     expect(leafPaths(de.villasArchive).sort()).toEqual(trPaths);
-    expect(trPaths.length).toBe(20);
+    /* 🛡️ "Hakkında" bölümünün 8 anahtarı kaldırıldı (20 → 12). */
+    expect(trPaths.length).toBe(12);
   });
 
   it("9) hiçbir dilde boş değer yok", () => {
@@ -423,11 +423,9 @@ describe("TR byte-identity — eski hardcoded metinler", () => {
     expect(a.emptyBody).toBe(
       "Koleksiyon henüz oluşturuluyor. Yakında keşfedilmeyi bekleyecek."
     );
-    expect(a.aboutEyebrow).toBe("Hakkında");
-    expect(a.aboutTitleLead).toBe("Bir konaklamadan");
-    expect(a.aboutTitleAccent).toBe("fazlası.");
-    expect(a.aboutParagraph3LinkLabel).toBe("arama sayfasından");
-    expect(a.aboutParagraph3Trail).toBe("sonuçları görüntüleyebilirsiniz.");
+    /* 'Hakkında' bölümü kaldırıldı — anahtarları sözlükte YOK. */
+    expect("aboutEyebrow" in a).toBe(false);
+    expect("aboutParagraph1" in a).toBe(false);
   });
 
   it("14) PAYLAŞILAN toolbar metinleri `search` namespace'inden gelir (kopya YOK)", () => {
@@ -481,21 +479,20 @@ describe("Gövde render — TR/EN/DE görünür metinler", () => {
   );
 
   it.each(["tr", "en", "de"] as const)(
-    "17) %s: 'Hakkında' bloğu kendi dilinde",
+    "17) %s: 'Hakkında' bölümü KALDIRILDI (render edilmez)",
     async (locale) => {
-      const d = { tr, en, de }[locale].villasArchive;
       await renderBody(locale);
-      expect(screen.getByText(d.aboutEyebrow)).toBeInTheDocument();
-      expect(screen.getByText(d.aboutParagraph1)).toBeInTheDocument();
-      expect(screen.getByText(d.aboutParagraph2)).toBeInTheDocument();
-      const link = screen.getByRole("link", {
-        name: d.aboutParagraph3LinkLabel,
-      });
-      /* Arama route'u locale-aware. */
-      expect(link).toHaveAttribute(
-        "href",
-        buildLocaleAlternates("/arama", locale).canonical
-      );
+      expect(document.getElementById("kv-about-heading")).toBeNull();
+      for (const text of [
+        "Hakkında",
+        "Bir konaklamadan",
+        "About",
+        "More than",
+        "Über",
+        "Mehr als",
+      ]) {
+        expect(screen.queryByText(text)).toBeNull();
+      }
     }
   );
 
@@ -517,7 +514,7 @@ describe("Gövde render — TR/EN/DE görünür metinler", () => {
   it("19) TR görünümünde EN/DE metinleri SIZMAZ (regresyon)", async () => {
     await renderBody("tr");
     expect(screen.queryByText(en.villasArchive.heroEyebrow)).toBeNull();
-    expect(screen.queryByText(de.villasArchive.aboutEyebrow)).toBeNull();
+    expect(screen.queryByText(de.villasArchive.heroEyebrow)).toBeNull();
   });
 });
 

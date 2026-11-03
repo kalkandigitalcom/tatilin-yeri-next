@@ -872,17 +872,6 @@ export const de: Dictionary = {
     emptyTitle: "Bald verfügbar.",
     emptyBody:
       "Die Kollektion wird noch zusammengestellt. Sie wartet bald darauf, entdeckt zu werden.",
-    aboutEyebrow: "Über",
-    aboutTitleLead: "Mehr als",
-    aboutTitleAccent: "ein Aufenthalt.",
-    aboutParagraph1:
-      "Diese Kollektion vereint Mietvillen in den schönsten Ecken des Mittelmeers, die mehr bieten sollen als eine Unterkunft. Jede Villa wird einzeln ausgewählt — nach Privatpool, Ausblick, Privatsphäre und Innenarchitektur.",
-    aboutParagraph2:
-      "Charakter spürt man nicht auf einer Karte, sondern Raum für Raum. Für alle, die ein erlesenes Villenerlebnis suchen, ist diese Kollektion keine schnelle Liste, sondern ein Archiv zum ruhigen Durchstöbern.",
-    aboutParagraph3Lead:
-      "Wählen Sie über die Filter links Region, Typ, Termin und Personenzahl und",
-    aboutParagraph3LinkLabel: "sehen Sie die Ergebnisse auf der Suchseite",
-    aboutParagraph3Trail: ".",
   },
 
   taxonomyLanding: {
