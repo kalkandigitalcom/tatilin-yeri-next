@@ -1,3 +1,4 @@
+import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import { blogServerRepository } from "@/lib/db/blog.repository.server";
 import type { BlogPostTranslationRow } from "@/lib/i18n/translations.types";
@@ -44,6 +45,10 @@ export const BLOG_TRANSLATION_MAX_LEN = {
 } as const;
 
 export type BlogTranslationInput = {
+  /** 🌐 Faz 2 — bu dildeki SEO URL slug'ı (migration 102).
+   *  undefined → DOKUNULMAZ (mevcut çağıranlar etkilenmez);
+   *  "" / null → temizlenir (o dilde TR slug'ı kullanılır). */
+  slug?: string | null;
   postId: string;
   locale: string;
   title?: string | null;
@@ -138,11 +143,26 @@ export async function upsertBlogTranslation(
   if (postError) return { ok: false, error: "Blog yazısı doğrulanamadı" };
   if (!postRow) return { ok: false, error: "Blog yazısı bulunamadı" };
 
+  /* 🌐 Faz 2 — dil slug'ı: yalnız alan GÖNDERİLDİYSE doğrulanır ve
+     yazılır; biçim + çakışma kontrolü (lib/i18n/routing/slug-validation). */
+  let slugField: { slug?: string | null } = {};
+  if (input.slug !== undefined) {
+    const v = await validateLocalizedSlug({
+      kind: "blog",
+      entityId: postId,
+      locale,
+      input: input.slug,
+    });
+    if (!v.ok) return { ok: false, error: v.error };
+    slugField = { slug: v.slug };
+  }
+
   const { data, error } = await translationRepository.upsertOne(
     "blog_post",
     postId,
     locale,
     {
+      ...slugField,
       title,
       excerpt,
       body,

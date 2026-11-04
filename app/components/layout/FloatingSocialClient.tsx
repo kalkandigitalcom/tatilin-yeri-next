@@ -1,11 +1,11 @@
 "use client";
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import { Phone } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 /* 🛡️ PHASE 11 — locale, Header (9A) / Footer (9B) / BottomNav ile AYNI
    desenle `usePathname()` üzerinden türetilir. */
-import { localeFromPathname } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
 /* ===============================================================
@@ -31,7 +31,7 @@ export default function FloatingSocialClient({
   phoneHref: string | null;
   whatsappHref: string | null;
 }) {
-  const dict = getDictionary(localeFromPathname(usePathname())).layout
+  const dict = getDictionary(localeOfPath(usePathname())).layout
     .floatingSocial;
 
   return (

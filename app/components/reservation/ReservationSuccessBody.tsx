@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import Link from "next/link";
 import { CheckCircle2, Home, MessageCircle, ArrowLeft } from "lucide-react";
 
@@ -50,7 +51,7 @@ export default async function ReservationSuccessBody({
   /* 🛡️ TR'de prefix YOK → href'ler BİREBİR eskisi gibi ("/",
      "/kiralik-villa/<slug>"). EN/DE'de mevcut gerçek route'lara
      işaret eder. Yeni routing sistemi kurulmadı. */
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
   const refNumber =
     typeof sp.ref === "string" && sp.ref.trim().length > 0
       ? sp.ref.trim()
@@ -193,7 +194,7 @@ export default async function ReservationSuccessBody({
           )}
 
           <Link
-            href={localePrefix === "" ? "/" : localePrefix}
+            href={localeHref("/", locale)}
             className="btn-primary !px-6 !py-3 text-[13.5px]"
           >
             <Home size={15} strokeWidth={1.75} />
@@ -202,7 +203,7 @@ export default async function ReservationSuccessBody({
 
           {villaSlug && (
             <Link
-              href={`${localePrefix}/kiralik-villa/${villaSlug}`}
+              href={localeHref(`/kiralik-villa/${villaSlug}`, locale)}
               className="
                 inline-flex items-center justify-center gap-2
                 px-6 py-3 rounded-full

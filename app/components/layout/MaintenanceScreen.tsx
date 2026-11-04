@@ -1,5 +1,6 @@
 "use client";
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import { usePathname } from "next/navigation";
 
 /* ===============================================================
@@ -20,7 +21,6 @@ import { usePathname } from "next/navigation";
    DOM/className/metin sırası `(public)/layout.tsx`'teki inline blok
    ile BİREBİR aynıdır.
    =============================================================== */
-import { localeFromPathname } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
 export default function MaintenanceScreen({
@@ -31,7 +31,7 @@ export default function MaintenanceScreen({
   /** `settings.maintenance_message` (canonical). Boşsa dictionary varsayılanı. */
   message?: string | null;
 }) {
-  const dict = getDictionary(localeFromPathname(usePathname())).maintenance;
+  const dict = getDictionary(localeOfPath(usePathname())).maintenance;
   const text = message?.trim() || dict.defaultMessage;
 
   return (

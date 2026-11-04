@@ -1,5 +1,6 @@
 "use client";
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -27,7 +28,7 @@ import type { TaxonomyItem, CorporatePage } from "./FooterWrapper";
    riski YOK (bkz. Phase 9B audit — bu tasarımın seçilme nedeni). */
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { DEFAULT_LOCALE, localeFromPathname } from "@/lib/i18n/config";
+import { DEFAULT_LOCALE } from "@/lib/i18n/config";
 import { resolvePublicHome } from "@/lib/i18n/public-home";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — footer iç linkleri aktif locale'i
    taşır (bkz. lib/i18n/locale-href.ts). Dış bağlantılar (sosyal medya,
@@ -227,7 +228,7 @@ export default function Footer({
      ÖNCEKİ modül-seviyesi sabitle (`getDictionary(DEFAULT_LOCALE)`)
      BİREBİR AYNI referans/değerleri döner. */
   const pathname = usePathname();
-  const locale = localeFromPathname(pathname);
+  const locale = localeOfPath(pathname);
   const dictionary = getDictionary(locale);
 
   /* 🔄 TR ana sayfa yolu — varsayılan dil EN/DE iken "/" bir

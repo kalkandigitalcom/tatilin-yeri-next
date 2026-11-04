@@ -716,10 +716,9 @@ export default function ReservationForm({
       /* 🛡️ LOCALE-AWARE SUCCESS REDIRECT. Query parametreleri (`ref`,
          `villa`) ve `encodeURIComponent` davranışı AYNEN korunur;
          yalnız path'e locale prefix'i eklenir. TR'de URL BYTE-IDENTICAL. */
-      const successBase =
-        activeLocale === DEFAULT_LOCALE
-          ? "/rezervasyon/basarili"
-          : `/${activeLocale}/rezervasyon/basarili`;
+      /* 🌐 Faz 2 — yol merkezi üreticiden (dil öneki + o dilin SEO
+         segmenti; TR'de BYTE-IDENTICAL "/rezervasyon/basarili"). */
+      const successBase = localeHref("/rezervasyon/basarili", activeLocale);
       const url = `${successBase}${qs.length ? `?${qs.join("&")}` : ""}`;
       router.push(url);
 

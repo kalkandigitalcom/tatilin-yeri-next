@@ -463,7 +463,7 @@ describe("çoklu dil — saf yardımcılar", () => {
     description: "The finest villas, in one place.",
     stats: ["300,000+ guests"],
     button_text: "Explore All Villas",
-    button_url: "/en/kiralik-villalar",
+    button_url: "/en/villas-for-rent",
   });
 
   it("toPublicSitePopup: EN içerik + boş alanlar (vurgu) Türkçe'ye düşer; TR alanlar aynen", () => {
@@ -474,7 +474,7 @@ describe("çoklu dil — saf yardımcılar", () => {
       description: "The finest villas, in one place.",
       highlight: "20",
       stats: ["300,000+ guests"],
-      button: { text: "Explore All Villas", url: "/en/kiralik-villalar", external: false },
+      button: { text: "Explore All Villas", url: "/en/villas-for-rent", external: false },
     });
     expect(p.translations.de).toBeUndefined();
   });
@@ -551,7 +551,7 @@ describe("çoklu dil — servis", () => {
     endDate: "",
   };
   const translations = {
-    en: { title: "<b>Title</b>", description: "", highlight: "", stats: [" x ", ""], buttonText: "Explore All Villas", buttonUrl: "/en/kiralik-villalar" },
+    en: { title: "<b>Title</b>", description: "", highlight: "", stats: [" x ", ""], buttonText: "Explore All Villas", buttonUrl: "/en/villas-for-rent" },
     de: { title: "", description: "", highlight: "", stats: [], buttonText: "", buttonUrl: "" },
   };
 
@@ -583,7 +583,7 @@ describe("çoklu dil — servis", () => {
       highlight_text: null,
       stats: ["x"],
       button_text: "Explore All Villas",
-      button_url: "/en/kiralik-villalar",
+      button_url: "/en/villas-for-rent",
     });
     expect(v2).toEqual({
       title: null, description: null, highlight_text: null, stats: [], button_text: null, button_url: null,
@@ -662,7 +662,7 @@ describe("çoklu dil — servis", () => {
 
 describe("çoklu dil — SitePopupLoader", () => {
   const popup = toPublicSitePopup(row({ dismiss_duration: "1d" }), resolve, NOW, [
-    tRow("en", { title: "Since 2006 we have been with you.", button_text: "Explore All Villas", button_url: "/en/kiralik-villalar" }),
+    tRow("en", { title: "Since 2006 we have been with you.", button_text: "Explore All Villas", button_url: "/en/villas-for-rent" }),
   ])!;
 
   beforeEach(() => {
@@ -684,7 +684,7 @@ describe("çoklu dil — SitePopupLoader", () => {
     render(<SitePopupLoader popup={popup} />);
     await openNow();
     expect(screen.getByRole("heading", { name: "Since 2006 we have been with you." })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Explore All Villas" }).getAttribute("href")).toBe("/en/kiralik-villalar");
+    expect(screen.getByRole("link", { name: "Explore All Villas" }).getAttribute("href")).toBe("/en/villas-for-rent");
     expect(screen.getByText("20")).toBeTruthy();
   });
 
@@ -702,8 +702,8 @@ describe("çoklu dil — SitePopupLoader", () => {
     expect(screen.getByRole("link", { name: "Villaları inceleyin" })).toBeTruthy();
   });
 
-  it("kapsam 'all': /en/kiralik-villalar → İngilizce; /energy gibi yol TR sayılır", async () => {
-    pathname = "/en/kiralik-villalar";
+  it("kapsam 'all': /en/villas-for-rent → İngilizce; /energy gibi yol TR sayılır", async () => {
+    pathname = "/en/villas-for-rent";
     const { unmount } = render(<SitePopupLoader popup={{ ...popup, scope: "all" }} />);
     await openNow();
     expect(screen.getByRole("heading", { name: "Since 2006 we have been with you." })).toBeTruthy();

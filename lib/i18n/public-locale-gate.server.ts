@@ -3,7 +3,11 @@ import "server-only";
 import { notFound } from "next/navigation";
 
 import { getCachedSettings } from "@/lib/cache.helpers";
-import { isMultilingualEnabled } from "@/lib/i18n/config";
+import {
+  isMultilingualEnabled,
+  isPublicLocaleEnabled,
+  type Locale,
+} from "@/lib/i18n/config";
 
 /* ===============================================================
    🛡️ PUBLIC LOCALE GATE — PHASE 4A (Public Locale Routing Core)
@@ -33,9 +37,21 @@ import { isMultilingualEnabled } from "@/lib/i18n/config";
  *  olarak KAPALI kabul edilir) → notFound() fırlatır (Next.js'in
  *  standart digest-throw mekanizması; çağıran page component'in
  *  gövdesinden `await` ile çağrılmalı). true ise sessizce döner. */
-export async function requirePublicLocaleEnabled(): Promise<void> {
+/* 🌐 Çok Dilli Mimari Faz 1 — DİL BAZLI KAPI (migration 101).
+   `locale` verilirse o dilin `site_locales`'te aktif olması da
+   zorunludur; kapalı dil → `notFound()` → HTTP 404 + Next'in otomatik
+   `<meta name="robots" content="noindex">` etiketi. Kapalı dilin
+   içerik/çevirileri SİLİNMEZ; dil yeniden açıldığında sayfalar aynen
+   geri gelir. `locale` verilmezse yalnız master switch kontrol edilir
+   (eski imza — geriye uyumlu). */
+export async function requirePublicLocaleEnabled(
+  locale?: Locale
+): Promise<void> {
   const settings = await getCachedSettings().catch(() => null);
   if (!isMultilingualEnabled(settings)) {
+    notFound();
+  }
+  if (locale && !isPublicLocaleEnabled(settings, locale)) {
     notFound();
   }
 }

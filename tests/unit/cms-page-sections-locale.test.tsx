@@ -141,9 +141,9 @@ function translationRow(locale: "en" | "de", sections: unknown) {
 }
 
 const ROUTES = {
-  tr: "@/app/p/[slug]/page",
-  en: "@/app/(public)/en/p/[slug]/page",
-  de: "@/app/(public)/de/p/[slug]/page",
+  tr: "@/app/p/[slug]/locale-page",
+  en: "@/app/(public)/en/p/[slug]/locale-page",
+  de: "@/app/(public)/de/p/[slug]/locale-page",
 } as const;
 
 async function renderRoute(locale: keyof typeof ROUTES) {
@@ -389,9 +389,9 @@ describe("STRUCTURAL INVARIANT — pages.sections resolver zinciri", () => {
 
   it("21) TR/EN/DE üç route da `resolvedSections` prop'unu geçer", () => {
     for (const rel of [
-      "app/p/[slug]/page.tsx",
-      "app/(public)/en/p/[slug]/page.tsx",
-      "app/(public)/de/p/[slug]/page.tsx",
+      "app/p/[slug]/locale-page.tsx",
+      "app/(public)/en/p/[slug]/locale-page.tsx",
+      "app/(public)/de/p/[slug]/locale-page.tsx",
     ]) {
       const src = read(rel);
       expect(src, rel).toMatch(/resolvedSections=\{resolved\.sections\}/);

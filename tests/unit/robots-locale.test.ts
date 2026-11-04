@@ -55,8 +55,8 @@ async function runRobots() {
 
 describe("robots() — Phase 7E EN/DE locale davranışı", () => {
   /* --- 8) TR disallow politikası AYNEN korunuyor + locale eşitleme ---
-     🛡️ PUBLIC LOCALE PARİTESİ: `/arama` TR'de kapalıyken `/en/arama` ve
-     `/de/arama` açık kalıyordu (faceted search asimetrisi). Artık TR
+     🛡️ PUBLIC LOCALE PARİTESİ: `/arama` TR'de kapalıyken `/en/search` ve
+     `/de/suche` açık kalıyordu (faceted search asimetrisi). Artık TR
      girdileri AYNI SIRAYLA başta, ardından locale-prefix'li kardeşleri
      geliyor. `/maki-admin` ve `/api` locale-routed DEĞİL → prefix ÜRETİLMEZ.
      Hiçbir route crawl'a AÇILMADI; yalnız mevcut politika EN/DE'ye
@@ -70,6 +70,8 @@ describe("robots() — Phase 7E EN/DE locale davranışı", () => {
     "/v/",
     "/rezervasyon/",
   ];
+  const EN_DISALLOW = ["/en/search", "/en/favorites", "/en/liste/", "/en/v/", "/en/booking/"];
+  const DE_DISALLOW = ["/de/suche", "/de/favoriten", "/de/liste/", "/de/v/", "/de/buchung/"];
   const LOCALE_ROUTED = TR_DISALLOW.filter(
     (p) => p !== "/maki-admin" && p !== "/api"
   );
@@ -87,14 +89,15 @@ describe("robots() — Phase 7E EN/DE locale davranışı", () => {
     const rule = result.rules as { disallow?: string | string[] } | Array<{ disallow?: string | string[] }>;
     const ruleObj = Array.isArray(rule) ? rule[0] : rule;
     const list = ruleObj.disallow as string[];
-    for (const p of LOCALE_ROUTED) {
-      expect(list).toContain(`/en${p}`);
-      expect(list).toContain(`/de${p}`);
+    /* 🌐 Faz 2 — EN/DE kardeşleri o dilin SEO segmentiyle. */
+    for (const p of [...EN_DISALLOW, ...DE_DISALLOW]) {
+      expect(list).toContain(p);
     }
+    expect(LOCALE_ROUTED.length).toBe(5);
     /* Faceted search — auditte bulunan asimetri. */
     expect(list).toContain("/arama");
-    expect(list).toContain("/en/arama");
-    expect(list).toContain("/de/arama");
+    expect(list).toContain("/en/search");
+    expect(list).toContain("/de/suche");
   });
 
   it("8c) `/maki-admin` ve `/api` için locale prefix ÜRETİLMEZ", async () => {
@@ -114,18 +117,18 @@ describe("robots() — Phase 7E EN/DE locale davranışı", () => {
     const list = ruleObj.disallow as string[];
     for (const allowed of [
       "/kiralik-villalar",
-      "/en/kiralik-villalar",
-      "/de/kiralik-villalar",
+      "/en/villas-for-rent",
+      "/de/ferienvillen",
       "/kiralik-villa/",
-      "/en/kiralik-villa/",
+      "/en/villa/",
       "/p/",
       "/en/p/",
       "/iletisim",
-      "/en/iletisim",
+      "/en/contact",
       "/teklif-al",
-      "/en/teklif-al",
+      "/en/request-a-quote",
       "/rezervasyon-kontrol",
-      "/en/rezervasyon-kontrol",
+      "/en/booking-status",
       "/kisa-sureli-tarihler/",
       "/blog",
     ]) {
@@ -156,11 +159,10 @@ describe("robots() — Phase 7E EN/DE locale davranışı", () => {
     for (const bad of ["/en", "/de", "/en/", "/de/"]) {
       expect(disallowList).not.toContain(bad);
     }
-    /* Her `/en|de/...` girdisinin TR eşleniği listede OLMALI. */
-    for (const entry of disallowList) {
-      const m = /^\/(en|de)(\/.*)$/.exec(entry);
-      if (m) expect(disallowList).toContain(m[2]);
-    }
+    /* 🌐 Faz 2 — liste TAM OLARAK TR politikası + EN/DE eşlenikleri. */
+    expect(new Set(disallowList)).toEqual(
+      new Set([...TR_DISALLOW, ...EN_DISALLOW, ...DE_DISALLOW])
+    );
   });
 
   it("9b) disallow listesi flag durumundan (multilingual_enabled) BAĞIMSIZ — robots.ts hiç settings okumuyor, statik/deterministik", async () => {

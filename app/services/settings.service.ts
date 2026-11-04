@@ -12,6 +12,7 @@ import { settingsServerRepository as settingsRepository } from "@/lib/db/setting
    çalıştırılmaz → TR davranışı ve sorgu sayısı BİREBİR aynı kalır. */
 import { isMultilingualEnabled } from "@/lib/i18n/config";
 import { getPublicSettingsTranslations } from "./settings-translation.service";
+import { getPublicLocaleStates } from "./site-locale.service";
 import type { Settings } from "./settings.types";
 
 /* ===============================================================
@@ -100,12 +101,21 @@ export async function getPublicSettings(): Promise<Settings | null> {
      TR canonical'e düşülür. */
   if (!settings?.id || !isMultilingualEnabled(settings)) return settings;
 
-  const translations = await getPublicSettingsTranslations(settings.id).catch(
-    () => null
-  );
-  if (!translations) return settings;
+  /* 🌐 Migration 101 — dil bazlı yayın durumu. Aynı kapı (yalnız
+     çoklu dil AÇIKKEN), çevirilerle PARALEL okunur. Okuma başarısız
+     veya tablo yoksa alan eklenmez → `getEnabledPublicLocales` tüm
+     desteklenen dilleri aktif sayar (migration öncesi davranış). */
+  const [translations, publicLocales] = await Promise.all([
+    getPublicSettingsTranslations(settings.id).catch(() => null),
+    getPublicLocaleStates().catch(() => null),
+  ]);
+  if (!translations && !publicLocales) return settings;
 
-  return { ...settings, translations };
+  return {
+    ...settings,
+    ...(translations ? { translations } : {}),
+    ...(publicLocales ? { public_locales: publicLocales } : {}),
+  };
 }
 
 /* ===============================================================

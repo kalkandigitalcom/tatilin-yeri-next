@@ -269,6 +269,8 @@ describe("TypesPage — Phase 10D Batch 3 — mevcut çeviri yükleme + kaydet",
         typeId: "type-1",
         locale: "en",
         name: "Luxury Villa",
+        /* 🌐 Faz 2 — dil slug'ı da gönderilir (boş → TR slug'ı). */
+        slug: "",
       })
     );
   });
@@ -373,6 +375,8 @@ describe("TypesPage — Phase 10D Batch 3 — regresyon + TR referans kuralı", 
     expect(trText.tagName).not.toBe("TEXTAREA");
 
     const inputs = within(panel).getAllByRole("textbox");
-    expect(inputs.length).toBe(1);
+    /* 🌐 Faz 2 — aktif dilin adı + aktif dilin SEO slug'ı (TR referansı
+       hâlâ salt metin, input DEĞİL). */
+    expect(inputs.length).toBe(2);
   });
 });

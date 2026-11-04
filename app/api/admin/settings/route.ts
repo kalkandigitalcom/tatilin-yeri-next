@@ -6,6 +6,7 @@ import {
   FORBIDDEN_MESSAGE,
 } from "@/lib/auth/action-authz";
 import { settingsServerRepository } from "@/lib/db/settings.repository.server";
+import { invalidatePublicRoutingCaches } from "@/lib/i18n/routing/invalidate.server";
 
 /* ===============================================================
    🛡️ /api/admin/settings — SETTINGS READ (admin-only)
@@ -140,6 +141,45 @@ export async function PUT(req: Request): Promise<NextResponse> {
       );
     }
 
+    /* 🌐 Çok Dilli Mimari — ANA DİL bu genel PUT ile DEĞİŞTİRİLEMEZ.
+       Tek yazma yolu Faz 4 önizlemeli değişim akışıdır
+       (`/api/admin/settings/root-locale`: kilit + iyimser kontrol +
+       cache geçersiz kılma + geçiş kaydı). Aynı değerin geri
+       gönderilmesi (genel ayar sayfasının normal kaydı) etkilenmez. */
+    if (
+      Object.prototype.hasOwnProperty.call(values, "public_default_locale") &&
+      values.public_default_locale !==
+        (current as { public_default_locale?: unknown }).public_default_locale
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Ana dil bu formdan değiştirilemez. Çoklu Dil bölümündeki \"Ana dili değiştir\" önizlemesini kullanın.",
+        },
+        { status: 409 }
+      );
+    }
+
+    /* 🌐 Faz 4 — TR dışı ana dil varken çoklu dil kapatılamaz: kapalı
+       çoklu dilde ana dil daima TR kabul edildiğinden bu, ana dili
+       sihirbazı atlayarak sessizce değiştirirdi (DB'de migration 104
+       trigger'ı da aynı kuralı uygular). */
+    const cur = current as { public_default_locale?: unknown; multilingual_enabled?: unknown };
+    const multilingualChanged =
+      Object.prototype.hasOwnProperty.call(values, "multilingual_enabled") &&
+      !!values.multilingual_enabled !== !!cur.multilingual_enabled;
+    if (multilingualChanged && !values.multilingual_enabled && cur.public_default_locale !== "tr") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Ana dil Türkçe değilken çoklu dil sistemi kapatılamaz. Önce ana dili Türkçe yapın.",
+        },
+        { status: 409 }
+      );
+    }
+
     const { error } = await settingsServerRepository.updateById(id, values);
     if (error) {
       console.error("[admin.settings.update] FAILED", error.message);
@@ -148,6 +188,10 @@ export async function PUT(req: Request): Promise<NextResponse> {
         { status: 500 }
       );
     }
+
+    /* Çoklu dil aç/kapa aktif dil kümesini ve URL'leri değiştirir →
+       proxy dahil routing cache'leri hemen geçersiz kılınır. */
+    if (multilingualChanged) invalidatePublicRoutingCaches();
 
     return NextResponse.json({ ok: true });
   } catch (err) {

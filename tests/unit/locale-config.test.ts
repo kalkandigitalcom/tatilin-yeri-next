@@ -130,13 +130,13 @@ describe("isMultilingualEnabled (Phase 1A settings entegrasyonu)", () => {
 describe("localeFromPathname (Phase 9A — Header client-side locale tespiti)", () => {
   it("'/en' veya '/en/...' -> 'en'", () => {
     expect(localeFromPathname("/en")).toBe("en");
-    expect(localeFromPathname("/en/kiralik-villa/ornek-slug")).toBe("en");
-    expect(localeFromPathname("/en/kiralik-villalar")).toBe("en");
+    expect(localeFromPathname("/en/villa/ornek-slug")).toBe("en");
+    expect(localeFromPathname("/en/villas-for-rent")).toBe("en");
   });
 
   it("'/de' veya '/de/...' -> 'de'", () => {
     expect(localeFromPathname("/de")).toBe("de");
-    expect(localeFromPathname("/de/kiralik-villa/ornek-slug")).toBe("de");
+    expect(localeFromPathname("/de/villa/ornek-slug")).toBe("de");
   });
 
   it("TR path'leri (prefix yok) -> 'tr'", () => {

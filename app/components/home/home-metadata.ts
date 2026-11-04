@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 import { getCachedSettings } from "@/lib/cache.helpers";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import { resolvePublicHome } from "@/lib/i18n/public-home";
 import { resolveSettingsText } from "@/lib/i18n/settings-translation.helper";
 
@@ -97,7 +97,7 @@ export async function buildHomeMetadata(
   return {
     title,
     description,
-    alternates: { canonical: homeCanonical, languages: homeLanguages },
+    alternates: pickSeoAlternates(settings, homeCanonical, homeLanguages),
     openGraph: { title, description },
     twitter: { title, description },
   };

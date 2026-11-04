@@ -5,12 +5,11 @@ import type { Metadata } from "next";
 import { getCachedSettings } from "@/lib/cache.helpers";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 
 /* ===============================================================
    🛡️ /iletisim METADATA (TR / EN / DE ORTAK)
@@ -56,9 +55,7 @@ export async function buildContactMetadata(
     CONTACT_TR_PATH,
     locale
   );
-  const alternates = isMultilingualEnabled(settings)
-    ? { canonical, languages }
-    : { canonical };
+  const alternates = pickSeoAlternates(settings, canonical, languages);
 
   return {
     title,

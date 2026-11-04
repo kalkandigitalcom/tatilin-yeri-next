@@ -212,7 +212,7 @@ describe("Footer — footer_copyright locale-aware (§7)", () => {
   });
 
   it("12) EN — çeviri kullanılır ve yer tutucular ÇEVİRİDE DE ikame edilir", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villalar");
+    usePathnameMock.mockReturnValue("/en/villas-for-rent");
     render(
       <Footer
         {...FOOTER_BASE}

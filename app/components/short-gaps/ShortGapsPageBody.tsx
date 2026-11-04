@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import { notFound } from "next/navigation";
 
 import VillaCard from "@/app/components/villa/VillaCard";
@@ -136,7 +137,7 @@ export default async function ShortGapsPageBody({
   locale?: Locale;
 }) {
   const dict = getDictionary(locale).shortGaps;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
   const { ay, gece } = await params;
   const sp = await searchParams;
 
@@ -321,7 +322,7 @@ export default async function ShortGapsPageBody({
     locale
   );
 
-  const basePath = `${localePrefix}/kisa-sureli-tarihler/${ay}/${nights}`;
+  const basePath = localeHref(`/kisa-sureli-tarihler/${ay}/${nights}`, locale);
   /* Sidebar — /arama FilterSidebar replikası ile aynı prop şekli.
      show_in_filter curation'ı bileşen içinde (regionGroups) uygulanır. */
   const sidebarRegionOptions: GapFilterOption[] = regionOptionsRaw.map((o) => ({
@@ -463,7 +464,7 @@ export default async function ShortGapsPageBody({
                             ? {
                                 label: gapLabel,
                                 nights,
-                                href: `${localePrefix}/rezervasyon/${villa.slug}?start=${gap.gap_start}&end=${gap.gap_end}`,
+                                href: localeHref(`/rezervasyon/${villa.slug}?start=${gap.gap_start}&end=${gap.gap_end}`, locale),
                               }
                             : undefined
                         }

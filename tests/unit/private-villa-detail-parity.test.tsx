@@ -130,7 +130,7 @@ vi.mock("@/app/context/CurrencyContext", () => ({
 
 import PrivateVillaPageBody from "@/app/components/private-villa/PrivateVillaPageBody";
 import BottomNav from "@/app/components/layout/BottomNav";
-import NormalVillaDetail from "@/app/(public)/kiralik-villa/[slug]/page";
+import NormalVillaDetail from "@/app/(public)/kiralik-villa/[slug]/locale-page";
 import VillaInfoBar from "@/app/components/villa/VillaInfoBar";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 

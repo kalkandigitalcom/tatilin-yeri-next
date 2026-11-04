@@ -8,13 +8,14 @@ import { resolveAssetUrl } from "@/lib/storage.helpers";
 import { versionedAssetUrl } from "@/lib/storage/site-asset-version";
 import { getSiteAssetVersions } from "@/lib/storage/site-asset-version.server";
 import { getCachedSettings } from "@/lib/cache.helpers";
+import { getContentLocales } from "@/lib/i18n/content-availability.server";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
+  getEnabledPublicLocales,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import { resolveBlogContent } from "@/lib/i18n/get-blog-translation.server";
 
 /* ===============================================================
@@ -47,14 +48,13 @@ export async function buildBlogIndexMetadata(
 ): Promise<Metadata> {
   const dict = getDictionary(locale).blog;
   const settings = await getCachedSettings().catch(() => null);
-  const multilingualEnabled = isMultilingualEnabled(settings);
 
   const { canonical, languages } = buildLocaleAlternates("/blog", locale);
 
   return {
     title: dict.metaTitle,
     description: dict.metaDescription,
-    alternates: multilingualEnabled ? { canonical, languages } : { canonical },
+    alternates: pickSeoAlternates(settings, canonical, languages),
     openGraph: {
       type: "website",
       title: dict.metaTitle,
@@ -95,17 +95,27 @@ export async function buildBlogDetailMetadata(
     ) || undefined;
 
   const settings = await getCachedSettings().catch(() => null);
-  const multilingualEnabled = isMultilingualEnabled(settings);
   const { canonical, languages } = buildLocaleAlternates(
     `/blog/${post.slug}`,
     locale
   );
+  /* 🌐 Faz 3 — bu dilde gerçek çeviri yoksa noindex + hreflang/sitemap dışı. */
+  /* Tek dilli sitede (çoklu dil kapalı) çeviri sorgusu ATILMAZ. */
+  const available =
+    getEnabledPublicLocales(settings).length >= 2
+      ? await getContentLocales("blog", post.id)
+      : getEnabledPublicLocales(settings);
+  const untranslated = !available.includes(locale);
 
   return {
     title,
     description,
-    alternates: multilingualEnabled ? { canonical, languages } : { canonical },
-    robots: post.noindex ? { index: false, follow: false } : undefined,
+    alternates: pickSeoAlternates(settings, canonical, languages, { available, locale }),
+    robots: post.noindex
+      ? { index: false, follow: false }
+      : untranslated
+        ? { index: false, follow: true }
+        : undefined,
     openGraph: {
       type: "article",
       title,

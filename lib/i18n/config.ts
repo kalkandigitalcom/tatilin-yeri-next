@@ -95,9 +95,22 @@ export function localeFromPathname(
    SETTINGS ENTEGRASYONU (Phase 1A alanlarının type-safe okuması)
    =============================================================== */
 
+/** `public.site_locales` (migration 101) satırının public payload'daki
+ *  dar şekli — yalnız yayın durumu. Dil metadatası kodda tutulur
+ *  (lib/i18n/locale-registry.ts). */
+export type PublicLocaleState = {
+  code: string;
+  is_enabled: boolean;
+  sort_order?: number | null;
+};
+
 type SettingsLocaleFields = {
   multilingual_enabled?: boolean | null;
   public_default_locale?: string | null;
+  /** Migration 101 — `getPublicSettings` çoklu dil AÇIKKEN doldurur.
+   *  undefined/null/boş → tablo yok veya okunamadı → "tüm desteklenen
+   *  diller aktif" (migration 101 öncesi davranış). */
+  public_locales?: readonly PublicLocaleState[] | null;
 };
 
 /** settings.multilingual_enabled'i null-safe okur.
@@ -118,6 +131,73 @@ export function getPublicDefaultLocale(
   settings: SettingsLocaleFields | null | undefined
 ): Locale {
   return toLocale(settings?.public_default_locale);
+}
+
+/* ===============================================================
+   🌐 DİL BAZLI AÇMA/KAPAMA — Çok Dilli Mimari Faz 1 (migration 101)
+   ===============================================================
+   TEK DOĞRULUK KAYNAĞI: public sitede hangi dillerin yayında olduğu
+   ve hangisinin ana (kök) dil olduğu YALNIZ bu iki fonksiyondan
+   okunur. Bileşenler/metadata/sitemap kendi listesini KURMAZ.
+
+   KURALLAR:
+     • Çoklu dil KAPALI → yalnız ana dil (bugün: TR) yayında.
+     • Çoklu dil AÇIK →
+         - `public_locales` yok/boş (migration 101 uygulanmamış veya
+           okuma hatası) → tüm desteklenen diller (eski davranış,
+           fail-open YALNIZ bu geçiş durumu için).
+         - aksi halde `is_enabled === true` olan desteklenen diller.
+     • Ana dil HER ZAMAN listededir (DB trigger'ı da zorlar).
+     • Kodda desteklenmeyen (sözlüğü olmayan) DB satırları yok sayılır.
+     • Sıra: sort_order, eşitlikte SUPPORTED_LOCALES sırası.
+   =============================================================== */
+
+/** Önek almayan (kök URL'de çalışan) dil.
+ *  Çoklu dil kapalıyken site DEFAULT_LOCALE ile çalışır (MOD A). */
+export function getRootLocale(
+  settings: SettingsLocaleFields | null | undefined
+): Locale {
+  if (!isMultilingualEnabled(settings)) return DEFAULT_LOCALE;
+  return getPublicDefaultLocale(settings);
+}
+
+/** Public sitede yayında olan diller (ana dil daima dahil). */
+export function getEnabledPublicLocales(
+  settings: SettingsLocaleFields | null | undefined
+): Locale[] {
+  const root = getRootLocale(settings);
+  if (!isMultilingualEnabled(settings)) return [root];
+
+  const rows = settings?.public_locales;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [...SUPPORTED_LOCALES];
+  }
+
+  const byCode = new Map<string, PublicLocaleState>();
+  for (const row of rows) {
+    if (row && typeof row.code === "string") byCode.set(row.code, row);
+  }
+
+  const enabled = SUPPORTED_LOCALES.filter(
+    (l) => l === root || byCode.get(l)?.is_enabled === true
+  );
+
+  const orderOf = (l: Locale): number => {
+    const v = byCode.get(l)?.sort_order;
+    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+  };
+  return enabled
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => orderOf(a.l) - orderOf(b.l) || a.i - b.i)
+    .map((x) => x.l);
+}
+
+/** Verilen dil public sitede yayında mı? */
+export function isPublicLocaleEnabled(
+  settings: SettingsLocaleFields | null | undefined,
+  locale: Locale
+): boolean {
+  return getEnabledPublicLocales(settings).includes(locale);
 }
 
 /* ===============================================================

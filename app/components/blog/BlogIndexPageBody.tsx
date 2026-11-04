@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import Link from "next/link";
 import Image from "next/image";
 import { CalendarDays, ArrowUpRight } from "lucide-react";
@@ -50,7 +51,7 @@ export default async function BlogIndexPageBody({
   locale?: Locale;
 } = {}) {
   const dict = getDictionary(locale).blog;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
 
   const posts = await getBlogPosts();
   const translated = await resolveBlogListContent(posts, locale);
@@ -64,7 +65,7 @@ export default async function BlogIndexPageBody({
     <>
       <PageHero
         breadcrumb={[
-          { name: dict.breadcrumbHome, href: localePrefix || "/" },
+          { name: dict.breadcrumbHome, href: localeHref("/", locale) },
           { name: dict.breadcrumbBlog },
         ]}
         eyebrow={dict.eyebrow}
@@ -92,7 +93,7 @@ export default async function BlogIndexPageBody({
               return (
                 <Link
                   key={post.id}
-                  href={`${localePrefix}/blog/${post.slug}`}
+                  href={localeHref(`/blog/${post.slug}`, locale)}
                   className="group flex flex-col rounded-2xl border border-[var(--color-stone-100)] bg-white overflow-hidden hover:border-[var(--color-stone-200)] hover:shadow-[0_12px_30px_-18px_rgb(27_26_23/0.18)] transition-all motion-reduce:transition-none"
                 >
                   <div className="relative aspect-[16/10] bg-[var(--color-sand-50)] overflow-hidden">

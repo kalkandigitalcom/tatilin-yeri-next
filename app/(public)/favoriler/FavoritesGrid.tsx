@@ -1,5 +1,6 @@
 "use client";
 
+import { localeHref } from "@/lib/i18n/locale-href";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Heart, Trash2, Share2, Check, AlertCircle } from "lucide-react";
@@ -66,7 +67,7 @@ export default function FavoritesGrid({
   locale?: Locale;
 }) {
   const dict = getDictionary(locale).favoritesPage;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
   const {
     favorites,
     isHydrated,
@@ -168,7 +169,7 @@ export default function FavoritesGrid({
       typeof window !== "undefined" && window.location?.origin
         ? window.location.origin
         : "";
-    const url = `${origin}${localePrefix}/favoriler/paylas/${res.token}`;
+    const url = `${origin}${localeHref(`/favoriler/paylas/${res.token}`, locale)}`;
 
     /* Clipboard — defansif: API yoksa veya permission düşerse URL
        success panel'de gösterilir (manuel kopya). */
@@ -187,7 +188,7 @@ export default function FavoritesGrid({
     }
 
     setShareState({ kind: "success", url, copied });
-  }, [favorites, shareState.kind]);
+  }, [favorites, shareState.kind, locale]);
 
   /* ----------------- HYDRATE OLMAMIŞ / LOADING ----------------- */
   if (!isHydrated || (loading && villas.length === 0)) {
@@ -240,7 +241,7 @@ export default function FavoritesGrid({
         </p>
         <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
           <Link
-            href={`${localePrefix}/kiralik-villalar`}
+            href={localeHref(`/kiralik-villalar`, locale)}
             className="
               inline-flex items-center gap-2
               px-5 py-2.5 rounded-full
@@ -255,7 +256,7 @@ export default function FavoritesGrid({
             {dict.emptyExploreCta}
           </Link>
           <Link
-            href={`${localePrefix}/arama`}
+            href={localeHref(`/arama`, locale)}
             className="
               inline-flex items-center gap-2
               px-5 py-2.5 rounded-full
@@ -294,7 +295,7 @@ export default function FavoritesGrid({
         </p>
         <div className="mt-7 flex items-center justify-center gap-3 flex-wrap">
           <Link
-            href={`${localePrefix}/kiralik-villalar`}
+            href={localeHref(`/kiralik-villalar`, locale)}
             className="
               inline-flex items-center gap-2 px-5 py-2.5 rounded-full
               bg-[var(--color-stone-900)] text-white

@@ -14,6 +14,7 @@
 =============================================================== */
 
 import type { SettingsTranslationsByLocale } from "@/lib/i18n/settings-translations.types";
+import type { PublicLocaleState } from "@/lib/i18n/config";
 
 export type WatermarkPosition =
   | "center"
@@ -46,6 +47,13 @@ export type Settings = {
      ile tr/en/de dışına izin verilmez. Default: false / 'tr'. */
   multilingual_enabled?: boolean | null;
   public_default_locale?: "tr" | "en" | "de" | null;
+
+  /* 🌐 Migration 101 — dil bazlı yayın durumu (`site_locales`).
+     DB kolonu DEĞİL: `getPublicSettings` çoklu dil AÇIKKEN ayrı, dar
+     bir sorguyla ekler (translations ile aynı desen). Kapalıyken veya
+     tablo yokken undefined → tüketiciler yalnız
+     `getEnabledPublicLocales` (lib/i18n/config.ts) üzerinden okur. */
+  public_locales?: PublicLocaleState[] | null;
 
   // 🔥 SITE LOGO (Storage public URL)
   site_logo?: string | null;

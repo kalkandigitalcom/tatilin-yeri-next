@@ -344,8 +344,8 @@ describe("ReservationPageBody — locale-aware gövde", () => {
   });
 
   it.each([
-    ["en", "/en", "/en/kiralik-villalar"],
-    ["de", "/de", "/de/kiralik-villalar"],
+    ["en", "/en", "/en/villas-for-rent"],
+    ["de", "/de", "/de/ferienvillen"],
   ] as const)("12) %s breadcrumb href'leri locale-prefixli", async (locale, home, villas) => {
     const el = await renderBody(locale);
     const hero = childrenOf(el).find((c) => c?.type === PageHero);
@@ -524,8 +524,8 @@ describe("ReservationSuccessBody — locale-aware başarı sayfası", () => {
   });
 
   it.each([
-    ["en", "/en", "/en/kiralik-villa/test-villa"],
-    ["de", "/de", "/de/kiralik-villa/test-villa"],
+    ["en", "/en", "/en/villa/test-villa"],
+    ["de", "/de", "/de/villa/test-villa"],
   ] as const)("24) %s — CTA href'leri locale-prefixli", async (locale, home, villa) => {
     await renderSuccess(locale, { villa: "test-villa" });
     const d = getDictionary(locale).reservation.success;
@@ -1105,8 +1105,8 @@ describe("ReservationForm — sunucu hata metni SIZMAZ", () => {
 describe("ReservationForm — locale-aware success redirect", () => {
   it.each([
     ["tr", "/rezervasyon/basarili"],
-    ["en", "/en/rezervasyon/basarili"],
-    ["de", "/de/rezervasyon/basarili"],
+    ["en", "/en/booking/success"],
+    ["de", "/de/buchung/erfolg"],
   ] as const)("51) %s → %s", async (locale, base) => {
     mockReservationPost(200, {
       ok: true,
@@ -1127,7 +1127,7 @@ describe("ReservationForm — locale-aware success redirect", () => {
     await fillAndSubmit("en");
     await waitFor(() => expect(pushMock).toHaveBeenCalledTimes(1));
     expect(pushMock.mock.calls[0][0]).toBe(
-      `/en/rezervasyon/basarili?ref=${encodeURIComponent(
+      `/en/booking/success?ref=${encodeURIComponent(
         "res 1/ü"
       )}&villa=test-villa`
     );
@@ -1138,7 +1138,7 @@ describe("ReservationForm — locale-aware success redirect", () => {
     await fillAndSubmit("de");
     await waitFor(() => expect(pushMock).toHaveBeenCalledTimes(1));
     expect(pushMock.mock.calls[0][0]).toBe(
-      "/de/rezervasyon/basarili?villa=test-villa"
+      "/de/buchung/erfolg?villa=test-villa"
     );
   });
 });
@@ -1151,15 +1151,15 @@ describe("locale switch — /rezervasyon/*", () => {
   it("54) /rezervasyon/<slug> → EN/DE prefixli hedefler", () => {
     const t = getLocaleSwitchTargets("/rezervasyon/test-villa");
     expect(t.tr).toBe("/rezervasyon/test-villa");
-    expect(t.en).toBe("/en/rezervasyon/test-villa");
-    expect(t.de).toBe("/de/rezervasyon/test-villa");
+    expect(t.en).toBe("/en/booking/test-villa");
+    expect(t.de).toBe("/de/buchung/test-villa");
   });
 
   it("55) query string AYNEN korunur", () => {
     const search = "?start=2026-06-01&end=2026-06-08&adults=2&poolHeating=1";
-    const t = getLocaleSwitchTargets("/en/rezervasyon/test-villa", search);
+    const t = getLocaleSwitchTargets("/en/booking/test-villa", search);
     expect(t.tr).toBe(`/rezervasyon/test-villa${search}`);
-    expect(t.de).toBe(`/de/rezervasyon/test-villa${search}`);
+    expect(t.de).toBe(`/de/buchung/test-villa${search}`);
   });
 
   it("56) /rezervasyon/basarili de allowlist'te (ref/villa korunur)", () => {
@@ -1167,8 +1167,8 @@ describe("locale switch — /rezervasyon/*", () => {
       "/rezervasyon/basarili",
       "?ref=res-1&villa=test-villa"
     );
-    expect(t.en).toBe("/en/rezervasyon/basarili?ref=res-1&villa=test-villa");
-    expect(t.de).toBe("/de/rezervasyon/basarili?ref=res-1&villa=test-villa");
+    expect(t.en).toBe("/en/booking/success?ref=res-1&villa=test-villa");
+    expect(t.de).toBe("/de/buchung/erfolg?ref=res-1&villa=test-villa");
   });
 
   /* 🛡️ PUBLIC ÇOKLU DİL TAMAMLAMA — `/rezervasyon-kontrol` ARTIK kendi
@@ -1178,8 +1178,8 @@ describe("locale switch — /rezervasyon/*", () => {
   it("57) /rezervasyon-kontrol locale-routed (kendi exact kaydı)", () => {
     const t = getLocaleSwitchTargets("/rezervasyon-kontrol");
     expect(t.tr).toBe("/rezervasyon-kontrol");
-    expect(t.en).toBe("/en/rezervasyon-kontrol");
-    expect(t.de).toBe("/de/rezervasyon-kontrol");
+    expect(t.en).toBe("/en/booking-status");
+    expect(t.de).toBe("/de/buchungsstatus");
   });
 
   it("57b) /rezervasyon-kontrolX → fallback (prefix ile yanlış eşleşme yok)", () => {
@@ -1252,7 +1252,7 @@ describe("source-lock — rezervasyon gövdelerinde hardcoded TR metin yok", () 
 
   it("62) success redirect locale-aware (kaynak seviyesinde)", () => {
     const src = sourceWithoutComments(SOURCE_LOCKED[0]);
-    expect(src).toContain("/rezervasyon/basarili");
-    expect(src).toContain("${activeLocale}/rezervasyon/basarili");
+    /* 🌐 Faz 2 — hedef yol merkezi üreticiden (dil öneki + SEO segmenti). */
+    expect(src).toContain('localeHref("/rezervasyon/basarili", activeLocale)');
   });
 });

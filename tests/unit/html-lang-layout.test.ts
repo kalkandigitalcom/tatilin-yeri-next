@@ -1,94 +1,115 @@
 /* ===============================================================
-   🛡️ PHASE 7E — A) app/layout.tsx <html lang> REGRESYON KİLİDİ
+   🌐 FAZ 3 — DİNAMİK <html lang> (çoklu root layout)
    ===============================================================
-   Bu dosya Phase 7E'nin AUDIT SONUCUNU test olarak kayıt altına alır:
+   ÖNCEKİ DURUM (Phase 7E kilidi): tek root layout (`app/layout.tsx`)
+   dil parametresini bilemediği için <html lang="tr"> TÜM sayfalarda
+   sabitti; bu dosya o sabitliği kilitliyordu. Phase 7E notunun
+   öngördüğü çözüm (`[locale]` dinamik segmentinin root layout'un
+   ÜSTÜNDE olması) Faz 2'de kuruldu (`app/(public)/[lang]`).
 
-   BULGU: `app/layout.tsx` (ROOT layout, `<html>` etiketini üreten TEK
-   yer — Next.js App Router'da yalnız root layout `<html>`/`<body>`
-   render edebilir) `/en/kiralik-villa/[slug]` gibi bir sayfanın
-   `setRequestLocale("en")` (Phase 4B, `request-locale.server.ts`)
-   çağrısını GÜVENLİ ŞEKİLDE OKUYAMAZ. Neden:
+   FAZ 3: public ağacın ROOT layout'u `app/(public)/[lang]/layout.tsx`
+   → <html lang> sayfanın gerçek dili; admin ağacının root layout'u
+   `app/(admin)/layout.tsx` → <html lang="tr">. `headers()` KULLANILMAZ
+   (statik/ISR korunur).
 
-     React Server Components render sırası PARENT-ÖNCE-ÇOCUK'tur:
-     Next.js `<RootLayout>{children}</RootLayout>` ağacını render
-     ederken RootLayout'un kendi async fonksiyon GÖVDESİ (ve onun
-     döndürdüğü JSX'teki `lang={...}` gibi PRIMITIVE prop değerleri)
-     `children` (nested layout → page) render edilmeden ÖNCE
-     tamamlanır/hesaplanır. `EnVillaDetailPage` içindeki
-     `setRequestLocale("en")` çağrısı, RootLayout'un JSX'i (ve
-     içindeki `lang` prop'u) ZATEN üretildikten SONRA çalışır — bu
-     yüzden RootLayout'ta `getRequestLocale()` okunsa bile bu HER ZAMAN
-     henüz yazılmamış DEFAULT_LOCALE ("tr") değerini görür, ASLA
-     "en"/"de" değil.
-
-     Next.js'in bu tür bir problem için sunduğu TEK resmi mekanizma
-     `next/root-params` (`node_modules/next/dist/server/request/
-     root-params.js`) — ama bu yalnız ROOT LAYOUT'UN ÜSTÜNDE bir
-     `[dynamic]` segment olduğunda çalışır
-     (`collect-root-param-keys.js`: "we return once we found the
-     first layout" — segment toplama root layout'ta DURUR). Bu
-     projede `app/layout.tsx` ZATEN en üstteki (ilk) layout — üstünde
-     hiçbir dynamic segment yok (EN/DE literal `en`/`de` klasörleri,
-     Phase 4A'nın bilinçli kararıyla `[locale]` dynamic segment
-     DEĞİL). `next/root-params` kullanmak, TÜM route'ları (TR dahil)
-     bir `[locale]` segmentinin altına taşımayı gerektirir — bu,
-     Phase 7E'nin AÇIKÇA YASAKLADIĞI "URL mimarisini değiştirme" /
-     "middleware'i değiştirme" sınırını ihlal eder.
-
-   SONUÇ: `app/layout.tsx` BU FAZDA DEĞİŞTİRİLMEDİ. `<html lang="tr">`
-   TÜM route'lar için (TR/EN/DE) SABİT kalıyor — bu, görev tanımının
-   kendi öngördüğü "güvenli değilse zorlama, yalnız robots/noindex
-   kısmını yap" fallback'idir (bkz. Phase 7E raporu).
-
-   Bu dosyadaki testler RootLayout'un GERÇEKTEN, bugün, HER durumda
-   `lang="tr"` ürettiğini doğruluyor (regresyon kilidi — ileride biri
-   bunu yanlışlıkla `getRequestLocale()`'a bağlarsa bu test KIRILIR ve
-   yukarıdaki mimari uyarıyı okumaya zorlar). İllüstratif "parent önce
-   render olur" hazard testi ayrı bir dosyada
-   (`request-locale-render-order.test.ts`) — bu ayrım, o dosyanın
-   `react`'i tüm dosya kapsamında mock'lamasının BU dosyadaki
-   `app/layout.tsx` import'unu (ve onun gerçek React davranışına
-   bağımlılığını) ETKİLEMEMESİ İÇİNDİR.
-
-   `next/font/google` (Outfit/Inter/Fraunces/Geist_Mono) YALNIZ Next.js'in
-   kendi SWC derleyici eklentisiyle çalışır; ham Vitest/Vite ortamında
-   `Outfit is not a function` hatası verir (ampirik olarak doğrulandı —
-   bu PROJEDE `app/layout.tsx`'i import eden BAŞKA HİÇBİR test yok, bu
-   İLK KEZ deneniyor — bkz. probe-layout-import.test.ts /
-   probe-layout-import2.test.ts). Bu yüzden `next/font/google` bu
-   dosyada YEREL olarak mock'lanıyor (yalnız bu test dosyasını
-   etkiler, `vitest.config.ts` DEĞİŞTİRİLMEDİ, global davranış AYNI).
-=============================================================== */
+   `next/font/google` ham Vitest'te çalışmadığı için YEREL mock'lanır.
+   =============================================================== */
 
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 vi.mock("@/lib/cache.helpers", () => ({
   getCachedSettings: () => Promise.resolve(null),
 }));
-
 vi.mock("next/font/google", () => ({
   Outfit: () => ({ variable: "--font-outfit" }),
   Inter: () => ({ variable: "--font-inter" }),
   Fraunces: () => ({ variable: "--font-fraunces" }),
   Geist_Mono: () => ({ variable: "--font-geist-mono" }),
 }));
+vi.mock("@/app/(public)/_shell/PublicShell", () => ({
+  default: ({ children }: { children: unknown }) => children,
+}));
 
-describe("A) app/layout.tsx — RootLayout <html lang> regresyon kilidi", () => {
-  it("RootLayout HER ZAMAN <html lang=\"tr\"> döner (Phase 7E BU FAZDA DEĞİŞTİRMEDİ — bkz. dosya başı audit notu)", async () => {
-    const mod = await import("@/app/layout");
-    const element = (await mod.default({ children: null })) as {
-      props: { lang: string };
-    };
-    expect(element.props.lang).toBe("tr");
+type El = { type: unknown; props: { lang?: string; children?: unknown } };
+
+async function renderLocaleLayout(lang: string): Promise<El> {
+  const mod = await import("@/app/(public)/[lang]/layout");
+  const doc = (await mod.default({
+    children: null,
+    params: Promise.resolve({ lang }),
+  })) as El;
+  /* <RootDocument lang=…> → fonksiyon bileşeni; çağırıp <html>'i al. */
+  return (doc.type as (p: unknown) => El)(doc.props);
+}
+
+describe("A) <html lang> sayfanın gerçek dili", () => {
+  it.each([
+    ["tr", "tr"],
+    ["en", "en"],
+    ["de", "de"],
+  ])("/[lang]=%s → <html lang=\"%s\">", async (lang, expected) => {
+    const html = await renderLocaleLayout(lang);
+    expect(html.type).toBe("html");
+    expect(html.props.lang).toBe(expected);
   });
 
-  it("settings null/reject olsa BİLE lang hâlâ 'tr' (fail-safe, ÖNCEKİ davranışla AYNI)", async () => {
-    const mod = await import("@/app/layout");
-    const element = (await mod.default({ children: null })) as {
-      type: string;
-      props: { lang: string };
-    };
-    expect(element.props.lang).toBe("tr");
-    expect(element.type).toBe("html");
+  it("geçersiz dil parametresi → varsayılan 'tr' (fail-safe)", async () => {
+    const html = await renderLocaleLayout("xx");
+    expect(html.props.lang).toBe("tr");
+  });
+
+  it("admin root layout'u <html lang=\"tr\">", () => {
+    const src = readFileSync(join(process.cwd(), "app/(admin)/layout.tsx"), "utf8");
+    expect(src).toContain('<RootDocument lang="tr">');
+  });
+
+  it("tek root layout (app/layout.tsx) KALDIRILDI; global 404 ayrı", () => {
+    expect(existsSync(join(process.cwd(), "app/layout.tsx"))).toBe(false);
+    expect(existsSync(join(process.cwd(), "app/global-not-found.tsx"))).toBe(true);
+    const cfg = readFileSync(join(process.cwd(), "next.config.ts"), "utf8");
+    expect(cfg).toMatch(/globalNotFound:\s*true/);
+  });
+
+  it("root layout'lar headers()/cookies() KULLANMAZ (ISR korunur)", () => {
+    for (const f of [
+      "app/(public)/[lang]/layout.tsx",
+      "app/(admin)/layout.tsx",
+      "app/_root/root-document.tsx",
+    ]) {
+      const src = readFileSync(join(process.cwd(), f), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      expect(src, f).not.toMatch(/\bheaders\(\)|\bcookies\(\)/);
+    }
+  });
+});
+
+describe("B) og:locale + og:locale:alternate", () => {
+  it("layout metadata: dilin og:locale'i + yalnız aktif diğer diller", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/cache.helpers", () => ({
+      getCachedSettings: () =>
+        Promise.resolve({
+          multilingual_enabled: true,
+          public_default_locale: "tr",
+          public_locales: [
+            { code: "tr", is_enabled: true, sort_order: 10 },
+            { code: "en", is_enabled: true, sort_order: 20 },
+            { code: "de", is_enabled: false, sort_order: 30 },
+          ],
+        }),
+    }));
+    const mod = await import("@/app/(public)/[lang]/layout");
+    const md = await mod.generateMetadata({ params: Promise.resolve({ lang: "en" }) });
+    expect(md.openGraph).toMatchObject({ locale: "en_US", alternateLocale: ["tr_TR"] });
+  });
+
+  it("sayfa kendi openGraph'ını verirse dispatcher aynı alanları ekler", async () => {
+    const { withOpenGraphLocale } = await import("@/lib/i18n/routing/locale-route");
+    const md = withOpenGraphLocale({ openGraph: { title: "X" } }, "de", ["tr", "en", "de"]);
+    expect(md.openGraph).toEqual({ title: "X", locale: "de_DE", alternateLocale: ["tr_TR", "en_US"] });
+    expect(withOpenGraphLocale({ title: "Y" }, "de", ["tr", "de"])).toEqual({ title: "Y" });
   });
 });

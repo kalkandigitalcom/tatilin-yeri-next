@@ -11,6 +11,18 @@ import { useNotify } from "@/app/components/admin/notifications/NotificationProv
 import { revalidateSettings } from "@/app/services/revalidate.actions";
 /* 🔗 CTA placeholder default'ları Hero fallback'i ile TEK source-of-truth. */
 import { HERO_CTA_DEFAULTS } from "@/lib/hero.helpers";
+import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/config";
+import { LOCALE_META } from "@/lib/i18n/locale-registry";
+import { validateEnabledLocalesInput } from "@/lib/i18n/site-locales.validation";
+import {
+  getSiteLocalesClient,
+  updateSiteLocalesClient,
+  type AdminSiteLocaleRow,
+} from "@/app/services/site-locales.client";
+import LocaleAvailabilityField, {
+  type LocaleEnabledMap,
+} from "./_components/LocaleAvailabilityField";
+import RootLocaleChangeField from "./_components/RootLocaleChangeField";
 
 import {
   SettingsSection,
@@ -50,6 +62,28 @@ const WATERMARK_POSITIONS: { value: WatermarkPosition; label: string }[] = [
   { value: "bottom-left", label: "Sol Alt" },
   { value: "bottom-right", label: "Sağ Alt" },
 ];
+
+/* 🌐 Faz 1 — site_locales satırlarını anahtar haritasına çevirir.
+   Satırı olmayan desteklenen dil KAPALI sayılır (DB kaynağı esas). */
+function toEnabledMap(rows: AdminSiteLocaleRow[]): LocaleEnabledMap {
+  const map = Object.fromEntries(
+    SUPPORTED_LOCALES.map((l) => [l, false])
+  ) as LocaleEnabledMap;
+  for (const r of rows) {
+    if ((SUPPORTED_LOCALES as readonly string[]).includes(r.code)) {
+      map[r.code as Locale] = r.is_enabled === true;
+    }
+  }
+  return map;
+}
+
+function enabledList(map: LocaleEnabledMap): Locale[] {
+  return SUPPORTED_LOCALES.filter((l) => map[l]);
+}
+
+const ALL_ENABLED: LocaleEnabledMap = Object.fromEntries(
+  SUPPORTED_LOCALES.map((l) => [l, true])
+) as LocaleEnabledMap;
 
 export default function SettingsGeneralPage() {
   const toast = useNotify();
@@ -106,9 +140,21 @@ export default function SettingsGeneralPage() {
      multilingualEnabled=false + publicDefaultLocale="tr" → mevcut site
      davranışı BİREBİR aynı kalır (DB default'larıyla birebir). */
   const [multilingualEnabled, setMultilingualEnabled] = useState(false);
+  /* 🌐 Faz 4 — ana dil değişimi yalnız KAYDEDİLMİŞ duruma göre yapılır. */
+  const [savedMultilingual, setSavedMultilingual] = useState(false);
   const [publicDefaultLocale, setPublicDefaultLocale] = useState<
     "tr" | "en" | "de"
   >("tr");
+
+  /* 🌐 Faz 1 — dil bazlı açma/kapama (migration 101, site_locales).
+     `localesUnavailable` doluysa tablo okunamadı → anahtarlar kilitli. */
+  const [localeEnabled, setLocaleEnabled] =
+    useState<LocaleEnabledMap>(ALL_ENABLED);
+  const [savedLocaleEnabled, setSavedLocaleEnabled] =
+    useState<LocaleEnabledMap>(ALL_ENABLED);
+  const [localesUnavailable, setLocalesUnavailable] = useState<string | null>(
+    null
+  );
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,6 +162,21 @@ export default function SettingsGeneralPage() {
 
   useEffect(() => {
     let cancelled = false;
+    getSiteLocalesClient().then((r) => {
+      if (cancelled) return;
+      if (r.ok) {
+        const map = toEnabledMap(r.locales);
+        setLocaleEnabled(map);
+        setSavedLocaleEnabled(map);
+        setLocalesUnavailable(null);
+      } else {
+        setLocalesUnavailable(
+          r.migrationMissing
+            ? "Dil bazlı açma/kapama için veritabanı güncellemesi (migration 101) henüz uygulanmamış. Şu an çoklu dil açıkken tüm diller yayındadır."
+            : "Dil ayarları okunamadı; anahtarlar geçici olarak kilitlendi."
+        );
+      }
+    });
     getSettings().then((s) => {
       if (cancelled || !s) {
         setLoading(false);
@@ -162,6 +223,7 @@ export default function SettingsGeneralPage() {
       setHeroBadge(s.hero_badge_text || "");
       setPageHeroBg(s.page_hero_background_image || null);
       setMultilingualEnabled(!!s.multilingual_enabled);
+      setSavedMultilingual(!!s.multilingual_enabled);
       setPublicDefaultLocale(
         (s.public_default_locale as "tr" | "en" | "de") || "tr"
       );
@@ -174,6 +236,35 @@ export default function SettingsGeneralPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    /* 🌐 Faz 1 — dil listesi değiştiyse ÖNCE istemcide doğrula
+       (sunucu ve DB trigger'ı aynı kuralı tekrar uygular). */
+    const localesDirty =
+      !localesUnavailable &&
+      SUPPORTED_LOCALES.some((l) => localeEnabled[l] !== savedLocaleEnabled[l]);
+    let nextEnabled: Locale[] = [];
+    if (localesDirty) {
+      const check = validateEnabledLocalesInput(
+        enabledList(localeEnabled),
+        publicDefaultLocale
+      );
+      if (!check.ok) {
+        toast.error(check.error, { id: "settings-genel" });
+        return;
+      }
+      nextEnabled = check.enabled;
+    }
+
+    /* 🌐 Faz 4 — TR dışı ana dil varken çoklu dil kapatılamaz (sunucu
+       409 ve DB trigger'ı aynı kuralı uygular). */
+    if (!multilingualEnabled && savedMultilingual && publicDefaultLocale !== "tr") {
+      toast.error(
+        "Ana dil Türkçe değilken çoklu dil sistemi kapatılamaz. Önce ana dili Türkçe yapın.",
+        { id: "settings-genel" }
+      );
+      return;
+    }
+
     setSaving(true);
     setSaved(false);
     const ok = await updateSettings({
@@ -205,11 +296,29 @@ export default function SettingsGeneralPage() {
       multilingual_enabled: !!multilingualEnabled,
       public_default_locale: publicDefaultLocale,
     });
-    setSaving(false);
     if (!ok) {
+      setSaving(false);
       toast.error("Kaydedilemedi", { id: "settings-genel" });
       return;
     }
+
+    if (localesDirty) {
+      const r = await updateSiteLocalesClient(nextEnabled);
+      if (!r.ok) {
+        setSaving(false);
+        revalidateSettings().catch(() => {});
+        toast.error(`Genel ayarlar kaydedildi, dil ayarları kaydedilemedi: ${r.error}`, {
+          id: "settings-genel",
+        });
+        return;
+      }
+      const map = toEnabledMap(r.locales);
+      setLocaleEnabled(map);
+      setSavedLocaleEnabled(map);
+    }
+
+    setSavedMultilingual(!!multilingualEnabled);
+    setSaving(false);
     setSaved(true);
     toast.success("Kaydedildi", { id: "settings-genel" });
     revalidateSettings().catch(() => {});
@@ -481,40 +590,52 @@ export default function SettingsGeneralPage() {
           </p>
         </SettingsSection>
 
-        {/* 🛡️ Migration 081 — ÇOKLU DİL (PHASE 1A: yalnız ayar altyapısı).
-            Bu bölüm yalnız admin ayarını değiştirir; henüz public tarafta
-            dil seçici / routing / çeviri YOK. multilingualEnabled=false
-            iken "Varsayılan Dil" alanı devre dışıdır (anlamsız — public
-            site zaten tr davranıyor). */}
+        {/* 🌐 ÇOKLU DİL — master switch (migration 081) + dil bazlı
+            açma/kapama (migration 101) + Faz 4 önizlemeli ana dil
+            değişimi (migration 104; genel Kaydet ana dili değiştiremez). */}
         <SettingsSection
           title="Çoklu Dil"
-          description="Public sitenin çoklu dil (TR/EN/DE) altyapısı için hazırlık ayarı. Bu adımda yalnız ayar kaydedilir; public site davranışı henüz değişmez."
+          description="Public sitenin dillerini yönetin. Kapatılan dilin sayfaları 404 döner ve dil seçici, hreflang ve sitemap'ten çıkar; içerik ve çeviriler silinmez."
         >
           <ToggleField
             label="Çoklu Dil Sistemi"
-            description="Kapalıyken public site yalnızca aşağıdaki Varsayılan Dil ile, mevcut haliyle çalışmaya devam eder."
+            description="Kapalıyken public site yalnızca ana dilde çalışır; aşağıdaki diğer diller yayında olmaz."
             checked={multilingualEnabled}
             onChange={setMultilingualEnabled}
             disabled={loading}
           />
+          <LocaleAvailabilityField
+            rootLocale={publicDefaultLocale}
+            value={localeEnabled}
+            onChange={setLocaleEnabled}
+            multilingualEnabled={multilingualEnabled}
+            disabled={loading || saving}
+            unavailableReason={localesUnavailable}
+          />
           <FieldShell
-            label="Varsayılan Dil"
-            hint="Çoklu Dil açıkken public sitenin ilk-ziyaretçi varsayılan dili. Kapalıyken site bu dilde (şu an yalnız Türkçe için garanti edilir) çalışır."
+            label="Ana Dil"
+            hint="Ana dil kök URL'de (/) öneksiz çalışır; diğer aktif diller kendi önekini kullanır. Değişim tüm URL'leri ve SEO'yu etkiler; bu yüzden ayrı bir önizleme ve onay adımıyla, Kaydet'ten bağımsız uygulanır."
           >
-            <select
-              value={publicDefaultLocale}
-              onChange={(e) =>
-                setPublicDefaultLocale(
-                  e.target.value as "tr" | "en" | "de"
-                )
+            <RootLocaleChangeField
+              currentRoot={publicDefaultLocale}
+              savedEnabled={enabledList(savedLocaleEnabled)}
+              savedMultilingual={savedMultilingual}
+              blockedReason={
+                loading
+                  ? "Yükleniyor…"
+                  : localesUnavailable
+                    ? "Dil ayarları okunamadığı için ana dil şu an değiştirilemez."
+                    : multilingualEnabled !== savedMultilingual ||
+                        SUPPORTED_LOCALES.some((l) => localeEnabled[l] !== savedLocaleEnabled[l])
+                      ? "Kaydedilmemiş çoklu dil değişiklikleri var. Ana dili değiştirmeden önce Kaydet'e basın."
+                      : null
               }
-              disabled={loading || !multilingualEnabled}
-              className="input"
-            >
-              <option value="tr">Türkçe</option>
-              <option value="en">English</option>
-              <option value="de">Deutsch</option>
-            </select>
+              onChanged={(next) => {
+                setPublicDefaultLocale(next);
+                revalidateSettings().catch(() => {});
+                toast.success(`Ana dil ${LOCALE_META[next].adminLabel} oldu`, { id: "settings-genel" });
+              }}
+            />
           </FieldShell>
         </SettingsSection>
 

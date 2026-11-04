@@ -60,16 +60,16 @@ describe("Footer — Phase 9B locale dictionary (props ile doğrudan render)", (
     expect(screen.getByText("Keşfet")).toBeInTheDocument();
   });
 
-  it("2) '/en/kiralik-villalar' → EN footer dictionary metinleri (lib/i18n/dictionaries/en.ts değerleri)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villalar");
+  it("2) '/en/villas-for-rent' → EN footer dictionary metinleri (lib/i18n/dictionaries/en.ts değerleri)", () => {
+    usePathnameMock.mockReturnValue("/en/villas-for-rent");
     render(<Footer {...BASE_PROPS} />);
     expect(screen.queryByText("Keşfet")).not.toBeInTheDocument();
     expect(screen.getByText("Explore")).toBeInTheDocument();
     expect(screen.getByText("Check Reservation")).toBeInTheDocument();
   });
 
-  it("3) '/de/kiralik-villalar' → DE footer dictionary metinleri (lib/i18n/dictionaries/de.ts değerleri)", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villalar");
+  it("3) '/de/ferienvillen' → DE footer dictionary metinleri (lib/i18n/dictionaries/de.ts değerleri)", () => {
+    usePathnameMock.mockReturnValue("/de/ferienvillen");
     render(<Footer {...BASE_PROPS} />);
     expect(screen.queryByText("Keşfet")).not.toBeInTheDocument();
     expect(screen.getByText("Entdecken")).toBeInTheDocument();
@@ -92,15 +92,15 @@ describe("Footer — Phase 9B locale dictionary (props ile doğrudan render)", (
      iç linkler artık AKTİF LOCALE'i taşır (eski "prefix'siz kalır"
      kuralı navigasyonda locale kaybına yol açıyordu). Test SİLİNMEDİ,
      doğru davranışa çevrildi ve "TR'ye düşmüyor" kontrolü eklendi. */
-  it("6) href'ler aktif locale'i taşır — EN path'te '/en/rezervasyon-kontrol'", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villalar");
+  it("6) href'ler aktif locale'i taşır — EN path'te '/en/booking-status'", () => {
+    usePathnameMock.mockReturnValue("/en/villas-for-rent");
     render(<Footer {...BASE_PROPS} />);
     const reservationLink = screen.getByRole("link", {
       name: /Check Reservation/i,
     });
     expect(reservationLink).toHaveAttribute(
       "href",
-      "/en/rezervasyon-kontrol"
+      "/en/booking-status"
     );
     expect(reservationLink).not.toHaveAttribute(
       "href",
@@ -256,15 +256,15 @@ describe("Footer — href locale kilidi (iç linkler aktif locale'i taşır)", (
   });
 
   it("12) taxonomy + CMS href'leri '/en/...' path'te '/en' prefix'i alır (token/slug kontratı AYNEN)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villalar");
+    usePathnameMock.mockReturnValue("/en/villas-for-rent");
     render(<Footer {...PROPS_WITH_TAXONOMY_AND_CMS} />);
     expect(screen.getByRole("link", { name: "Havuzlu Villa" })).toHaveAttribute(
       "href",
-      "/en/villa-turleri/havuzlu-villa"
+      "/en/villa-types/havuzlu-villa"
     );
     expect(screen.getByRole("link", { name: "Kalkan" })).toHaveAttribute(
       "href",
-      "/en/arama?bolgeler=kalkan"
+      "/en/search?bolgeler=kalkan"
     );
     expect(screen.getByRole("link", { name: "Hakkımızda" })).toHaveAttribute(
       "href",
@@ -278,15 +278,15 @@ describe("Footer — href locale kilidi (iç linkler aktif locale'i taşır)", (
   });
 
   it("13) taxonomy + CMS href'leri '/de/...' path'te '/de' prefix'i alır (token/slug kontratı AYNEN)", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villalar");
+    usePathnameMock.mockReturnValue("/de/ferienvillen");
     render(<Footer {...PROPS_WITH_TAXONOMY_AND_CMS} />);
     expect(screen.getByRole("link", { name: "Havuzlu Villa" })).toHaveAttribute(
       "href",
-      "/de/villa-turleri/havuzlu-villa"
+      "/de/villa-typen/havuzlu-villa"
     );
     expect(screen.getByRole("link", { name: "Kalkan" })).toHaveAttribute(
       "href",
-      "/de/arama?bolgeler=kalkan"
+      "/de/suche?bolgeler=kalkan"
     );
     expect(screen.getByRole("link", { name: "Hakkımızda" })).toHaveAttribute(
       "href",

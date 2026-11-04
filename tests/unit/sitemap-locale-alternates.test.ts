@@ -126,20 +126,30 @@ describe("sitemap() — Phase 7D villa locale alternates", () => {
     };
     expect(villa.alternates?.languages).toEqual({
       tr: "https://example.com/kiralik-villa/villa-in-love",
-      en: "https://example.com/en/kiralik-villa/villa-in-love",
-      de: "https://example.com/de/kiralik-villa/villa-in-love",
+      en: "https://example.com/en/villa/villa-in-love",
+      de: "https://example.com/de/villa/villa-in-love",
       "x-default": "https://example.com/kiralik-villa/villa-in-love",
     });
   });
 
-  it("6b) EN/DE için AYRI bir sitemap URL entry'si YOK (multilingual=true iken bile)", async () => {
+  /* 🌐 Faz 3 — ÇOK DİLLİ SITEMAP: aktif her dilin kanonik URL'si AYRI
+     bir girdi olarak yer alır (önceden yalnız TR girdisi + alternates
+     vardı; EN/DE sayfaları o zaman noindex placeholder'dı). */
+  it("6b) multilingual=true → EN/DE kanonik URL'leri AYRI girdi olarak var", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
 
     const entries = await runSitemap();
-    const hasEnDeUrl = entries.some(
-      (e) => e.url.includes("/en/") || e.url.includes("/de/")
-    );
-    expect(hasEnDeUrl).toBe(false);
+    const urls = entries.map((e) => e.url);
+    expect(urls).toContain("https://example.com/en/villa/villa-in-love");
+    expect(urls).toContain("https://example.com/de/villa/villa-in-love");
+    expect(urls).toContain("https://example.com/en/villas-for-rent");
+    expect(new Set(urls).size).toBe(urls.length);
+  });
+
+  it("6c) multilingual=false → yalnız TR girdileri (EN/DE YOK)", async () => {
+    getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
+    const entries = await runSitemap();
+    expect(entries.some((e) => e.url.includes("/en/") || e.url.includes("/de/"))).toBe(false);
   });
 
   /* --- 7) TR canonical URL değişmiyor --- */
@@ -216,10 +226,14 @@ describe("sitemap() — Phase 7D villa locale alternates", () => {
       "https://example.com/kiralik-villalar",
       "https://example.com/iletisim",
       "https://example.com/teklif-al",
-      "https://example.com/p/hakkimizda",
       "https://example.com/blog",
-      "https://example.com/blog/ilk-yazi",
     ];
+    /* 🌐 Faz 3 — çevirisi OLMAYAN blog yazısı / CMS sayfası yalnız TR ile
+       listelenir; sahte EN/DE alternate ÜRETİLMEZ (bu testte çeviri yok). */
+    for (const u of ["https://example.com/p/hakkimizda", "https://example.com/blog/ilk-yazi"]) {
+      expect((byUrl.get(u) as { alternates?: unknown } | undefined)?.alternates).toBeUndefined();
+      expect(urls).not.toContain(u.replace("example.com/", "example.com/en/"));
+    }
     for (const u of localized) {
       const alt = (byUrl.get(u) as Record<string, unknown> | undefined)
         ?.alternates as { languages?: Record<string, string> } | undefined;
@@ -240,17 +254,37 @@ describe("sitemap() — Phase 7D villa locale alternates", () => {
     expect(homeAlt.languages.de).toBe("https://example.com/de");
     expect(homeAlt.languages.tr).toBe("https://example.com/");
 
-    /* BLOG hreflang — `buildLocaleAlternates` ile birebir. */
-    const blogAlt = (
-      byUrl.get("https://example.com/blog/ilk-yazi") as Record<string, unknown>
-    ).alternates as { languages: Record<string, string> };
-    expect(blogAlt.languages.tr).toBe("https://example.com/blog/ilk-yazi");
-    expect(blogAlt.languages.en).toBe("https://example.com/en/blog/ilk-yazi");
-    expect(blogAlt.languages.de).toBe("https://example.com/de/blog/ilk-yazi");
-    expect(blogAlt.languages["x-default"]).toBe(blogAlt.languages.tr);
+    // Faz 3 — her aktif dil ayrı girdi: 4 statik×3 + 2 villa×3 + blog dizini×3
+    // + çevirisiz CMS sayfası×1 + çevirisiz blog yazısı×1 = 23
+    expect(entries).toHaveLength(23);
+  });
 
-    // Toplam entry sayısı: 4 statik + 2 villa + 1 page + 1 blog-index + 1 blog = 9
-    expect(entries).toHaveLength(9);
+  it("10b) gerçek çevirisi olan blog yazısı: yalnız çevrilmiş diller + doğru x-default", async () => {
+    getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
+    vi.doMock("@/lib/i18n/sitemap-data.server", () => ({
+      loadNoindexSlugs: async () => ({ villa: new Set(["villa-sunset"]), page: new Set(), blog: new Set() }),
+      loadTranslatedContentLocales: async () => ({
+        blog: new Map([["ilk-yazi", ["tr", "en"]]]),
+        page: new Map(),
+      }),
+    }));
+    const entries = await runSitemap();
+    const urls = entries.map((e) => e.url);
+    expect(urls).toContain("https://example.com/en/blog/ilk-yazi");
+    expect(urls).not.toContain("https://example.com/de/blog/ilk-yazi");
+    const blogAlt = (
+      entries.find((e) => e.url === "https://example.com/en/blog/ilk-yazi") as {
+        alternates: { languages: Record<string, string> };
+      }
+    ).alternates.languages;
+    expect(blogAlt).toEqual({
+      tr: "https://example.com/blog/ilk-yazi",
+      en: "https://example.com/en/blog/ilk-yazi",
+      "x-default": "https://example.com/blog/ilk-yazi",
+    });
+    /* noindex villa sitemap'e hiçbir dilde girmez. */
+    expect(urls.some((u) => u.includes("villa-sunset"))).toBe(false);
+    vi.doUnmock("@/lib/i18n/sitemap-data.server");
   });
 
   it("10a) `multilingual_enabled=false` → HİÇBİR entry alternates taşımaz", async () => {

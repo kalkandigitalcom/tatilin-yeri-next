@@ -1,5 +1,6 @@
 "use client";
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
@@ -39,10 +40,9 @@ const SitePopupDialog = dynamic(() => import("./SitePopupDialog"), { ssr: false 
 
 const CLOSE_LABELS: Record<string, string> = { tr: "Kapat", en: "Close", de: "Schließen" };
 
+/* 🌐 Faz 2 — dil, merkezi yol çözümleyicisinden (ana dil kökte). */
 function localeOf(pathname: string): "tr" | "en" | "de" {
-  if (pathname === "/en" || pathname.startsWith("/en/")) return "en";
-  if (pathname === "/de" || pathname.startsWith("/de/")) return "de";
-  return "tr";
+  return localeOfPath(pathname);
 }
 
 function readDismissed(version: string): boolean {

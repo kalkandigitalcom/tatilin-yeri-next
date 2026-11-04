@@ -1,5 +1,6 @@
 "use client";
 
+import { localeOfPath, toBaseRoutePath } from "@/lib/i18n/routing/url";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Menu, X, ChevronDown } from "lucide-react";
@@ -25,7 +26,7 @@ import VillaSearchBox from "@/app/components/layout/VillaSearchBox";
    Header zaten "use client" olduğu ve `usePathname()`'e sahip olduğu
    için mümkün; site-wide dynamic-rendering riski YOK). */
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { DEFAULT_LOCALE, localeFromPathname } from "@/lib/i18n/config";
+import { DEFAULT_LOCALE } from "@/lib/i18n/config";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — iç linkler aktif locale'i taşır.
    Yeni bir routing sistemi DEĞİL; `buildLocaleAlternates` (Phase 7B)
    üzerine ince, saf sarmalayıcı (bkz. lib/i18n/locale-href.ts). */
@@ -110,7 +111,7 @@ export default function Header({
      (pathname `/en`/`/de` ile başlamıyorsa) `dictionary` ÖNCEKİ modül-
      seviyesi sabitle (`getDictionary(DEFAULT_LOCALE)`) BİREBİR AYNI
      referans/değerleri döner. */
-  const locale = localeFromPathname(pathname);
+  const locale = localeOfPath(pathname);
   const dictionary = getDictionary(locale);
 
   /* TR'de ana sayfa hedefi `trHomeHref`; EN/DE'de mevcut
@@ -261,7 +262,7 @@ export default function Header({
               "
             >
               {menu.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = toBaseRoutePath(pathname) === item.href;
                 const hasChildren = item.children && item.children.length > 0;
                 /* 🛡️ PHASE 10H — villa tipi (category) öğelerinde
                    locale karşılığı; diğer öğelerde canonical `name`. */

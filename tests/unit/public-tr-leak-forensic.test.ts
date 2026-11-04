@@ -67,7 +67,7 @@ function walkPages(dir: string, acc: string[]): void {
   for (const name of readdirSync(abs)) {
     const rel = join(dir, name);
     if (statSync(join(ROOT, rel)).isDirectory()) walkPages(rel, acc);
-    else if (name === "page.tsx" || name === "layout.tsx") acc.push(rel);
+    else if (name === "page.tsx" || name === "locale-page.tsx" || name === "layout.tsx") acc.push(rel);
   }
 }
 

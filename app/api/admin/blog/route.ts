@@ -151,6 +151,8 @@ export async function POST(req: Request): Promise<NextResponse> {
      Full Route Cache'i temizlenir; sonraki ziyaretçi yeni listeyi hemen
      görür. Detay (force-dynamic) etkilenmez; cache mimarisi korunur. */
   revalidatePath("/blog");
+  /* 🌐 Faz 2 — TR iç route yolu (app/(public)/[lang]/blog). */
+  revalidatePath("/tr/blog");
   /* 🛡️ EN/DE blog listeleri de ISR — yalnız TR tazeleniyordu; kapak
      (ve `?v=` versiyonu) EN/DE listede de hemen güncel olsun. */
   revalidatePath("/en/blog");

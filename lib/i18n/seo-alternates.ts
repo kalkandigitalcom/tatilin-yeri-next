@@ -52,7 +52,15 @@
    reuse edilir (savunmacı validasyon için — bkz. `buildLocaleAlternates`).
    =============================================================== */
 
-import { SUPPORTED_LOCALES, toLocale, type Locale } from "@/lib/i18n/config";
+import {
+  SUPPORTED_LOCALES,
+  getEnabledPublicLocales,
+  getRootLocale,
+  toLocale,
+  type Locale,
+} from "@/lib/i18n/config";
+import { getRoutingContext } from "@/lib/i18n/routing/context";
+import { localizeHref } from "@/lib/i18n/routing/url";
 
 export type LocaleAlternates = {
   /** Hedef `locale` için canonical path (relative, `/` ile başlar). */
@@ -64,82 +72,95 @@ export type LocaleAlternates = {
 
 /** TR dışındaki, gerçekten URL prefix'i olan locale'ler. `SUPPORTED_LOCALES`
  *  (Phase 1B) üzerinden türetilir — yeni bir locale listesi İCAT EDİLMEDİ. */
-const PREFIXED_LOCALES: readonly Exclude<Locale, "tr">[] = SUPPORTED_LOCALES.filter(
-  (l): l is Exclude<Locale, "tr"> => l !== "tr"
-);
-
-/** path'in başına tek bir "/" garantiler — `app/sitemap.ts:74-83`'teki
- *  `url()` helper'ıyla AYNI desen (yeni bir kural değil, mevcut olanın
- *  reuse'u). */
-function ensureLeadingSlash(path: string): string {
-  return path.startsWith("/") ? path : `/${path}`;
-}
-
-/**
- * path zaten bir locale prefix'i (`/en`, `/de`) ile başlıyorsa onu
- * SOYAR ve TR-eşdeğeri (prefix'siz) base path'i döner. Prefix yoksa
- * path aynen döner. Yalnız TAM segment eşleşmesi kabul edilir
- * (`/en/...` veya tam `/en`) — `/energy` gibi path'ler YANLIŞLIKLA
- * eşleşmez (segment sınırı: prefix sonrası ya path biter ya `/` gelir).
- */
-function stripLocalePrefix(path: string): string {
-  for (const prefix of PREFIXED_LOCALES) {
-    const withTrailingSlash = `/${prefix}/`;
-    const exact = `/${prefix}`;
-    if (path.startsWith(withTrailingSlash)) {
-      // "/en/kiralik-villa/x" → "/kiralik-villa/x" (baştaki "/" korunur).
-      return path.slice(withTrailingSlash.length - 1);
-    }
-    if (path === exact) {
-      // Tam "/en" (kök) → "/" (TR kökü).
-      return "/";
-    }
-  }
-  return path;
-}
-
-/** base path + locale prefix → prefixed path. `base === "/"` özel
- *  durumu `/en/` değil `/en` üretir (çifte slash yok). */
-function withLocalePrefix(base: string, prefix: Exclude<Locale, "tr">): string {
-  return base === "/" ? `/${prefix}` : `/${prefix}${base}`;
-}
-
-/**
- * Bir path + hedef locale için canonical + tam hreflang (`languages`)
- * kümesini üretir.
- *
- * `path`: TR path'i (prefix'siz, ör. "/kiralik-villa/villa-in-love")
- * VEYA zaten `/en`/`/de` ile prefixed bir path olabilir — ikisi de
- * AYNI (idempotent) sonucu üretir; fonksiyon önce mevcut prefix'i
- * soyar, sonra tüm locale varyantlarını bu TR-eşdeğeri base'ten
- * yeniden inşa eder.
- *
- * `locale`: TS tipi `Locale` ile sınırlı olsa da, çağıran taraf
- * (örn. runtime/JSON kaynaklı, tip-güvenli olmayan bir değer)
- * savunmacı olarak `toLocale()` (Phase 1B) ile sanitize edilir —
- * geçersiz bir değer sessizce `DEFAULT_LOCALE` ("tr")'ye düşer,
- * ASLA throw etmez (projenin mevcut "asla throw etme" güvenli-fallback
- * convention'ıyla tutarlı — bkz. lib/i18n/get-translation.server.ts).
- *
- * `multilingual_enabled` KONTROL EDİLMEZ — pure helper; flag kontrolü
- * ileride çağıran tarafın (generateMetadata/sitemap) sorumluluğu.
- */
+/* 🌐 Çok Dilli Mimari Faz 2 — URL'ler artık merkezi route kaydından
+   (lib/i18n/routing) üretilir: ana dil kökte, diğer diller önekli; yol
+   segmentleri ve içerik slug'ları dile göre. `path` TR biçiminde (veya
+   herhangi bir dilin public yolu) verilebilir; sonuç idempotenttir.
+   x-default = ana dilin URL'si. */
 export function buildLocaleAlternates(
   path: string,
   locale: Locale
 ): LocaleAlternates {
   const safeLocale = toLocale(locale);
-  const basePath = stripLocalePrefix(ensureLeadingSlash(path));
-
-  const languages: Record<Locale | "x-default", string> = {
-    tr: basePath,
-    en: withLocalePrefix(basePath, "en"),
-    de: withLocalePrefix(basePath, "de"),
-    "x-default": basePath,
-  };
-
+  const ctx = getRoutingContext();
+  const languages = Object.fromEntries(
+    SUPPORTED_LOCALES.map((l) => [l, localizeHref(path || "/", l, ctx)])
+  ) as Record<Locale | "x-default", string>;
+  languages["x-default"] = languages[ctx.root];
   return {
     canonical: languages[safeLocale],
     languages,
   };
+}
+
+/* ===============================================================
+   🌐 AKTİF DİLLERE GÖRE ALTERNATES — Çok Dilli Mimari Faz 1
+   ===============================================================
+   Metadata call-site'larının ORTAK kuralı (önceden her dosyada
+   `isMultilingualEnabled(settings) ? {canonical, languages} :
+   {canonical}` olarak tekrar ediyordu):
+     • canonical: her zaman sayfanın kendi URL'si (değişmedi).
+     • hreflang (`languages`): YALNIZ aktif diller + x-default.
+       Kapalı dil hiçbir hreflang çıktısında görünmez.
+     • Aktif dil sayısı < 2 (çoklu dil kapalı veya tek dil açık) →
+       hreflang HİÇ basılmaz (tek dilli sitede hreflang anlamsızdır).
+   Saf fonksiyon: settings çağırandan gelir, IO yok. */
+type AlternatesSettings = Parameters<typeof getEnabledPublicLocales>[0];
+
+export function filterLocaleLanguages(
+  languages: Record<string, string>,
+  enabledLocales: readonly Locale[],
+  /** Faz 3 — x-default'un bağlanacağı dil (listede olmalı). Verilmezse
+   *  gelen x-default aynen taşınır (eski davranış). */
+  xDefaultLocale?: Locale
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const l of enabledLocales) {
+    if (languages[l]) out[l] = languages[l];
+  }
+  if (xDefaultLocale && out[xDefaultLocale]) {
+    out["x-default"] = out[xDefaultLocale];
+  } else if (languages["x-default"]) {
+    out["x-default"] = languages["x-default"];
+  }
+  return out;
+}
+
+/* 🌐 Faz 3 — hreflang kuralları:
+     • Yalnız AKTİF diller ve (verilmişse) içeriğin GERÇEKTEN çevrildiği
+       diller (`available`) listelenir.
+     • Sayfanın kendi dili çeviri değilse (`locale` ∉ available) hreflang
+       HİÇ basılmaz (o sayfa noindex'tir; yanlış çeviri ilişkisi kurulmaz).
+     • x-default → ana dilin URL'si; ana dilde çeviri yoksa mevcut ilk
+       sürüm (taban TR) — asla var olmayan bir URL'ye bağlanmaz.
+     • Kalan dil sayısı < 2 → yalnız canonical. */
+export type SeoAvailability = {
+  available?: readonly Locale[];
+  locale?: Locale;
+};
+
+export function pickSeoAlternates(
+  settings: AlternatesSettings,
+  canonical: string,
+  languages: Record<string, string>,
+  opts: SeoAvailability = {}
+): { canonical: string; languages?: Record<string, string> } {
+  const enabled = getEnabledPublicLocales(settings);
+  const kept = opts.available
+    ? enabled.filter((l) => opts.available!.includes(l))
+    : enabled;
+  if (opts.locale && !kept.includes(opts.locale)) return { canonical };
+  if (kept.length < 2) return { canonical };
+  const root = getRootLocale(settings);
+  const xDefault = kept.includes(root) ? root : kept[0];
+  return { canonical, languages: filterLocaleLanguages(languages, kept, xDefault) };
+}
+
+export function resolveSeoAlternates(
+  settings: AlternatesSettings,
+  path: string,
+  locale: Locale
+): { canonical: string; languages?: Record<string, string> } {
+  const { canonical, languages } = buildLocaleAlternates(path, locale);
+  return pickSeoAlternates(settings, canonical, languages);
 }

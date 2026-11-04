@@ -41,7 +41,7 @@
      localeHref("#hero", "en")      → "#hero"
    =============================================================== */
 
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { localizeHref } from "@/lib/i18n/routing/url";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 
 /** İç (site içi) bir path mi? Değilse href AYNEN korunur. */
@@ -67,13 +67,6 @@ export function localeHref(
 ): string {
   const raw = (href ?? "").toString();
   if (!raw || !isInternalPath(raw)) return raw;
-
-  /* Path / (query + hash) ayrımı — prefix YALNIZ path'e uygulanır. */
-  const cut = raw.search(/[?#]/);
-  const pathOnly = cut === -1 ? raw : raw.slice(0, cut);
-  const suffix = cut === -1 ? "" : raw.slice(cut);
-
-  /* 🛡️ Yeni path mantığı İCAT EDİLMEDİ — mevcut Phase 7B helper'ı. */
-  const prefixed = buildLocaleAlternates(pathOnly, locale).canonical;
-  return `${prefixed}${suffix}`;
+  /* 🌐 Faz 2 — merkezi URL üretimi (segment + slug + ana dil). */
+  return localizeHref(raw, locale);
 }

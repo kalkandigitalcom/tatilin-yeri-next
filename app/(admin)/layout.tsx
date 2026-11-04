@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { RootDocument, buildRootMetadata, rootViewport } from "@/app/_root/root-document";
 
 import { ADMIN_BRANDING_PATHS, getAdminIconUrl } from "@/lib/admin-branding";
 import { getSiteAssetVersions } from "@/lib/storage/site-asset-version.server";
@@ -68,9 +69,18 @@ async function getAdminBrandingVersions() {
   };
 }
 
+/* 🌐 Faz 3 — (admin) artık KENDİ root layout'u (çoklu root layout):
+   ortak kök metadata (metadataBase, theme-color, doğrulama) + admin
+   override'ları; <html lang="tr">. */
+export const viewport = rootViewport;
+
 export async function generateMetadata(): Promise<Metadata> {
-  const { icon } = await getAdminBrandingVersions();
+  const [{ icon }, base] = await Promise.all([
+    getAdminBrandingVersions(),
+    buildRootMetadata(),
+  ]);
   return {
+    ...base,
     title: { absolute: "KalkanDigital — Yönetim Paneli" },
     icons: { icon: getAdminIconUrl(icon) },
     robots: { index: false, follow: false },
@@ -84,8 +94,10 @@ export default async function AdminGroupLayout({
 }) {
   const versions = await getAdminBrandingVersions();
   return (
-    <AdminBrandingVersionProvider versions={versions}>
-      {children}
-    </AdminBrandingVersionProvider>
+    <RootDocument lang="tr">
+      <AdminBrandingVersionProvider versions={versions}>
+        {children}
+      </AdminBrandingVersionProvider>
+    </RootDocument>
   );
 }

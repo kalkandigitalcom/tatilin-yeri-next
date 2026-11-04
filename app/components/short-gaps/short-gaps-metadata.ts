@@ -5,12 +5,11 @@ import type { Metadata } from "next";
 import { getCachedSettings } from "@/lib/cache.helpers";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import type { MonthNumber } from "@/lib/i18n/dictionaries/types";
 import {
   resolveBucketMonthFromSlug,
@@ -66,9 +65,7 @@ export async function buildShortGapsMetadata(
   const trPath = `/kisa-sureli-tarihler/${ay}/${nights}`;
   const settings = await getCachedSettings().catch(() => null);
   const { canonical, languages } = buildLocaleAlternates(trPath, locale);
-  const alternates = isMultilingualEnabled(settings)
-    ? { canonical, languages }
-    : { canonical };
+  const alternates = pickSeoAlternates(settings, canonical, languages);
 
   return {
     title,

@@ -65,27 +65,27 @@ describe("Header — Phase 9A locale dictionary", () => {
   });
 
   it("3) '/en/...' path → 'Get a Quote' (EN dictionary)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/ornek-slug");
+    usePathnameMock.mockReturnValue("/en/villa/ornek-slug");
     render(<Header menu={[]} siteLogo={null} />);
     expect(screen.getAllByText("Get a Quote").length).toBeGreaterThan(0);
     expect(screen.queryByText("Teklif Al")).not.toBeInTheDocument();
   });
 
   it("4) '/de/...' path → 'Angebot anfordern' (DE dictionary)", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villa/ornek-slug");
+    usePathnameMock.mockReturnValue("/de/villa/ornek-slug");
     render(<Header menu={[]} siteLogo={null} />);
     expect(screen.getAllByText("Angebot anfordern").length).toBeGreaterThan(0);
     expect(screen.queryByText("Teklif Al")).not.toBeInTheDocument();
   });
 
   it("5) menuOpen aria-label — EN path'te 'Open menu'", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villalar");
+    usePathnameMock.mockReturnValue("/en/villas-for-rent");
     render(<Header menu={[]} siteLogo={null} />);
     expect(screen.getByLabelText("Open menu")).toBeInTheDocument();
   });
 
   it("6) menuOpen aria-label — DE path'te 'Menü öffnen'", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villalar");
+    usePathnameMock.mockReturnValue("/de/ferienvillen");
     render(<Header menu={[]} siteLogo={null} />);
     expect(screen.getByLabelText("Menü öffnen")).toBeInTheDocument();
   });
@@ -139,7 +139,7 @@ describe("Header — href locale kilidi (iç linkler aktif locale'i taşır)", (
   });
 
   it("Logo href '/en/...' path'te '/en' olur (locale KAYBOLMAZ)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/ornek-slug");
+    usePathnameMock.mockReturnValue("/en/villa/ornek-slug");
     render(<Header menu={[]} siteLogo={null} />);
     const logoLink = screen.getByRole("link", { name: /Kiralama/i });
     expect(logoLink).toHaveAttribute("href", "/en");
@@ -147,7 +147,7 @@ describe("Header — href locale kilidi (iç linkler aktif locale'i taşır)", (
   });
 
   it("Logo href '/de/...' path'te '/de' olur", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villa/ornek-slug");
+    usePathnameMock.mockReturnValue("/de/villa/ornek-slug");
     render(<Header menu={[]} siteLogo={null} />);
     const logoLink = screen.getByRole("link", { name: /Kiralama/i });
     expect(logoLink).toHaveAttribute("href", "/de");
@@ -163,26 +163,26 @@ describe("Header — href locale kilidi (iç linkler aktif locale'i taşır)", (
     });
   });
 
-  it("CTA href '/en/...' path'te '/en/teklif-al' olur (metin VE hedef EN)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villalar");
+  it("CTA href '/en/...' path'te '/en/request-a-quote' olur (metin VE hedef EN)", () => {
+    usePathnameMock.mockReturnValue("/en/villas-for-rent");
     render(<Header menu={[]} siteLogo={null} />);
     const ctaLinks = screen.getAllByRole("link", { name: "Get a Quote" });
     expect(ctaLinks.length).toBeGreaterThan(0);
     ctaLinks.forEach((link) => {
-      expect(link).toHaveAttribute("href", "/en/teklif-al");
+      expect(link).toHaveAttribute("href", "/en/request-a-quote");
       expect(link).not.toHaveAttribute("href", "/teklif-al");
     });
   });
 
-  it("CTA href '/de/...' path'te '/de/teklif-al' olur", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villalar");
+  it("CTA href '/de/...' path'te '/de/angebot-anfordern' olur", () => {
+    usePathnameMock.mockReturnValue("/de/ferienvillen");
     render(<Header menu={[]} siteLogo={null} />);
     const ctaLinks = screen.getAllByRole("link", {
       name: "Angebot anfordern",
     });
     expect(ctaLinks.length).toBeGreaterThan(0);
     ctaLinks.forEach((link) => {
-      expect(link).toHaveAttribute("href", "/de/teklif-al");
+      expect(link).toHaveAttribute("href", "/de/angebot-anfordern");
     });
   });
 });

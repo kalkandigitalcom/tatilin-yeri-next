@@ -1,3 +1,4 @@
+import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { VillaTypeTranslationRow } from "@/lib/i18n/translations.types";
 
@@ -21,6 +22,10 @@ function isWritableLocale(value: unknown): value is WritableTranslationLocale {
 }
 
 export type TypeTranslationInput = {
+  /** 🌐 Faz 2 — bu dildeki SEO URL slug'ı (migration 102).
+   *  undefined → DOKUNULMAZ (mevcut çağıranlar etkilenmez);
+   *  "" / null → temizlenir (o dilde TR slug'ı kullanılır). */
+  slug?: string | null;
   typeId: string;
   locale: string;
   name: string;
@@ -69,11 +74,25 @@ export async function upsertTypeTranslation(
   const name = normalize(input.name);
   if (!name) return { ok: false, error: "İsim gerekli" };
 
+  /* 🌐 Faz 2 — dil slug'ı: yalnız alan GÖNDERİLDİYSE doğrulanır ve
+     yazılır; biçim + çakışma kontrolü (lib/i18n/routing/slug-validation). */
+  let slugField: { slug?: string | null } = {};
+  if (input.slug !== undefined) {
+    const v = await validateLocalizedSlug({
+      kind: "villaType",
+      entityId: typeId,
+      locale,
+      input: input.slug,
+    });
+    if (!v.ok) return { ok: false, error: v.error };
+    slugField = { slug: v.slug };
+  }
+
   const { data, error } = await translationRepository.upsertOne(
     "villa_type",
     typeId,
     locale,
-    { name }
+    { ...slugField, name }
   );
 
   if (error || !data) return { ok: false, error: "Çeviri kaydedilemedi" };

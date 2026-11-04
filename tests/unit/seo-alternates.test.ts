@@ -17,8 +17,8 @@ import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
 import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/config";
 
 const TR_PATH = "/kiralik-villa/villa-in-love";
-const EN_PATH = "/en/kiralik-villa/villa-in-love";
-const DE_PATH = "/de/kiralik-villa/villa-in-love";
+const EN_PATH = "/en/villa/villa-in-love";
+const DE_PATH = "/de/villa/villa-in-love";
 
 describe("buildLocaleAlternates", () => {
   /* --- 1) TR villa path --- */
@@ -121,11 +121,14 @@ describe("buildLocaleAlternates", () => {
   });
 
   /* --- 13) path sonundaki slash davranışı --- */
-  it("13) trailing slash STRIP EDİLMEZ — olduğu gibi (tek kopya) taşınır, yeni bir kural icat edilmez", () => {
+  /* 🌐 Faz 2 — merkezi üretici yolları segment bazında kurar; sondaki
+     "/" kanonik URL'ye taşınmaz (Next `trailingSlash: false` ile tutarlı,
+     tek kanonik adres). */
+  it("13) trailing slash kanonik URL'de normalize edilir (tek kanonik adres)", () => {
     const withSlash = "/kiralik-villa/villa-in-love/";
     const result = buildLocaleAlternates(withSlash, "en");
-    expect(result.canonical).toBe("/en/kiralik-villa/villa-in-love/");
-    expect(result.languages.tr).toBe(withSlash);
+    expect(result.canonical).toBe("/en/villa/villa-in-love");
+    expect(result.languages.tr).toBe("/kiralik-villa/villa-in-love");
   });
 
   /* --- 14) query/hash yanlışlıkla eklenmiyor/bozulmuyor --- */
@@ -133,7 +136,7 @@ describe("buildLocaleAlternates", () => {
     const withQueryAndHash = "/kiralik-villa/villa-in-love?ref=abc&utm=x#section";
     const result = buildLocaleAlternates(withQueryAndHash, "en");
     expect(result.canonical).toBe(
-      "/en/kiralik-villa/villa-in-love?ref=abc&utm=x#section"
+      "/en/villa/villa-in-love?ref=abc&utm=x#section"
     );
     // Yalnız prefix eklendi; query/hash karakterleri BOZULMADI.
     expect(result.canonical).toContain("?ref=abc&utm=x#section");

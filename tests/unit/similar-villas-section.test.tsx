@@ -175,14 +175,14 @@ describe("SimilarVillasSection — VillaCard'a locale aktarımı", () => {
 
   it("EN: detay linki /en ile prefix'lenir", async () => {
     const { container } = await renderSection("en");
-    const link = container.querySelector('a[href*="kiralik-villa"]');
-    expect(link).toHaveAttribute("href", "/en/kiralik-villa/villa-in-love");
+    const link = container.querySelector('a[href*="/villa/"]');
+    expect(link).toHaveAttribute("href", "/en/villa/villa-in-love");
   });
 
   it("DE: detay linki /de ile prefix'lenir", async () => {
     const { container } = await renderSection("de");
-    const link = container.querySelector('a[href*="kiralik-villa"]');
-    expect(link).toHaveAttribute("href", "/de/kiralik-villa/villa-in-love");
+    const link = container.querySelector('a[href*="/villa/"]');
+    expect(link).toHaveAttribute("href", "/de/villa/villa-in-love");
   });
 
   it("locale VillaCard'ın METİNLERİNE de geçer (kartta TR hardcoded metin kalmaz)", async () => {

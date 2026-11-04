@@ -15,6 +15,7 @@
    tarafta TR'ye fallback eder (bu ekranda değiştirilmiyor).
    =============================================================== */
 
+import LocalizedSlugField from "@/app/components/admin/shared/LocalizedSlugField";
 import { useEffect, useState } from "react";
 import { Languages, Loader2 } from "lucide-react";
 
@@ -30,6 +31,8 @@ type LocaleFormState = {
   description: string;
   badge: string;
   seoTitle: string;
+  /* 🌐 Faz 2 — bu dildeki SEO URL slug'ı. */
+  slug: string;
   seoDescription: string;
 };
 
@@ -37,6 +40,7 @@ const EMPTY_FORM: LocaleFormState = {
   description: "",
   badge: "",
   seoTitle: "",
+  slug: "",
   seoDescription: "",
 };
 
@@ -86,6 +90,7 @@ export default function VillaTranslationsCard({ villaId }: Props) {
             description: row.description ?? "",
             badge: row.badge ?? "",
             seoTitle: row.seo_title ?? "",
+            slug: row.slug ?? "",
             seoDescription: row.seo_description ?? "",
           };
         }
@@ -118,6 +123,7 @@ export default function VillaTranslationsCard({ villaId }: Props) {
         description: current.description,
         badge: current.badge,
         seoTitle: current.seoTitle,
+        slug: current.slug,
         seoDescription: current.seoDescription,
       });
 
@@ -205,6 +211,13 @@ export default function VillaTranslationsCard({ villaId }: Props) {
               onChange={(e) => setField("badge", e.target.value)}
             />
           </div>
+
+          <LocalizedSlugField
+            kind="villa"
+            locale={activeLocale}
+            value={form.slug}
+            onChange={(v) => setField("slug", v)}
+          />
 
           <div>
             <label className="text-[12px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-500)] block">

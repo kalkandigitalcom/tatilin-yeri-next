@@ -6,14 +6,15 @@ import { getPageBySlug } from "@/app/services/page.service";
 import { getPageCoverPublicUrl } from "@/lib/storage.helpers";
 import { versionedAssetUrl } from "@/lib/storage/site-asset-version";
 import { getSiteAssetVersions } from "@/lib/storage/site-asset-version.server";
+import { getContentLocales } from "@/lib/i18n/content-availability.server";
 import { getCachedSettings } from "@/lib/cache.helpers";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
   type Locale,
+  getEnabledPublicLocales,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import { resolvePageContent } from "@/lib/i18n/get-page-translation.server";
 
 /* ===============================================================
@@ -77,17 +78,28 @@ export async function buildCmsPageMetadata(
     await getSiteAssetVersions([coverPath]),
     coverPath
   );
+  /* 🌐 Faz 3 — bu dilde gerçek çeviri yoksa (TR fallback) sayfa noindex,
+     hreflang/sitemap dışı; canonical kendi URL'si kalır. */
+  const settings = await getCachedSettings().catch(() => null);
+  /* Tek dilli sitede (çoklu dil kapalı) çeviri sorgusu ATILMAZ. */
+  const available =
+    getEnabledPublicLocales(settings).length >= 2
+      ? await getContentLocales("page", (page as { id?: string }).id)
+      : getEnabledPublicLocales(settings);
+  const untranslated = !available.includes(locale);
   const robots = page.noindex
     ? { index: false, follow: false }
-    : { index: true, follow: true };
+    : untranslated
+      ? { index: false, follow: true }
+      : { index: true, follow: true };
 
   /* TR path'i — hreflang seti bundan türetilir (slug ÇEVRİLMEZ). */
   const trPath = `/p/${slug}`;
   const { canonical, languages } = buildLocaleAlternates(trPath, locale);
-  const settings = await getCachedSettings().catch(() => null);
-  const alternates = isMultilingualEnabled(settings)
-    ? { canonical, languages }
-    : { canonical };
+  const alternates = pickSeoAlternates(settings, canonical, languages, {
+    available,
+    locale,
+  });
 
   return {
     title,

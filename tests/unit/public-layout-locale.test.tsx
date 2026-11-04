@@ -116,7 +116,7 @@ describe("1) BottomNav — locale", () => {
   });
 
   it("1c) DE — çevrilmiş metinler", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villalar");
+    usePathnameMock.mockReturnValue("/de/ferienvillen");
     render(<BottomNav {...props} />);
     const d = getDictionary("de");
     expect(screen.getByText(d.header.home)).toBeInTheDocument();
@@ -126,8 +126,8 @@ describe("1) BottomNav — locale", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("1d) 🔒 P0 REGRESYONU — /en/kiralik-villa/x'te nav HÂLÂ gizli (null)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/ornek-villa");
+  it("1d) 🔒 P0 REGRESYONU — /en/villa/x'te nav HÂLÂ gizli (null)", () => {
+    usePathnameMock.mockReturnValue("/en/villa/ornek-villa");
     const { container } = render(<BottomNav {...props} />);
     expect(container.innerHTML).toBe("");
   });

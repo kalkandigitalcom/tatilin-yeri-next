@@ -38,6 +38,7 @@
    akışına (`handleSubmit`) KARIŞMAZ.
    =============================================================== */
 
+import LocalizedSlugField from "@/app/components/admin/shared/LocalizedSlugField";
 import { useEffect, useMemo, useState } from "react";
 import { Languages, Loader2 } from "lucide-react";
 
@@ -63,6 +64,8 @@ type LocaleFormState = {
   excerpt: string;
   body: string;
   seoTitle: string;
+  /* 🌐 Faz 2 — bu dildeki SEO URL slug'ı. */
+  slug: string;
   seoDescription: string;
 };
 
@@ -71,6 +74,7 @@ const EMPTY_FORM: LocaleFormState = {
   excerpt: "",
   body: "",
   seoTitle: "",
+  slug: "",
   seoDescription: "",
 };
 
@@ -229,6 +233,7 @@ export default function PageTranslationsCard({
             excerpt: row.excerpt ?? "",
             body: row.body ?? "",
             seoTitle: row.seo_title ?? "",
+            slug: row.slug ?? "",
             seoDescription: row.seo_description ?? "",
           };
         }
@@ -302,6 +307,7 @@ export default function PageTranslationsCard({
         excerpt: current.excerpt,
         body: current.body,
         seoTitle: current.seoTitle,
+        slug: current.slug,
         seoDescription: current.seoDescription,
         /* 🛡️ MIGRATION 091 — yapı canonical'dan, metinler formdan.
            Hiçbir alan doldurulmamışsa `null` → canonical TR fallback. */
@@ -330,6 +336,7 @@ export default function PageTranslationsCard({
           excerpt: result.row.excerpt ?? "",
           body: result.row.body ?? "",
           seoTitle: result.row.seo_title ?? "",
+          slug: result.row.slug ?? "",
           seoDescription: result.row.seo_description ?? "",
         },
       }));
@@ -422,6 +429,13 @@ export default function PageTranslationsCard({
                 onChange={(e) => setField("title", e.target.value)}
               />
             </div>
+            <LocalizedSlugField
+              kind="page"
+              locale={activeLocale}
+              value={form.slug}
+              onChange={(v) => setField("slug", v)}
+            />
+
             <div>
               <label className="text-[12px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-500)] block">
                 SEO Başlık

@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 
@@ -40,7 +41,7 @@ export default async function BlogDetailPageBody({
   locale?: Locale;
 }) {
   const dict = getDictionary(locale).blog;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
 
   const { slug } = await params;
   const post = await getBlogPostBySlug(slug);
@@ -71,8 +72,8 @@ export default async function BlogDetailPageBody({
     author: post.author,
   });
   const breadcrumbLd = buildBreadcrumb([
-    { name: dict.breadcrumbHome, url: localePrefix || "/" },
-    { name: dict.breadcrumbBlog, url: `${localePrefix}/blog` },
+    { name: dict.breadcrumbHome, url: localeHref("/", locale) },
+    { name: dict.breadcrumbBlog, url: localeHref(`/blog`, locale) },
     { name: title },
   ]);
 
@@ -84,8 +85,8 @@ export default async function BlogDetailPageBody({
 
       <PageHero
         breadcrumb={[
-          { name: dict.breadcrumbHome, href: localePrefix || "/" },
-          { name: dict.breadcrumbBlog, href: `${localePrefix}/blog` },
+          { name: dict.breadcrumbHome, href: localeHref("/", locale) },
+          { name: dict.breadcrumbBlog, href: localeHref(`/blog`, locale) },
           { name: title },
         ]}
         eyebrow={post.category || dict.eyebrow}

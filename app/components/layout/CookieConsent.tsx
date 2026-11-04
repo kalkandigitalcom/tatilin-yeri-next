@@ -14,13 +14,13 @@
    - Mevcut site CSS değişkenleri reuse; yeni design system YOK.
    =============================================================== */
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /* 🛡️ PHASE 11 — locale, Header/Footer ile AYNI desenle pathname'den
    türetilir. Consent/localStorage davranışına DOKUNULMADI. */
-import { localeFromPathname } from "@/lib/i18n/config";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — iç link aktif locale'i taşır
    (bkz. lib/i18n/locale-href.ts). */
 import { localeHref } from "@/lib/i18n/locale-href";
@@ -33,7 +33,7 @@ export default function CookieConsent() {
   /* 🛡️ NAVIGATION LOCALE PERSISTENCE — locale artık AYRI türetilir
      (dictionary çözümü BİREBİR aynı kalır) çünkü çerez politikası
      linkinin de aktif locale'i taşıması gerekir. */
-  const locale = localeFromPathname(pathname);
+  const locale = localeOfPath(pathname);
   const dict = getDictionary(locale).layout.cookie;
   const [visible, setVisible] = useState(false);
 

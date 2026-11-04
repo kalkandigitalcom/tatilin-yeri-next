@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import PageHero from "@/app/components/ui/PageHero";
 import FavoritesGrid from "@/app/(public)/favoriler/FavoritesGrid";
 
@@ -22,7 +23,7 @@ export default function FavoritesPageBody({
 }) {
   const dictionary = getDictionary(locale);
   const dict = dictionary.favoritesPage;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
 
   return (
     <>
@@ -30,7 +31,7 @@ export default function FavoritesPageBody({
         breadcrumb={[
           {
             name: dictionary.search.breadcrumbHome,
-            href: localePrefix === "" ? "/" : localePrefix,
+            href: localeHref("/", locale),
           },
           { name: dict.heroTitle },
         ]}

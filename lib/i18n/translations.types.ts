@@ -19,6 +19,8 @@ import type { Locale } from "./config";
 /* ---------- Satır tipleri (migration 082 kolonlarıyla birebir) ---------- */
 
 export type VillaTranslationRow = {
+  /** 🌐 Faz 2 — bu dildeki SEO slug'ı (migration 102). NULL → TR slug'ı. */
+  slug?: string | null;
   id: string;
   villa_id: string;
   locale: Locale;
@@ -44,6 +46,8 @@ export type VillaTranslationRow = {
    için Phase 10F'te uygulanan AYNI desen). */
 
 export type VillaTypeTranslationRow = {
+  /** 🌐 Faz 2 — bu dildeki SEO slug'ı (migration 102). NULL → TR slug'ı. */
+  slug?: string | null;
   id: string;
   type_id: string;
   locale: Locale;
@@ -95,6 +99,8 @@ export type PriceIncludeItemTranslationRow = {
    için Phase 10I'de uygulanan AYNI desen). */
 
 export type BlogPostTranslationRow = {
+  /** 🌐 Faz 2 — bu dildeki SEO slug'ı (migration 102). NULL → TR slug'ı. */
+  slug?: string | null;
   id: string;
   blog_post_id: string;
   locale: Locale;
@@ -108,6 +114,8 @@ export type BlogPostTranslationRow = {
 };
 
 export type PageTranslationRow = {
+  /** 🌐 Faz 2 — bu dildeki SEO slug'ı (migration 102). NULL → TR slug'ı. */
+  slug?: string | null;
   id: string;
   page_id: string;
   locale: Locale;

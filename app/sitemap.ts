@@ -20,12 +20,10 @@ import { blogRepository } from "@/lib/db/blog.repository";
 import { getCachedSettings } from "@/lib/cache.helpers";
 /* 🛡️ SEO landing — kategori + bölge GRUBU kökü giriş sayfaları. */
 import { getTaxonomyLandingSitemapPaths } from "@/lib/taxonomy-landing.server";
-import { isMultilingualEnabled } from "@/lib/i18n/config";
-import {
-  resolvePublicHome,
-  type PublicHomeResolution,
-} from "@/lib/i18n/public-home";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { getEnabledPublicLocales, type Locale } from "@/lib/i18n/config";
+import { primeRoutingContext } from "@/lib/i18n/routing/context.server";
+import { loadNoindexSlugs, loadTranslatedContentLocales } from "@/lib/i18n/sitemap-data.server";
+import { localizeHref } from "@/lib/i18n/routing/url";
 
 /* ===============================================================
    🛡️ SITEMAP — Next.js App Router (production-grade, dynamic)
@@ -113,264 +111,162 @@ function toDate(value: string | null | undefined): Date | undefined {
    alanı EKLENİYOR. Path'ler Phase 7B'nin `buildLocaleAlternates`'inden
    (tek kaynak); absolute'a bu dosyanın MEVCUT `url()` helper'ıyla
    çözülüyor (yeni bir absolute-URL mekanizması İCAT EDİLMEDİ). */
-function languageAlternates(trPath: string): Record<string, string> {
-  const { languages } = buildLocaleAlternates(trPath, "tr");
-  return {
-    tr: url(languages.tr),
-    en: url(languages.en),
-    de: url(languages.de),
-    "x-default": url(languages["x-default"]),
-  };
-}
+/* 🌐 Çok Dilli Mimari Faz 1 — kapalı diller sitemap hreflang'inde
+   GÖRÜNMEZ (`filterLocaleLanguages`; aktif dil listesi
+   `getEnabledPublicLocales` — tek kaynak). */
+/* ===============================================================
+   🌐 ÇOK DİLLİ SITEMAP — Faz 3
+   ===============================================================
+   Her içerik için, AKTİF ve içeriğin GERÇEKTEN mevcut olduğu her dilde
+   AYRI bir <url> girdisi üretilir:
+     • loc        → o dilin kanonik URL'si (merkezi route sistemi:
+                    ana dil öneksiz, diğerleri önekli, dil segmentleri ve
+                    dil slug'ları). Proxy ve sayfa canonical'ı ile AYNI.
+     • alternates → aynı içeriğin diğer dillerdeki URL'leri + x-default
+                    (ana dil; ana dilde yoksa taban TR). ≥2 dil yoksa
+                    alan eklenmez.
+   GİRMEYENLER: kapalı diller, noindex kayıtlar, pasif/silinmiş kayıtlar,
+   çevirisi olmayan blog/CMS dilleri, 0 villalı kategori/bölge, robots
+   ile kapatılan sayfalar (arama, favoriler, rezervasyon, token linkleri),
+   yönlendiren URL'ler (yalnız kanonik URL'ler üretildiği için).
+   Aynı loc iki kez yazılmaz (Set).
+   =============================================================== */
+type Freq = NonNullable<MetadataRoute.Sitemap[number]["changeFrequency"]>;
 
-/* 🔄 ANA SAYFAYA ÖZEL hreflang SETİ
-   ------------------------------------------------------------
-   Varsayılan dil EN/DE olduğunda (`redirectsFromRoot`) `/` bir
-   YÖNLENDİRİCİDİR; TR ana sayfa `/tr`'de yaşar. Sitemap'e veya
-   hreflang'e redirect eden bir URL koymak Search Console'da
-   "Page with redirect" + hreflang mismatch üretir. Bu yüzden bu
-   modda TR hedefi `/tr`, `x-default` ise varsayılan dilin ana
-   sayfası olur. Varsayılan "tr" iken (bugünkü production) çıktı
-   `languageAlternates("/")` ile BYTE-IDENTICAL kalır. */
-function homeLanguageAlternates(
-  home: PublicHomeResolution
-): Record<string, string> {
-  const base = languageAlternates("/");
-  if (!home.redirectsFromRoot) return base;
-  return {
-    ...base,
-    tr: url(home.trHomeHref),
-    "x-default": url(`/${home.defaultLocale}`),
-  };
-}
-
-/** Villa detay — mevcut çağıranın imzası DEĞİŞMEDİ. */
-function villaLanguageAlternates(slug: string): Record<string, string> {
-  return languageAlternates(`/kiralik-villa/${slug}`);
+function localizedEntries(
+  trPath: string,
+  locales: readonly Locale[],
+  root: Locale,
+  meta: { lastModified?: Date; changeFrequency: Freq; priority: number },
+  seen: Set<string>
+): MetadataRoute.Sitemap {
+  if (locales.length === 0) return [];
+  const urls = Object.fromEntries(
+    locales.map((l) => [l, url(localizeHref(trPath, l))])
+  ) as Record<string, string>;
+  const xDefault = locales.includes(root) ? root : locales[0];
+  const languages =
+    locales.length >= 2 ? { ...urls, "x-default": urls[xDefault] } : undefined;
+  const out: MetadataRoute.Sitemap = [];
+  for (const l of locales) {
+    const loc = urls[l];
+    if (seen.has(loc)) continue;
+    seen.add(loc);
+    out.push({
+      url: loc,
+      ...(meta.lastModified ? { lastModified: meta.lastModified } : {}),
+      changeFrequency: meta.changeFrequency,
+      priority: meta.priority,
+      ...(languages ? { alternates: { languages } } : {}),
+    });
+  }
+  return out;
 }
 
 type SlugRow = { slug: string | null; created_at: string | null };
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  /* 🛡️ EXIT HARDENING — villa + pages query'leri repository'den.
-     SSR client init kaldırıldı (artık kullanılmıyor). */
-
-  /* 🛡️ PHASE 7D — yalnız villa entry'lerinin `alternates.languages`
-     alanı için. `multilingual_enabled=false` iken (bugün production)
-     bu flag hiç okunmasa da davranış AYNI olurdu (villaEntries.map
-     aşağıda koşullu) — okunuyor çünkü flag açıldığında YENİ BİR
-     DEPLOY GEREKMEDEN sitemap otomatik doğru davranışa geçsin diye.
-     `getCachedSettings()` sayfa/route'larda zaten kullanılan AYNI
-     cache'lenmiş fonksiyon (Phase 4A/6B/7C ile aynı desen) — yeni bir
-     cache mekanizması KURULMADI. Sitemap'in kendi `revalidate = 3600`
-     penceresi DEĞİŞMEDİ. */
-  const seoSettings = await getCachedSettings().catch(() => null);
-  const multilingualEnabled = isMultilingualEnabled(seoSettings);
-  /* Ana sayfanın kanonik TR URL'i ("/" veya "/tr") — ek okuma YOK,
-     yukarıdaki `seoSettings`'ten saf şekilde türetilir. */
-  const home = resolvePublicHome(seoSettings);
-
-  /* ---------- STATIK INDEXLENEN ROUTE'LAR ---------- */
+  const settings = await getCachedSettings().catch(() => null);
+  const ctx = await primeRoutingContext();
+  const enabled = getEnabledPublicLocales(settings);
+  const root = ctx.root;
   const now = new Date();
-  /* 🛡️ PUBLIC ÇOKLU DİL TAMAMLAMA — `/`, `/kiralik-villalar`,
-     `/iletisim` ve `/teklif-al` artık GERÇEK `/en` + `/de` route
-     dosyalarına sahip (ortak gövde + locale prop) ve kendi
-     `generateMetadata`'larında hreflang üretiyorlar. Sitemap de AYNI
-     `buildLocaleAlternates` kaynağından `alternates.languages` alanını
-     alır — TR entry'lerinin `url` alanı DEĞİŞMEZ, yalnız ek bir
-     hreflang-ilişki alanı EKLENİR (villa detayda uygulanan AYNI desen).
-     `multilingual_enabled=false` iken alan HİÇ eklenmez. */
-  const staticEntries: MetadataRoute.Sitemap = [
-    {
-      /* MOD A → "/" (bugünkü davranış). MOD B → "/tr": `/` artık
-         yönlendirici olduğu için sitemap'e indexlenebilir olan
-         TR ana sayfa URL'i yazılır. */
-      url: url(home.trHomeHref),
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 1.0,
-      ...(multilingualEnabled
-        ? { alternates: { languages: homeLanguageAlternates(home) } }
-        : {}),
-    },
-    {
-      url: url("/kiralik-villalar"),
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.9,
-      ...(multilingualEnabled
-        ? {
-            alternates: {
-              languages: languageAlternates("/kiralik-villalar"),
-            },
-          }
-        : {}),
-    },
-    {
-      url: url("/iletisim"),
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
-      ...(multilingualEnabled
-        ? { alternates: { languages: languageAlternates("/iletisim") } }
-        : {}),
-    },
-    {
-      url: url("/teklif-al"),
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
-      ...(multilingualEnabled
-        ? { alternates: { languages: languageAlternates("/teklif-al") } }
-        : {}),
-    },
-  ];
+  const seen = new Set<string>();
 
-  /* ---------- DİNAMİK: AKTİF VİLLALAR ---------- */
-  let villaEntries: MetadataRoute.Sitemap = [];
-  try {
-    /* 🛡️ EXIT HARDENING — repository slim read. Fail-soft repo
-       içinde ([] on error); davranış AYNEN. */
-    const data = await villaRepository.listPublicSlugs();
-    villaEntries = ((data as SlugRow[] | null) || [])
-      .filter((v) => !!v.slug)
-      .map((v) => ({
-        url: url(`/kiralik-villa/${v.slug}`),
-        lastModified: toDate(v.created_at),
-        changeFrequency: "weekly",
-        priority: 0.8,
-        /* 🛡️ PHASE 7D — yalnız flag açıkken; EN/DE'ye AYRI URL entry'si
-           YOK (yukarıdaki `villaLanguageAlternates` yorumuna bkz.). */
-        ...(multilingualEnabled
-          ? { alternates: { languages: villaLanguageAlternates(v.slug as string) } }
-          : {}),
-      }));
-  } catch (err) {
-    /* Fail-soft: villa fetch patlarsa statik + sayfa entry'leri yine döner. */
-    console.error(
-      "[sitemap] villa fetch EXCEPTION:",
-      err instanceof Error ? err.message : err
-    );
-  }
+  const [noindex, translated] = await Promise.all([
+    loadNoindexSlugs(),
+    loadTranslatedContentLocales(),
+  ]);
+  /* Çevirisi olmayan dil listeden çıkar; TR (taban) her zaman mevcuttur. */
+  const contentLocales = (list: Locale[] | undefined) =>
+    enabled.filter((l) => (list ?? ["tr"]).includes(l));
 
-  /* ---------- DİNAMİK: SEO LANDING (/villa-turleri, /bolgeler) ----------
-     Yalnız slug'lı + en az 1 aktif villalı kategori ve bölge GRUP
-     KÖKLERİ (alt bölgeler ASLA). Kaynak: mevcut taxonomy/villa sayaç
-     cache'leri (tag "taxonomy"/"villas" → admin CRUD sonrası tazelenir);
-     sitemap'in kendi `revalidate` penceresi DEĞİŞMEDİ. Fail-soft: hata
-     olursa diğer entry'ler yine döner. */
-  let landingEntries: MetadataRoute.Sitemap = [];
+  const entries: MetadataRoute.Sitemap = [];
+
+  /* ---------- statik sayfalar (her aktif dilde) ---------- */
+  entries.push(
+    ...localizedEntries("/", enabled, root, { lastModified: now, changeFrequency: "daily", priority: 1.0 }, seen),
+    ...localizedEntries("/kiralik-villalar", enabled, root, { lastModified: now, changeFrequency: "daily", priority: 0.9 }, seen),
+    ...localizedEntries("/iletisim", enabled, root, { lastModified: now, changeFrequency: "monthly", priority: 0.5 }, seen),
+    ...localizedEntries("/teklif-al", enabled, root, { lastModified: now, changeFrequency: "monthly", priority: 0.5 }, seen)
+  );
+
+  /* ---------- kategori + bölge açılış sayfaları (≥1 aktif villa) ---------- */
   try {
     const { categories, regions } = await getTaxonomyLandingSitemapPaths();
-    landingEntries = [...categories, ...regions].map((path) => ({
-      url: url(path),
-      lastModified: now,
-      changeFrequency: "daily" as const,
-      priority: 0.8,
-      ...(multilingualEnabled
-        ? { alternates: { languages: languageAlternates(path) } }
-        : {}),
-    }));
+    for (const path of [...categories, ...regions]) {
+      entries.push(
+        ...localizedEntries(path, enabled, root, { lastModified: now, changeFrequency: "daily", priority: 0.8 }, seen)
+      );
+    }
   } catch (err) {
-    console.error(
-      "[sitemap] taxonomy landing EXCEPTION:",
-      err instanceof Error ? err.message : err
-    );
+    console.error("[sitemap] taxonomy landing EXCEPTION:", err instanceof Error ? err.message : err);
   }
 
-  /* ---------- DİNAMİK: AKTİF CMS SAYFALARI (/p/[slug]) ---------- */
-  let pageEntries: MetadataRoute.Sitemap = [];
+  /* ---------- villalar (aktif, silinmemiş, noindex değil) ---------- */
   try {
-    /* 🛡️ EXIT HARDENING — mevcut `pagesRepository.findActivePages()`
-       (is_active=true). Superset SELECT (slug+created_at dahil);
-       sitemap yalnız slug+created_at okur → davranış AYNEN. */
-    const { data, error } = await pagesRepository.findActivePages();
+    const data = await villaRepository.listPublicSlugs();
+    for (const v of (data as SlugRow[] | null) || []) {
+      if (!v.slug || noindex.villa.has(v.slug)) continue;
+      entries.push(
+        ...localizedEntries(`/kiralik-villa/${v.slug}`, enabled, root, {
+          lastModified: toDate(v.created_at),
+          changeFrequency: "weekly",
+          priority: 0.8,
+        }, seen)
+      );
+    }
+  } catch (err) {
+    console.error("[sitemap] villa fetch EXCEPTION:", err instanceof Error ? err.message : err);
+  }
 
+  /* ---------- CMS sayfaları (aktif, noindex değil, çevrilmiş diller) ---------- */
+  try {
+    const { data, error } = await pagesRepository.findActivePages();
     if (error) {
       console.error("[sitemap] pages fetch error:", error.message);
     } else {
-      pageEntries = ((data as SlugRow[] | null) || [])
-        .filter((p) => !!p.slug)
-        .map((p) => ({
-          url: url(`/p/${p.slug}`),
-          lastModified: toDate(p.created_at),
-          changeFrequency: "monthly",
-          priority: 0.6,
-          /* 🛡️ CMS sayfaları `/en|de/p/[slug]` ile gerçek içerik
-             render ediyor (`page_translations`). */
-          ...(multilingualEnabled
-            ? {
-                alternates: {
-                  languages: languageAlternates(`/p/${p.slug}`),
-                },
-              }
-            : {}),
-        }));
+      for (const p of (data as SlugRow[] | null) || []) {
+        if (!p.slug || noindex.page.has(p.slug)) continue;
+        entries.push(
+          ...localizedEntries(`/p/${p.slug}`, contentLocales(translated.page.get(p.slug)), root, {
+            lastModified: toDate(p.created_at),
+            changeFrequency: "monthly",
+            priority: 0.6,
+          }, seen)
+        );
+      }
     }
   } catch (err) {
-    console.error(
-      "[sitemap] pages fetch EXCEPTION:",
-      err instanceof Error ? err.message : err
-    );
+    console.error("[sitemap] pages fetch EXCEPTION:", err instanceof Error ? err.message : err);
   }
 
-  /* ---------- DİNAMİK: YAYINDA BLOG YAZILARI (/blog/[slug]) ---------- */
-  let blogEntries: MetadataRoute.Sitemap = [];
+  /* ---------- blog dizini + yazılar ---------- */
+  entries.push(
+    ...localizedEntries("/blog", enabled, root, { lastModified: now, changeFrequency: "daily", priority: 0.7 }, seen)
+  );
   try {
     const { data, error } = await blogRepository.findActiveSlugs();
     if (error) {
       console.error("[sitemap] blog fetch error:", error.message);
     } else {
-      blogEntries = (
-        (data as
-          | { slug: string | null; published_at: string | null; updated_at: string | null }[]
-          | null) || []
-      )
-        .filter((b) => !!b.slug)
-        .map((b) => ({
-          url: url(`/blog/${b.slug}`),
-          lastModified: toDate(b.updated_at || b.published_at),
-          changeFrequency: "weekly",
-          priority: 0.7,
-          /* 🛡️ hreflang — `/en|de/blog/[slug]` GERÇEK route'ları var.
-             `multilingual_enabled` kapalıyken çıktı eskisiyle AYNI. */
-          ...(multilingualEnabled
-            ? {
-                alternates: {
-                  languages: languageAlternates(`/blog/${b.slug}`),
-                },
-              }
-            : {}),
-        }));
+      type BlogRow = { slug: string | null; published_at: string | null; updated_at: string | null };
+      for (const b of (data as BlogRow[] | null) || []) {
+        if (!b.slug || noindex.blog.has(b.slug)) continue;
+        entries.push(
+          ...localizedEntries(`/blog/${b.slug}`, contentLocales(translated.blog.get(b.slug)), root, {
+            lastModified: toDate(b.updated_at || b.published_at),
+            changeFrequency: "weekly",
+            priority: 0.7,
+          }, seen)
+        );
+      }
     }
   } catch (err) {
-    console.error(
-      "[sitemap] blog fetch EXCEPTION:",
-      err instanceof Error ? err.message : err
-    );
+    console.error("[sitemap] blog fetch EXCEPTION:", err instanceof Error ? err.message : err);
   }
 
-  /* Blog index sayfası (statik route). */
-  const blogIndexEntry: MetadataRoute.Sitemap = [
-    {
-      url: url("/blog"),
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.7,
-      ...(multilingualEnabled
-        ? { alternates: { languages: languageAlternates("/blog") } }
-        : {}),
-    },
-  ];
-
-  return [
-    ...staticEntries,
-    ...landingEntries,
-    ...villaEntries,
-    ...pageEntries,
-    ...blogIndexEntry,
-    ...blogEntries,
-  ];
+  return entries;
 }
 
 /* ===============================================================

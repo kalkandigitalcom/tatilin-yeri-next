@@ -285,8 +285,8 @@ beforeEach(() => {
    A) ROUTE DAVRANIŞI
    =============================================================== */
 const LOCALE_ROUTES: Array<[string, "en" | "de"]> = [
-  ["@/app/(public)/en/kiralik-villalar/page", "en"],
-  ["@/app/(public)/de/kiralik-villalar/page", "de"],
+  ["@/app/(public)/en/kiralik-villalar/locale-page", "en"],
+  ["@/app/(public)/de/kiralik-villalar/locale-page", "de"],
 ];
 
 describe.each(LOCALE_ROUTES)("%s", (modulePath, locale) => {
@@ -325,11 +325,11 @@ describe.each(LOCALE_ROUTES)("%s", (modulePath, locale) => {
   });
 });
 
-describe("app/(public)/kiralik-villalar/page.tsx — TR", () => {
+describe("app/(public)/kiralik-villalar/locale-page.tsx — TR", () => {
   it("5) ORTAK gövdeyi locale='tr' ile render eder", async () => {
     const sp = Promise.resolve({});
     const { default: Page } = await import(
-      "@/app/(public)/kiralik-villalar/page"
+      "@/app/(public)/kiralik-villalar/locale-page"
     );
     const element = await Page({ searchParams: sp });
     expect(element.type).toBe(KiralikVillalarPageBody);
@@ -339,7 +339,7 @@ describe("app/(public)/kiralik-villalar/page.tsx — TR", () => {
 
   it("6) TR'de locale gate'i ÇAĞRILMAZ (davranış değişmedi)", async () => {
     const { default: Page } = await import(
-      "@/app/(public)/kiralik-villalar/page"
+      "@/app/(public)/kiralik-villalar/locale-page"
     );
     await Page({ searchParams: Promise.resolve({}) });
     expect(setRequestLocaleMock).not.toHaveBeenCalled();
@@ -348,7 +348,7 @@ describe("app/(public)/kiralik-villalar/page.tsx — TR", () => {
 
   it("7) TR'de de route segment config YOK (mevcut davranış korundu)", async () => {
     const mod: Record<string, unknown> = await import(
-      "@/app/(public)/kiralik-villalar/page"
+      "@/app/(public)/kiralik-villalar/locale-page"
     );
     expect(mod.dynamic).toBeUndefined();
     expect(mod.revalidate).toBeUndefined();
@@ -524,8 +524,8 @@ describe("Gövde render — TR/EN/DE görünür metinler", () => {
 describe("FilterSidebar sözleşmesi", () => {
   it.each([
     ["tr", "/arama"],
-    ["en", "/en/arama"],
-    ["de", "/de/arama"],
+    ["en", "/en/search"],
+    ["de", "/de/suche"],
   ] as const)(
     "20) %s: mode='redirect' + locale + basePath='%s' (arama route'u, bu sayfa DEĞİL)",
     async (locale, expectedBasePath) => {
@@ -640,14 +640,14 @@ describe("URL kontratı — pagination / sort / pageSize", () => {
   it("28) archivePath() üç locale için doğru", () => {
     expect(ARCHIVE_TR_PATH).toBe("/kiralik-villalar");
     expect(archivePath("tr")).toBe("/kiralik-villalar");
-    expect(archivePath("en")).toBe("/en/kiralik-villalar");
-    expect(archivePath("de")).toBe("/de/kiralik-villalar");
+    expect(archivePath("en")).toBe("/en/villas-for-rent");
+    expect(archivePath("de")).toBe("/de/ferienvillen");
   });
 
   it.each([
     ["tr", "/kiralik-villalar"],
-    ["en", "/en/kiralik-villalar"],
-    ["de", "/de/kiralik-villalar"],
+    ["en", "/en/villas-for-rent"],
+    ["de", "/de/ferienvillen"],
   ] as const)(
     "29) %s: pagination linkleri locale'li basePath kullanır, query adları AYNI",
     async (locale, base) => {
@@ -670,13 +670,13 @@ describe("URL kontratı — pagination / sort / pageSize", () => {
     const smart = screen.getByRole("menuitemradio", {
       name: en.search.sortOptions.smart,
     });
-    expect(smart).toHaveAttribute("href", "/en/kiralik-villalar");
+    expect(smart).toHaveAttribute("href", "/en/villas-for-rent");
     const priceAsc = screen.getByRole("menuitemradio", {
       name: en.search.sortOptions.priceAsc,
     });
     expect(priceAsc).toHaveAttribute(
       "href",
-      "/en/kiralik-villalar?sort=price-asc"
+      "/en/villas-for-rent?sort=price-asc"
     );
   });
 
@@ -689,10 +689,10 @@ describe("URL kontratı — pagination / sort / pageSize", () => {
       a.getAttribute("href")
     );
     expect(hrefs).toEqual([
-      "/de/kiralik-villalar?sort=price-desc",
-      "/de/kiralik-villalar?pageSize=30&sort=price-desc",
-      "/de/kiralik-villalar?pageSize=50&sort=price-desc",
-      "/de/kiralik-villalar?pageSize=100&sort=price-desc",
+      "/de/ferienvillen?sort=price-desc",
+      "/de/ferienvillen?pageSize=30&sort=price-desc",
+      "/de/ferienvillen?pageSize=50&sort=price-desc",
+      "/de/ferienvillen?pageSize=100&sort=price-desc",
     ]);
   });
 
@@ -714,11 +714,11 @@ describe("Locale switch — query string korunması", () => {
   const Q =
     "villa-turleri=2027-kiralik-villalar%2Cmuhafazakar-villalar&flexible=3";
 
-  it("34) /de/kiralik-villalar + query → EN'de AYNI query (kullanıcı senaryosu)", () => {
-    const t = getLocaleSwitchTargets("/de/kiralik-villalar", Q);
-    expect(t.en).toBe(`/en/kiralik-villalar?${Q}`);
+  it("34) /de/ferienvillen + query → EN'de AYNI query (kullanıcı senaryosu)", () => {
+    const t = getLocaleSwitchTargets("/de/ferienvillen", Q);
+    expect(t.en).toBe(`/en/villas-for-rent?${Q}`);
     expect(t.tr).toBe(`/kiralik-villalar?${Q}`);
-    expect(t.de).toBe(`/de/kiralik-villalar?${Q}`);
+    expect(t.de).toBe(`/de/ferienvillen?${Q}`);
   });
 
   it("35) canonical token'lar ÇEVRİLMEZ / yeniden yorumlanmaz", () => {
@@ -731,17 +731,17 @@ describe("Locale switch — query string korunması", () => {
 
   it("36) pagination query'si de korunur", () => {
     const t = getLocaleSwitchTargets(
-      "/en/kiralik-villalar",
+      "/en/villas-for-rent",
       "page=3&pageSize=50&sort=price-asc"
     );
-    expect(t.de).toBe("/de/kiralik-villalar?page=3&pageSize=50&sort=price-asc");
+    expect(t.de).toBe("/de/ferienvillen?page=3&pageSize=50&sort=price-asc");
   });
 
   it("37) query YOKSA mevcut davranış BİREBİR (soru işareti eklenmez)", () => {
     expect(getLocaleSwitchTargets("/kiralik-villalar")).toEqual({
       tr: "/kiralik-villalar",
-      en: "/en/kiralik-villalar",
-      de: "/de/kiralik-villalar",
+      en: "/en/villas-for-rent",
+      de: "/de/ferienvillen",
     });
   });
 });

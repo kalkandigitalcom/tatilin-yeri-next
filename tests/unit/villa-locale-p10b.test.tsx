@@ -478,7 +478,7 @@ describe("BookingSummary — Phase 10B locale (TR default + EN/DE, yeni shortSta
       (Section 7'nin YATIRIMI — TR byte-identical, EN/DE ek param)
 
       🔄 GÜNCELLEME (navigation locale kaybı düzeltmesi):
-      Bu testler yazıldığında `/en|/de/rezervasyon/[slug]` route'ları
+      Bu testler yazıldığında `/en|/de/buchung/[slug]` route'ları
       `LocaleRouteComingSoon` placeholder'ıydı; bu yüzden EN/DE hedefi
       bilinçli olarak PREFİX'SİZ TR route'uydu. O route'lar artık gerçek
       gövdeyi render ettiği için hedef `localeHref` ile prefix'lenir.
@@ -640,7 +640,7 @@ describe("useBookingEngine — Phase 10B handleReservation navigation URL '&loca
     expect(window.location.href).toContain("&locale=en");
     /* Hedef artık EN route'u (locale kaybı düzeltmesi). */
     expect(window.location.href).toBe(
-      "/en/rezervasyon/test-villa?start=2026-10-05&end=2026-10-08&adults=2&children=0&poolHeating=0&locale=en"
+      "/en/booking/test-villa?start=2026-10-05&end=2026-10-08&adults=2&children=0&poolHeating=0&locale=en"
     );
   });
 
@@ -670,7 +670,7 @@ describe("useBookingEngine — Phase 10B handleReservation navigation URL '&loca
     expect(window.location.href).toContain("&locale=de");
     /* Hedef artık DE route'u (locale kaybı düzeltmesi). */
     expect(window.location.href).toBe(
-      "/de/rezervasyon/test-villa?start=2026-10-05&end=2026-10-08&adults=2&children=0&poolHeating=0&locale=de"
+      "/de/buchung/test-villa?start=2026-10-05&end=2026-10-08&adults=2&children=0&poolHeating=0&locale=de"
     );
   });
 });

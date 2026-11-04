@@ -1,3 +1,4 @@
+import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import { villaAdminRepository } from "@/lib/db/villa.repository.server";
 import type { VillaTranslationRow } from "@/lib/i18n/translations.types";
@@ -27,6 +28,10 @@ const MAX_SEO_TITLE_LEN = 120; // SeoStep.tsx ile AYNI
 const MAX_SEO_DESCRIPTION_LEN = 300; // SeoStep.tsx ile AYNI
 
 export type VillaTranslationInput = {
+  /** 🌐 Faz 2 — bu dildeki SEO URL slug'ı (migration 102).
+   *  undefined → DOKUNULMAZ (mevcut çağıranlar etkilenmez);
+   *  "" / null → temizlenir (o dilde TR slug'ı kullanılır). */
+  slug?: string | null;
   villaId: string;
   locale: string;
   /* 🛡️ `title` KALDIRILDI — villa adı özel isimdir, çevrilmez.
@@ -100,7 +105,22 @@ export async function upsertVillaTranslation(
 
   /* 🛡️ `title` payload'a HİÇ girmez — villa adı çevrilmez. DB kolonu
      (migration 082) duruyor ama bu koddan asla yazılmaz/okunmaz. */
+  /* 🌐 Faz 2 — dil slug'ı: yalnız alan GÖNDERİLDİYSE doğrulanır ve
+     yazılır; biçim + çakışma kontrolü (lib/i18n/routing/slug-validation). */
+  let slugField: { slug?: string | null } = {};
+  if (input.slug !== undefined) {
+    const v = await validateLocalizedSlug({
+      kind: "villa",
+      entityId: villaId,
+      locale,
+      input: input.slug,
+    });
+    if (!v.ok) return { ok: false, error: v.error };
+    slugField = { slug: v.slug };
+  }
+
   const { data, error } = await translationRepository.upsertOne("villa", villaId, locale, {
+    ...slugField,
     description,
     badge,
     seo_title: seoTitle,

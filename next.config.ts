@@ -177,6 +177,12 @@ export function buildCspReportOnly(
 const CSP_REPORT_ONLY_HEADER = "Content-Security-Policy-Report-Only";
 
 const nextConfig: NextConfig = {
+  /* 🌐 Çok Dilli Mimari Faz 3 — çoklu root layout ((admin) + (public)/[lang]).
+     Hiçbir route'a uymayan URL'ler için tek global 404 (app/global-not-found.tsx).
+     Public sayfalardaki 404'ler dil bazlı app/(public)/[lang]/not-found.tsx'tir. */
+  experimental: {
+    globalNotFound: true,
+  },
   images: {
     remotePatterns: [
       {

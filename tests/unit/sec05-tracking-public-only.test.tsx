@@ -86,8 +86,10 @@ describe("SEC-05 P2 — mimari kilit (admin'de render yok)", () => {
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "");
 
-  it("root app/layout.tsx ham HTML / GTM render etmez", () => {
-    const c = code("app/layout.tsx");
+  /* 🌐 Faz 3 — eski tek root layout'un kabuğu ortak RootDocument modülünde
+     (hem admin hem public root layout'u kullanır). */
+  it("ortak root kabuğu (app/_root/root-document.tsx) ham HTML / GTM render etmez", () => {
+    const c = code("app/_root/root-document.tsx");
     expect(c).not.toContain("dangerouslySetInnerHTML");
     expect(c).not.toContain("gtm-init");
     expect(c).not.toContain("custom_head_scripts");
@@ -104,10 +106,15 @@ describe("SEC-05 P2 — mimari kilit (admin'de render yok)", () => {
     }
   });
 
-  it("public layout (normal + bakım dalı), /p layout'u ve 404 render eder", () => {
-    const pub = code("app/(public)/layout.tsx");
+  /* 🌐 Faz 3 — public kabuk `app/(public)/_shell/PublicShell.tsx`'e taşındı
+     ve dil bazlı root layout (`app/(public)/[lang]/layout.tsx`) içinden
+     render edilir; public 404 (`[lang]/not-found.tsx`) da bu kabuğun
+     İÇİNDE olduğundan takip scriptleri oradan gelir. Eski /p shim'i
+     kaldırıldı (CMS sayfaları [lang] ağacında). */
+  it("public kabuk (normal + bakım dalı) render eder; public 404 kabuğun içinde", () => {
+    const pub = code("app/(public)/_shell/PublicShell.tsx");
     expect(pub.match(/<SiteTrackingScripts settings=\{settings\} \/>/g)?.length).toBe(2);
-    expect(code("app/p/layout.tsx")).toContain('export { default } from "@/app/(public)/layout"');
-    expect(code("app/not-found.tsx")).toContain("<SiteTrackingScripts settings={settings} />");
+    expect(code("app/(public)/[lang]/(site)/layout.tsx")).toContain("<PublicShell>");
+    expect(code("app/(public)/[lang]/(site)/not-found.tsx")).not.toContain("SiteTrackingScripts");
   });
 });

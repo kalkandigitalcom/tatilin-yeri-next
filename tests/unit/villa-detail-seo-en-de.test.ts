@@ -3,8 +3,8 @@
    CANONICAL + HREFLANG (7C) + SEO_DESCRIPTION (8C)
    ===============================================================
    Hedef:
-     app/(public)/en/kiralik-villa/[slug]/page.tsx > generateMetadata
-     app/(public)/de/kiralik-villa/[slug]/page.tsx > generateMetadata
+     app/(public)/en/kiralik-villa/[slug]/locale-page.tsx > generateMetadata
+     app/(public)/de/kiralik-villa/[slug]/locale-page.tsx > generateMetadata
 
    Mock seviyesi Phase 6B/locale-routes.test.tsx ile AYNI desen:
    `@/lib/i18n/public-locale-gate.server`, `@/app/services/villa.service`,
@@ -96,12 +96,12 @@ const ROUTES: Array<{
   notFoundTitle: string;
 }> = [
   {
-    modulePath: "@/app/(public)/en/kiralik-villa/[slug]/page",
+    modulePath: "@/app/(public)/en/kiralik-villa/[slug]/locale-page",
     locale: "en",
     notFoundTitle: "Villa not found",
   },
   {
-    modulePath: "@/app/(public)/de/kiralik-villa/[slug]/page",
+    modulePath: "@/app/(public)/de/kiralik-villa/[slug]/locale-page",
     locale: "de",
     notFoundTitle: "Villa nicht gefunden",
   },
@@ -122,7 +122,7 @@ describe.each(ROUTES)(
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.alternates?.canonical).toBe(
-        `/${locale}/kiralik-villa/villa-in-love`
+        `/${locale}/villa/villa-in-love`
       );
     });
 
@@ -136,8 +136,8 @@ describe.each(ROUTES)(
         | Record<string, unknown>
         | undefined;
       expect(languages?.tr).toBe("/kiralik-villa/villa-in-love");
-      expect(languages?.en).toBe("/en/kiralik-villa/villa-in-love");
-      expect(languages?.de).toBe("/de/kiralik-villa/villa-in-love");
+      expect(languages?.en).toBe("/en/villa/villa-in-love");
+      expect(languages?.de).toBe("/de/villa/villa-in-love");
       expect(languages?.["x-default"]).toBe("/kiralik-villa/villa-in-love");
     });
 
@@ -161,7 +161,7 @@ describe.each(ROUTES)(
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.alternates).toEqual({
-        canonical: `/${locale}/kiralik-villa/villa-in-love`,
+        canonical: `/${locale}/villa/villa-in-love`,
       });
       expect(
         (result.alternates as Record<string, unknown>).languages

@@ -445,7 +445,11 @@ vi.mock("@/lib/cache.helpers", () => ({
 describe("H) buildHomeMetadata", () => {
   beforeEach(() => {
     getCachedSettingsMock.mockReset();
+    /* 🌐 Faz 1 — hreflang artık yalnız ≥2 AKTİF dil varken üretilir;
+       çeviriler zaten yalnız çoklu dil AÇIKKEN yüklenir → fixture
+       gerçek üretim durumunu yansıtacak şekilde açık. */
     getCachedSettingsMock.mockResolvedValue({
+      multilingual_enabled: true,
       default_meta_title: "TR Başlık",
       default_meta_description: "TR Açıklama",
       translations: {
@@ -487,6 +491,36 @@ describe("H) buildHomeMetadata", () => {
         "x-default": "/",
       });
     }
+  });
+
+  it("30b) çoklu dil KAPALI → ana sayfada hreflang YOK (404 olan /en, /de gösterilmez)", async () => {
+    getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
+    const { buildHomeMetadata } = await import(
+      "@/app/components/home/home-metadata"
+    );
+    const alt = (await buildHomeMetadata("tr")).alternates;
+    expect(alt?.canonical).toBe("/");
+    expect(alt?.languages).toBeUndefined();
+  });
+
+  it("30c) DE kapalı → ana sayfa hreflang'inde de YOK", async () => {
+    getCachedSettingsMock.mockResolvedValue({
+      multilingual_enabled: true,
+      public_default_locale: "tr",
+      public_locales: [
+        { code: "tr", is_enabled: true, sort_order: 10 },
+        { code: "en", is_enabled: true, sort_order: 20 },
+        { code: "de", is_enabled: false, sort_order: 30 },
+      ],
+    });
+    const { buildHomeMetadata } = await import(
+      "@/app/components/home/home-metadata"
+    );
+    expect((await buildHomeMetadata("en")).alternates?.languages).toEqual({
+      tr: "/",
+      en: "/en",
+      "x-default": "/",
+    });
   });
 
   it("31) title/description — EN çevirisi kullanılır", async () => {

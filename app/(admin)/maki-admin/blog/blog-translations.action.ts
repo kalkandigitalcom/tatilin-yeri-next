@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidateLocaleSlugs } from "@/lib/i18n/routing/slug-map.server";
+
 import {
   callerHasPermission,
   requirePermission,
@@ -46,5 +48,8 @@ export async function saveBlogTranslationAction(
     return { ok: false, error: "Yetkisiz" };
   }
 
-  return upsertBlogTranslation(input);
+  const result = await upsertBlogTranslation(input);
+  /* 🌐 Faz 2 — dil slug'ı değiştiyse URL haritası + sayfalar yenilenir. */
+  if (result.ok && input.slug !== undefined) revalidateLocaleSlugs();
+  return result;
 }

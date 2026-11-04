@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import { getVillaBySlug } from "@/app/services/villa.service";
 import { getVillaPrices } from "@/app/services/villa-price.service";
 import { getVillaDiscounts } from "@/app/services/villa-discount.service";
@@ -68,7 +69,7 @@ export default async function ReservationPageBody({
   /* 🛡️ TR'de prefix YOK → href'ler BİREBİR eskisi gibi ("/",
      "/kiralik-villalar"). EN/DE'de mevcut gerçek route'lara işaret
      eder. Yeni routing sistemi kurulmadı. */
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
 
   if (!slug) {
     return (
@@ -141,11 +142,11 @@ export default async function ReservationPageBody({
         breadcrumb={[
           {
             name: dictionary.search.breadcrumbHome,
-            href: localePrefix === "" ? "/" : localePrefix,
+            href: localeHref("/", locale),
           },
           {
             name: dictionary.villasArchive.breadcrumbCurrent,
-            href: `${localePrefix}/kiralik-villalar`,
+            href: localeHref(`/kiralik-villalar`, locale),
           },
           { name: dict.breadcrumbCurrent },
         ]}

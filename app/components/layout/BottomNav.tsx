@@ -1,5 +1,6 @@
 "use client";
 
+import { localeOfPath, toBaseRoutePath } from "@/lib/i18n/routing/url";
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,11 +8,10 @@ import { Home, Search, Phone, type LucideIcon } from "lucide-react";
 
 import SearchBottomSheet from "@/app/components/layout/SearchBottomSheet";
 /* 🛡️ PHASE 11 — locale prefix'ini soymak için (Phase 7B helper'ı). */
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
 /* 🛡️ PHASE 11 — locale, Header (9A) / Footer (9B) ile AYNI şekilde
    ZATEN VAR OLAN `pathname`'den türetilir. Layout'a (server) dokunulmadı;
    `headers()`/`cookies()` KULLANILMADI. */
-import { DEFAULT_LOCALE, localeFromPathname } from "@/lib/i18n/config";
+import { DEFAULT_LOCALE } from "@/lib/i18n/config";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — iç link aktif locale'i taşır
    (bkz. lib/i18n/locale-href.ts). */
 import { localeHref } from "@/lib/i18n/locale-href";
@@ -77,11 +77,13 @@ export default function BottomNav({
      TR-eşdeğeri base path'i verir — `getLocaleSwitchTargets` ile AYNI
      desen. Yeni bir path/locale mantığı İCAT EDİLMEDİ. TR path'lerinde
      `basePath === pathname` olduğu için davranış BİREBİR AYNI kalır. */
-  const basePath = buildLocaleAlternates(pathname || "/", "tr").languages.tr;
+  /* 🌐 Faz 2 — her dil/ana dil kombinasyonunda TR (taban) karşılaştırma
+     yolu (ör. "/en/villa/x" → "/kiralik-villa/x"). */
+  const basePath = toBaseRoutePath(pathname || "/");
 
   /* 🛡️ PHASE 11 — locale AYRI bir türetme; yukarıdaki `basePath`
      (P0'da eklenen prefix-soyma) mantığına DOKUNULMADI. */
-  const locale = localeFromPathname(pathname);
+  const locale = localeOfPath(pathname);
   const dict = getDictionary(locale);
   const navDict = dict.layout.bottomNav;
 

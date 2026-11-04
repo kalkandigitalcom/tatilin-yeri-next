@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import PageHero from "@/app/components/ui/PageHero";
 import { JsonLd, buildBreadcrumb } from "@/app/components/seo/StructuredData";
 import ReservationLookup from "@/app/(public)/rezervasyon-kontrol/ReservationLookup";
@@ -28,8 +29,8 @@ export default async function ReservationLookupPageBody({
 }) {
   const dictionary = getDictionary(locale);
   const dict = dictionary.reservationLookup;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
-  const homeHref = localePrefix === "" ? "/" : localePrefix;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
+  const homeHref = localeHref("/", locale);
 
   /* 🛡️ ADDITIVE — `?token=` ile gelen güvenli paylaşım linki. Token YOKSA
      mevcut Rezervasyon No + E-posta akışı BİREBİR çalışır. */

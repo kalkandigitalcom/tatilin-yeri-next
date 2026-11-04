@@ -99,7 +99,7 @@ const ROUTES: Array<{
 for (const route of ROUTES) {
   for (const locale of WRITABLE) {
     describe(`/${locale}/${route.path}`, () => {
-      const modulePath = `@/app/(public)/${locale}/${route.path}/page`;
+      const modulePath = `@/app/(public)/${locale}/${route.path}/locale-page`;
 
       it(`1) gate geçtiğinde ortak gövdeyi locale="${locale}" ile render eder`, async () => {
         const { default: Page } = await import(modulePath);
@@ -298,7 +298,7 @@ const SOURCE_LOCKED = [
   "app/components/layout/VillaSearchBox.tsx",
   "app/components/favorites/HeaderFavoritesLink.tsx",
   "app/components/villa/HorizontalCarousel.tsx",
-  "app/(public)/layout.tsx",
+  "app/(public)/_shell/PublicShell.tsx",
 ];
 
 describe("source-lock — public gövdelerde hardcoded TR metin yok", () => {

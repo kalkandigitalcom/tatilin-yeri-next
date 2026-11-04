@@ -179,56 +179,56 @@ describe("getLocaleSwitchTargets", () => {
   it("6) '/kiralik-villalar' → 3 locale varyantı (gerçek route)", () => {
     expect(getLocaleSwitchTargets("/kiralik-villalar")).toEqual({
       tr: "/kiralik-villalar",
-      en: "/en/kiralik-villalar",
-      de: "/de/kiralik-villalar",
+      en: "/en/villas-for-rent",
+      de: "/de/ferienvillen",
     });
   });
 
   it("7) '/kiralik-villa/test-villa' → 3 locale varyantı", () => {
     expect(getLocaleSwitchTargets("/kiralik-villa/test-villa")).toEqual({
       tr: "/kiralik-villa/test-villa",
-      en: "/en/kiralik-villa/test-villa",
-      de: "/de/kiralik-villa/test-villa",
+      en: "/en/villa/test-villa",
+      de: "/de/villa/test-villa",
     });
   });
 
-  it("8) '/en/kiralik-villa/test-villa' (zaten EN prefixli) → aynı 3 varyant", () => {
-    expect(getLocaleSwitchTargets("/en/kiralik-villa/test-villa")).toEqual({
+  it("8) '/en/villa/test-villa' (zaten EN prefixli) → aynı 3 varyant", () => {
+    expect(getLocaleSwitchTargets("/en/villa/test-villa")).toEqual({
       tr: "/kiralik-villa/test-villa",
-      en: "/en/kiralik-villa/test-villa",
-      de: "/de/kiralik-villa/test-villa",
+      en: "/en/villa/test-villa",
+      de: "/de/villa/test-villa",
     });
   });
 
-  it("9) '/de/kiralik-villa/test-villa' (zaten DE prefixli) → aynı 3 varyant", () => {
-    expect(getLocaleSwitchTargets("/de/kiralik-villa/test-villa")).toEqual({
+  it("9) '/de/villa/test-villa' (zaten DE prefixli) → aynı 3 varyant", () => {
+    expect(getLocaleSwitchTargets("/de/villa/test-villa")).toEqual({
       tr: "/kiralik-villa/test-villa",
-      en: "/en/kiralik-villa/test-villa",
-      de: "/de/kiralik-villa/test-villa",
+      en: "/en/villa/test-villa",
+      de: "/de/villa/test-villa",
     });
   });
 
   it("10) '/rezervasyon/test-villa' → 3 locale varyantı", () => {
     expect(getLocaleSwitchTargets("/rezervasyon/test-villa")).toEqual({
       tr: "/rezervasyon/test-villa",
-      en: "/en/rezervasyon/test-villa",
-      de: "/de/rezervasyon/test-villa",
+      en: "/en/booking/test-villa",
+      de: "/de/buchung/test-villa",
     });
   });
 
   it("11) '/teklif-al' → locale prefix'li hedefler", () => {
     expect(getLocaleSwitchTargets("/teklif-al")).toEqual({
       tr: "/teklif-al",
-      en: "/en/teklif-al",
-      de: "/de/teklif-al",
+      en: "/en/request-a-quote",
+      de: "/de/angebot-anfordern",
     });
   });
 
-  it("12) '/en/teklif-al' → DE '/de/teklif-al', TR '/teklif-al'", () => {
-    const targets = getLocaleSwitchTargets("/en/teklif-al");
+  it("12) '/en/request-a-quote' → DE '/de/angebot-anfordern', TR '/teklif-al'", () => {
+    const targets = getLocaleSwitchTargets("/en/request-a-quote");
     expect(targets.tr).toBe("/teklif-al");
-    expect(targets.en).toBe("/en/teklif-al");
-    expect(targets.de).toBe("/de/teklif-al");
+    expect(targets.en).toBe("/en/request-a-quote");
+    expect(targets.de).toBe("/de/angebot-anfordern");
   });
 
   it("13) '/de/blog' → locale prefix'li hedefler (artık EN/DE route'u var)", () => {
@@ -250,35 +250,35 @@ describe("getLocaleSwitchTargets", () => {
   it("14) '/rezervasyon-kontrol' → locale prefix'li hedefler", () => {
     expect(getLocaleSwitchTargets("/rezervasyon-kontrol")).toEqual({
       tr: "/rezervasyon-kontrol",
-      en: "/en/rezervasyon-kontrol",
-      de: "/de/rezervasyon-kontrol",
+      en: "/en/booking-status",
+      de: "/de/buchungsstatus",
     });
   });
 
   it("15) '/favoriler' → locale prefix'li hedefler", () => {
     expect(getLocaleSwitchTargets("/favoriler")).toEqual({
       tr: "/favoriler",
-      en: "/en/favoriler",
-      de: "/de/favoriler",
+      en: "/en/favorites",
+      de: "/de/favoriten",
     });
   });
 
   /* 🛡️ Dinamik segmentler (token / ay / gece) AYNEN korunur. */
-  it("15b) '/de/favoriler/paylas/abc123' → token korunur", () => {
-    expect(getLocaleSwitchTargets("/de/favoriler/paylas/abc123")).toEqual({
+  it("15b) '/de/favoriten/teilen/abc123' → token korunur", () => {
+    expect(getLocaleSwitchTargets("/de/favoriten/teilen/abc123")).toEqual({
       tr: "/favoriler/paylas/abc123",
-      en: "/en/favoriler/paylas/abc123",
-      de: "/de/favoriler/paylas/abc123",
+      en: "/en/favorites/share/abc123",
+      de: "/de/favoriten/teilen/abc123",
     });
   });
 
-  it("15c) '/en/kisa-sureli-tarihler/haziran/2' → ay/gece korunur", () => {
+  it("15c) '/en/short-stays/haziran/2' → ay/gece korunur", () => {
     expect(
-      getLocaleSwitchTargets("/en/kisa-sureli-tarihler/haziran/2")
+      getLocaleSwitchTargets("/en/short-stays/haziran/2")
     ).toEqual({
       tr: "/kisa-sureli-tarihler/haziran/2",
-      en: "/en/kisa-sureli-tarihler/haziran/2",
-      de: "/de/kisa-sureli-tarihler/haziran/2",
+      en: "/en/short-stays/haziran/2",
+      de: "/de/kurzaufenthalte/haziran/2",
     });
   });
 
@@ -315,42 +315,42 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
   /** Kullanıcının bildirdiği gerçek örnek query — birebir. */
   const Q = "villa-turleri=2027-kiralik-villalar%2Cmuhafazakar-villalar&flexible=3";
 
-  it("Q1) '/arama' + query → '/en/arama' + AYNI query", () => {
+  it("Q1) '/arama' + query → '/en/search' + AYNI query", () => {
     expect(getLocaleSwitchTargets("/arama", Q)).toEqual({
       tr: `/arama?${Q}`,
-      en: `/en/arama?${Q}`,
-      de: `/de/arama?${Q}`,
+      en: `/en/search?${Q}`,
+      de: `/de/suche?${Q}`,
     });
   });
 
-  it("Q2) '/en/arama' + query → '/de/arama' + AYNI query", () => {
-    expect(getLocaleSwitchTargets("/en/arama", Q)).toEqual({
+  it("Q2) '/en/search' + query → '/de/suche' + AYNI query", () => {
+    expect(getLocaleSwitchTargets("/en/search", Q)).toEqual({
       tr: `/arama?${Q}`,
-      en: `/en/arama?${Q}`,
-      de: `/de/arama?${Q}`,
+      en: `/en/search?${Q}`,
+      de: `/de/suche?${Q}`,
     });
   });
 
-  it("Q3) '/de/arama' + query → '/arama' + AYNI query (kullanıcı senaryosu)", () => {
-    expect(getLocaleSwitchTargets("/de/arama", Q)).toEqual({
+  it("Q3) '/de/suche' + query → '/arama' + AYNI query (kullanıcı senaryosu)", () => {
+    expect(getLocaleSwitchTargets("/de/suche", Q)).toEqual({
       tr: `/arama?${Q}`,
-      en: `/en/arama?${Q}`,
-      de: `/de/arama?${Q}`,
+      en: `/en/search?${Q}`,
+      de: `/de/suche?${Q}`,
     });
   });
 
   it("Q4) birden fazla parametre — adları/değerleri/SIRASI korunur", () => {
     const multi = "regions=fethiye&guests=6&start=2026-07-01&end=2026-07-08&page=2&sort=price-asc";
     const t = getLocaleSwitchTargets("/arama", multi);
-    expect(t.en).toBe(`/en/arama?${multi}`);
-    expect(t.de).toBe(`/de/arama?${multi}`);
+    expect(t.en).toBe(`/en/search?${multi}`);
+    expect(t.de).toBe(`/de/suche?${multi}`);
     expect(t.tr).toBe(`/arama?${multi}`);
   });
 
   it("Q5) `villa-turleri` virgüllü değerleri canonical slug olarak kalır (çeviri YOK)", () => {
     const q = "villa-turleri=2027-kiralik-villalar%2Cmuhafazakar-villalar";
-    const t = getLocaleSwitchTargets("/de/arama", q);
-    expect(t.en).toBe(`/en/arama?${q}`);
+    const t = getLocaleSwitchTargets("/de/suche", q);
+    expect(t.en).toBe(`/en/search?${q}`);
     expect(t.en).toContain("2027-kiralik-villalar%2Cmuhafazakar-villalar");
     /* Slug'lar hiçbir locale'de değişmez — 3 hedefte de AYNI token. */
     expect(t.tr.endsWith(q)).toBe(true);
@@ -360,13 +360,13 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
   it("Q6) `flexible` parametresi korunur", () => {
     expect(getLocaleSwitchTargets("/arama", "flexible=3")).toEqual({
       tr: "/arama?flexible=3",
-      en: "/en/arama?flexible=3",
-      de: "/de/arama?flexible=3",
+      en: "/en/search?flexible=3",
+      de: "/de/suche?flexible=3",
     });
   });
 
   it("Q7) query YOK (undefined / '' / '?') → MEVCUT davranış birebir (soru işareti eklenmez)", () => {
-    const expected = { tr: "/arama", en: "/en/arama", de: "/de/arama" };
+    const expected = { tr: "/arama", en: "/en/search", de: "/de/suche" };
     expect(getLocaleSwitchTargets("/arama")).toEqual(expected);
     expect(getLocaleSwitchTargets("/arama", "")).toEqual(expected);
     expect(getLocaleSwitchTargets("/arama", "?")).toEqual(expected);
@@ -376,7 +376,7 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
   it("Q8) URL encoding BOZULMAZ — percent-encoded değerler decode/re-encode edilmez", () => {
     const q = "regions=k%C3%B6ycegiz%2Csarigerme&q=deniz%20manzara";
     const t = getLocaleSwitchTargets("/arama", q);
-    expect(t.en).toBe(`/en/arama?${q}`);
+    expect(t.en).toBe(`/en/search?${q}`);
     expect(t.en).toContain("k%C3%B6ycegiz%2Csarigerme");
     expect(t.en).toContain("deniz%20manzara");
     expect(t.en).not.toContain("köycegiz");
@@ -386,8 +386,8 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
     /* (a) allowlist'teki route → query AYNEN korunur */
     expect(getLocaleSwitchTargets("/teklif-al", "foo=bar")).toEqual({
       tr: "/teklif-al?foo=bar",
-      en: "/en/teklif-al?foo=bar",
-      de: "/de/teklif-al?foo=bar",
+      en: "/en/request-a-quote?foo=bar",
+      de: "/de/angebot-anfordern?foo=bar",
     });
     /* (a2) `/blog` artık allowlist'te → query AYNEN korunur */
     expect(getLocaleSwitchTargets("/de/blog", "x=1")).toEqual({
@@ -406,13 +406,13 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
     expect(getLocaleSwitchTargets("/")).toEqual({ tr: "/", en: "/en", de: "/de" });
     expect(getLocaleSwitchTargets("/kiralik-villa/test-villa")).toEqual({
       tr: "/kiralik-villa/test-villa",
-      en: "/en/kiralik-villa/test-villa",
-      de: "/de/kiralik-villa/test-villa",
+      en: "/en/villa/test-villa",
+      de: "/de/villa/test-villa",
     });
 
     /* (c) query'li diğer allowlist route'ları da aynı kuralı izler */
     expect(getLocaleSwitchTargets("/kiralik-villa/test-villa", "guests=4").en).toBe(
-      "/en/kiralik-villa/test-villa?guests=4"
+      "/en/villa/test-villa?guests=4"
     );
     expect(getLocaleSwitchTargets("/p/hakkimizda", "utm=x").de).toBe(
       "/de/p/hakkimizda?utm=x"
@@ -428,17 +428,17 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
   it("Q11) pathname içine gömülü query — allowlist eşleşmesi BOZULMAZ (savunmacı)", () => {
     expect(getLocaleSwitchTargets("/arama?flexible=3")).toEqual({
       tr: "/arama?flexible=3",
-      en: "/en/arama?flexible=3",
-      de: "/de/arama?flexible=3",
+      en: "/en/search?flexible=3",
+      de: "/de/suche?flexible=3",
     });
-    expect(getLocaleSwitchTargets("/de/arama?flexible=3").tr).toBe("/arama?flexible=3");
+    expect(getLocaleSwitchTargets("/de/suche?flexible=3").tr).toBe("/arama?flexible=3");
   });
 
   it("Q12) `hasLocaleRoute` query'den ETKİLENMEZ (yalnız path allowlist'i)", () => {
     expect(hasLocaleRoute("/arama")).toBe(true);
-    /* Ham query'li string allowlist'te YOK — helper'ın path'i ayırması
-       bu yüzden zorunlu (Q11 bunu davranış seviyesinde doğruluyor). */
-    expect(hasLocaleRoute("/arama?flexible=3")).toBe(false);
+    /* 🌐 Faz 2 — allowlist yerine merkezi route kaydı: çözümleyici
+       query'yi yol eşleşmesinden ÖNCE ayırır → sonuç query'den bağımsız. */
+    expect(hasLocaleRoute("/arama?flexible=3")).toBe(true);
   });
 });
 
@@ -452,20 +452,25 @@ describe("getLocaleSwitchTargets — query string koruma", () => {
 describe("SEO landing sayfaları — aynı slug, yalnız locale prefix'i değişir", () => {
   it.each([
     ["/villa-turleri/balayi-villalari", "/villa-turleri/balayi-villalari"],
-    ["/en/villa-turleri/balayi-villalari", "/villa-turleri/balayi-villalari"],
-    ["/de/villa-turleri/balayi-villalari", "/villa-turleri/balayi-villalari"],
+    ["/en/villa-types/balayi-villalari", "/villa-turleri/balayi-villalari"],
+    ["/de/villa-typen/balayi-villalari", "/villa-turleri/balayi-villalari"],
     ["/bolgeler/kalkan", "/bolgeler/kalkan"],
-    ["/en/bolgeler/kalkan", "/bolgeler/kalkan"],
-    ["/de/bolgeler/kalkan", "/bolgeler/kalkan"],
+    ["/en/regions/kalkan", "/bolgeler/kalkan"],
+    ["/de/regionen/kalkan", "/bolgeler/kalkan"],
   ])("%s", (path, tr) => {
-    expect(getLocaleSwitchTargets(path)).toEqual({ tr, en: `/en${tr}`, de: `/de${tr}` });
+    /* 🌐 Faz 2 — slug aynı; yol segmenti dile göre (route-registry). */
+    const seg = (l: "en" | "de") =>
+      tr
+        .replace("/villa-turleri/", l === "en" ? "/villa-types/" : "/villa-typen/")
+        .replace("/bolgeler/", l === "en" ? "/regions/" : "/regionen/");
+    expect(getLocaleSwitchTargets(path)).toEqual({ tr, en: `/en${seg("en")}`, de: `/de${seg("de")}` });
   });
 
   it("sayfalama/sort query'si korunur", () => {
-    expect(getLocaleSwitchTargets("/en/bolgeler/kalkan", "page=2")).toEqual({
+    expect(getLocaleSwitchTargets("/en/regions/kalkan", "page=2")).toEqual({
       tr: "/bolgeler/kalkan?page=2",
-      en: "/en/bolgeler/kalkan?page=2",
-      de: "/de/bolgeler/kalkan?page=2",
+      en: "/en/regions/kalkan?page=2",
+      de: "/de/regionen/kalkan?page=2",
     });
   });
 
@@ -473,29 +478,34 @@ describe("SEO landing sayfaları — aynı slug, yalnız locale prefix'i değiş
     expect(hasLocaleRoute("/villa-turleri")).toBe(false);
     expect(hasLocaleRoute("/villa-turleri/")).toBe(false);
     expect(hasLocaleRoute("/bolgeler")).toBe(false);
-    expect(getLocaleSwitchTargets("/en/bolgeler")).toEqual({ tr: "/", en: "/en", de: "/de" });
+    expect(getLocaleSwitchTargets("/en/regions")).toEqual({ tr: "/", en: "/en", de: "/de" });
   });
 
   it("MOD B (varsayılan EN/DE): TR hedefi landing sayfasının kendisidir, /tr değil", () => {
-    expect(getLocaleSwitchTargets("/en/villa-turleri/x", "", "/tr").tr).toBe("/villa-turleri/x");
+    expect(getLocaleSwitchTargets("/en/villa-types/x", "", "/tr").tr).toBe("/villa-turleri/x");
   });
 });
 
 /* Gerçek `/en` ve `/de` route dosyalarının HEPSİ allowlist'te olmalı —
    yeni bir locale route eklenip listeye yazılmazsa bu test yakalar. */
-describe("allowlist ↔ app/(public)/en|de route dosyaları", () => {
-  it("her EN/DE sayfası için hasLocaleRoute(true)", async () => {
+describe("route kaydı ↔ app/(public)/[lang] route dosyaları (Faz 2)", () => {
+  it("her [lang] sayfası için hasLocaleRoute(true)", async () => {
     const { readdirSync } = await import("node:fs");
     const { join, relative, sep } = await import("node:path");
-    for (const locale of ["en", "de"]) {
-      const root = join(process.cwd(), "app/(public)", locale);
+    for (const locale of ["tr"]) {
+      const root = join(process.cwd(), "app/(public)/[lang]");
       const paths: string[] = [];
       const walk = (dir: string) => {
         for (const e of readdirSync(dir, { withFileTypes: true })) {
           const full = join(dir, e.name);
           if (e.isDirectory()) walk(full);
           else if (e.name === "page.tsx") {
-            const rel = relative(root, dir).split(sep).filter(Boolean);
+            /* Route grupları ("(site)") URL'ye girmez. */
+            const rel = relative(root, dir)
+              .split(sep)
+              .filter((s) => Boolean(s) && !/^\(.*\)$/.test(s));
+            /* Faz 3 — `[...notFound]` 404 catch-all'ı bir içerik route'u değildir. */
+            if (rel.some((s) => s.startsWith("[..."))) continue;
             paths.push("/" + rel.map((s) => (s.startsWith("[") ? "ornek" : s)).join("/"));
           }
         }

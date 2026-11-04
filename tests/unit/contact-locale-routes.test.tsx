@@ -1,5 +1,5 @@
 /* ===============================================================
-   🛡️ /iletisim · /en/iletisim · /de/iletisim ÇOKLU DİL TESTLERİ
+   🛡️ /iletisim · /en/contact · /de/kontakt ÇOKLU DİL TESTLERİ
    ===============================================================
    Kapsam:
      A) Üç route da AYNI `ContactPageBody`'yi DOĞRU locale ile render
@@ -189,8 +189,8 @@ beforeEach(() => {
    A) ROUTE DAVRANIŞI
    =============================================================== */
 const LOCALE_ROUTES: Array<[string, "en" | "de"]> = [
-  ["@/app/(public)/en/iletisim/page", "en"],
-  ["@/app/(public)/de/iletisim/page", "de"],
+  ["@/app/(public)/en/iletisim/locale-page", "en"],
+  ["@/app/(public)/de/iletisim/locale-page", "de"],
 ];
 
 describe.each(LOCALE_ROUTES)("%s", (modulePath, locale) => {
@@ -220,16 +220,16 @@ describe.each(LOCALE_ROUTES)("%s", (modulePath, locale) => {
   });
 });
 
-describe("app/(public)/iletisim/page.tsx — TR", () => {
+describe("app/(public)/iletisim/locale-page.tsx — TR", () => {
   it("4) ORTAK gövdeyi locale='tr' ile render eder", async () => {
-    const { default: Page } = await import("@/app/(public)/iletisim/page");
+    const { default: Page } = await import("@/app/(public)/iletisim/locale-page");
     const element = await Page();
     expect(element.type).toBe(ContactPageBody);
     expect(element.props.locale).toBe("tr");
   });
 
   it("5) TR'de locale gate'i ÇAĞRILMAZ (davranış değişmedi)", async () => {
-    const { default: Page } = await import("@/app/(public)/iletisim/page");
+    const { default: Page } = await import("@/app/(public)/iletisim/locale-page");
     await Page();
     expect(setRequestLocaleMock).not.toHaveBeenCalled();
     expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
@@ -237,7 +237,7 @@ describe("app/(public)/iletisim/page.tsx — TR", () => {
 
   it("6) TR'de de route segment config YOK (mevcut davranış korundu)", async () => {
     const mod: Record<string, unknown> = await import(
-      "@/app/(public)/iletisim/page"
+      "@/app/(public)/iletisim/locale-page"
     );
     expect(mod.dynamic).toBeUndefined();
     expect(mod.revalidate).toBeUndefined();
@@ -429,7 +429,7 @@ describe("Gövde render — TR/EN/DE", () => {
          locale'i taşır (slug canonical kalır). */
       expect(link).toHaveAttribute(
         "href",
-        locale === "tr" ? "/arama" : `/${locale}/arama`
+        { tr: "/arama", en: "/en/search", de: "/de/suche" }[locale]
       );
     }
   );
@@ -709,14 +709,14 @@ describe("Metadata", () => {
   it("38) contactPath() üç locale için doğru", () => {
     expect(CONTACT_TR_PATH).toBe("/iletisim");
     expect(contactPath("tr")).toBe("/iletisim");
-    expect(contactPath("en")).toBe("/en/iletisim");
-    expect(contactPath("de")).toBe("/de/iletisim");
+    expect(contactPath("en")).toBe("/en/contact");
+    expect(contactPath("de")).toBe("/de/kontakt");
   });
 
   it.each([
     ["tr", "/iletisim"],
-    ["en", "/en/iletisim"],
-    ["de", "/de/iletisim"],
+    ["en", "/en/contact"],
+    ["de", "/de/kontakt"],
   ] as const)("39) %s: canonical '%s' + locale başlık", async (locale, canonical) => {
     const meta = await buildContactMetadata(locale);
     const d = { tr, en, de }[locale].contact.meta;
@@ -730,8 +730,8 @@ describe("Metadata", () => {
     const meta = await buildContactMetadata("en");
     expect(meta.alternates?.languages).toEqual({
       tr: "/iletisim",
-      en: "/en/iletisim",
-      de: "/de/iletisim",
+      en: "/en/contact",
+      de: "/de/kontakt",
       "x-default": "/iletisim",
     });
   });
@@ -760,18 +760,18 @@ describe("Locale switch", () => {
     expect(hasLocaleRoute("/iletisim")).toBe(true);
   });
 
-  it("44) /de/iletisim → EN/TR hedefleri doğru", () => {
-    expect(getLocaleSwitchTargets("/de/iletisim")).toEqual({
+  it("44) /de/kontakt → EN/TR hedefleri doğru", () => {
+    expect(getLocaleSwitchTargets("/de/kontakt")).toEqual({
       tr: "/iletisim",
-      en: "/en/iletisim",
-      de: "/de/iletisim",
+      en: "/en/contact",
+      de: "/de/kontakt",
     });
   });
 
   it("45) query string KORUNUR", () => {
     const q = "utm_source=mail&x=1";
-    const t = getLocaleSwitchTargets("/de/iletisim", q);
-    expect(t.en).toBe(`/en/iletisim?${q}`);
+    const t = getLocaleSwitchTargets("/de/kontakt", q);
+    expect(t.en).toBe(`/en/contact?${q}`);
     expect(t.tr).toBe(`/iletisim?${q}`);
   });
 });

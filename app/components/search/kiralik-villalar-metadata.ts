@@ -5,12 +5,11 @@ import type { Metadata } from "next";
 import { getCachedSettings } from "@/lib/cache.helpers";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import { ARCHIVE_TR_PATH } from "@/app/components/search/KiralikVillalarPageBody";
 
 /* ===============================================================
@@ -53,9 +52,7 @@ export async function buildVillasArchiveMetadata(
     ARCHIVE_TR_PATH,
     locale
   );
-  const alternates = isMultilingualEnabled(settings)
-    ? { canonical, languages }
-    : { canonical };
+  const alternates = pickSeoAlternates(settings, canonical, languages);
 
   /* 🛡️ openGraph.url — eski TR davranışı: SITE_URL varsa absolute,
      yoksa relative path. Locale canonical'ı kullanılır. */

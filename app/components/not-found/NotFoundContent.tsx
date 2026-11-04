@@ -1,5 +1,7 @@
 "use client";
 
+import { localeHref } from "@/lib/i18n/locale-href";
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Search, Compass } from "lucide-react";
@@ -26,7 +28,10 @@ import VillaCard from "@/app/components/villa/VillaCard";
    ve detay linkleri de locale-aware olur. Villa verisi, sıralama ve
    kart prop'ları AYNEN korundu.
    =============================================================== */
-import { DEFAULT_LOCALE, localeFromPathname } from "@/lib/i18n/config";
+import {
+  DEFAULT_LOCALE,
+  type Locale,
+} from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
 /** `app/not-found.tsx`'in `getCachedVillas()` sonucundan geçirdiği
@@ -45,13 +50,27 @@ export type NotFoundSuggestionVilla = {
 };
 
 export default function NotFoundContent({
+  locale: forcedLocale,
   suggestionVillas,
+  enabledLocales,
 }: {
+  /* 🌐 Faz 3 son kontrol — proxy 404'ünde dil sunucuda bellidir
+     (global-not-found → header). Verilirse yol tahmini yapılmaz. */
+  locale?: Locale;
   suggestionVillas?: NotFoundSuggestionVilla[];
+  /* 🌐 Faz 1 — kapalı bir dilin URL'sinde (ör. EN kapalıyken /en/x)
+     404 gövdesi o dilin linklerini (yine 404) ÜRETMEZ; varsayılan
+     dile düşer. Verilmezse eski davranış (tüm diller). */
+  enabledLocales?: readonly Locale[];
 }) {
-  const locale = localeFromPathname(usePathname());
+  const pathname = usePathname();
+  const pathLocale = forcedLocale ?? localeOfPath(pathname);
+  const locale =
+    !enabledLocales || enabledLocales.includes(pathLocale)
+      ? pathLocale
+      : DEFAULT_LOCALE;
   const dict = getDictionary(locale).notFound;
-  const prefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
 
   return (
     <main className="flex-1">
@@ -72,14 +91,14 @@ export default function NotFoundContent({
           {/* BUTONLAR */}
           <div className="mt-9 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
             <Link
-              href={prefix === "" ? "/" : prefix}
+              href={localeHref("/", locale)}
               className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-[var(--color-stone-900)] text-white text-[14px] font-medium tracking-[0.02em] hover:bg-[var(--color-stone-700)] transition-colors motion-reduce:transition-none"
             >
               <Home className="w-4 h-4" />
               {dict.homeCta}
             </Link>
             <Link
-              href={`${prefix}/kiralik-villalar`}
+              href={localeHref(`/kiralik-villalar`, locale)}
               className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full border border-[var(--color-stone-200)] text-[14px] font-medium text-[var(--color-stone-800)] hover:border-[var(--color-stone-300)] hover:bg-white transition-colors motion-reduce:transition-none"
             >
               <Search className="w-4 h-4" />

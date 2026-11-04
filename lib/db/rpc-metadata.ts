@@ -34,6 +34,7 @@ export const RPC_RETURN_KIND: Readonly<Record<string, RpcReturnKind>> = {
   consume_villa_zip_token: "scalar", // returns uuid
   resolve_reservation_share_token: "scalar", // returns uuid
   get_public_settings: "scalar", // returns jsonb
+  change_public_root_locale: "scalar", // returns text — migration 104 (ana dil değişimi)
   refresh_villa_short_gaps: "scalar", // returns integer
 
   /* setof scalar */
@@ -53,6 +54,7 @@ export const RPC_RETURN_KIND: Readonly<Record<string, RpcReturnKind>> = {
   replace_villa_price_include_relations: "void", // returns void
   set_villa_sort_orders: "void", // returns void
   set_villa_type_sort_orders: "void", // returns void
+  set_site_locales_enabled: "void", // returns void — migration 101 (site_locales)
 };
 
 /** Fonksiyonun dönüş türü (kayıtlı değilse "table" → ham satır dizisi). */

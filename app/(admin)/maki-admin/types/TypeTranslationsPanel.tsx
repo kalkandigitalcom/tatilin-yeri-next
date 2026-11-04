@@ -10,6 +10,7 @@
    gösterilir.
    =============================================================== */
 
+import LocalizedSlugField from "@/app/components/admin/shared/LocalizedSlugField";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -48,6 +49,11 @@ export default function TypeTranslationsPanel({ typeId, typeName }: Props) {
     en: "",
     de: "",
   });
+  /* 🌐 Faz 2 — dil bazlı SEO URL slug'ı (kategori sayfası). */
+  const [slugs, setSlugs] = useState<Record<WritableLocale, string>>({
+    en: "",
+    de: "",
+  });
   const [activeLocale, setActiveLocale] = useState<WritableLocale>("en");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,6 +83,14 @@ export default function TypeTranslationsPanel({ typeId, typeName }: Props) {
         }
         return next;
       });
+      setSlugs((prev) => {
+        const next = { ...prev };
+        for (const row of result.rows) {
+          if (row.locale !== "en" && row.locale !== "de") continue;
+          next[row.locale] = row.slug ?? "";
+        }
+        return next;
+      });
       setLoading(false);
     })();
 
@@ -101,6 +115,7 @@ export default function TypeTranslationsPanel({ typeId, typeName }: Props) {
         typeId,
         locale: activeLocale,
         name: current,
+        slug: slugs[activeLocale],
       });
 
       if (!result.ok) {
@@ -115,6 +130,7 @@ export default function TypeTranslationsPanel({ typeId, typeName }: Props) {
         ...prev,
         [activeLocale]: result.row.name ?? current,
       }));
+      setSlugs((prev) => ({ ...prev, [activeLocale]: result.row.slug ?? "" }));
 
       toast.success(`${LOCALE_LABELS[activeLocale]} çevirisi kaydedildi`, {
         id: `type-translations-save-${typeId}`,
@@ -175,6 +191,13 @@ export default function TypeTranslationsPanel({ typeId, typeName }: Props) {
                 [activeLocale]: e.target.value,
               }))
             }
+          />
+
+          <LocalizedSlugField
+            kind="villaType"
+            locale={activeLocale}
+            value={slugs[activeLocale]}
+            onChange={(v) => setSlugs((prev) => ({ ...prev, [activeLocale]: v }))}
           />
 
           <button

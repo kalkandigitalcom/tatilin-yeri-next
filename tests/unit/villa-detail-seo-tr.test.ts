@@ -1,7 +1,7 @@
 /* ===============================================================
    🛡️ PHASE 7C — TR VILLA DETAIL generateMetadata: CANONICAL + HREFLANG
    ===============================================================
-   Hedef: app/(public)/kiralik-villa/[slug]/page.tsx > generateMetadata
+   Hedef: app/(public)/kiralik-villa/[slug]/locale-page.tsx > generateMetadata
 
    Bu dosya TR sayfasının generateMetadata'sını GERÇEK modül olarak
    import eder (dynamic import) — yalnız `@/app/services/villa.service`
@@ -59,7 +59,7 @@ const BASE_VILLA = {
 };
 
 async function callGenerateMetadata(slug = "villa-in-love") {
-  const mod = await import("@/app/(public)/kiralik-villa/[slug]/page");
+  const mod = await import("@/app/(public)/kiralik-villa/[slug]/locale-page");
   return mod.generateMetadata({ params: Promise.resolve({ slug }) });
 }
 
@@ -84,8 +84,8 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
       | undefined;
     expect(languages).toBeDefined();
     expect(languages?.tr).toBe("/kiralik-villa/villa-in-love");
-    expect(languages?.en).toBe("/en/kiralik-villa/villa-in-love");
-    expect(languages?.de).toBe("/de/kiralik-villa/villa-in-love");
+    expect(languages?.en).toBe("/en/villa/villa-in-love");
+    expect(languages?.de).toBe("/de/villa/villa-in-love");
     expect(languages?.["x-default"]).toBe("/kiralik-villa/villa-in-love");
   });
 

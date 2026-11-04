@@ -30,21 +30,21 @@ const LOCALES: Locale[] = ["tr", "en", "de"];
    =============================================================== */
 
 const ROUTE_TRIPLETS: Array<[string, string, string]> = [
-  ["app/(public)/blog/page.tsx", "app/(public)/en/blog/page.tsx", "app/(public)/de/blog/page.tsx"],
+  ["app/(public)/blog/locale-page.tsx", "app/(public)/en/blog/locale-page.tsx", "app/(public)/de/blog/locale-page.tsx"],
   [
-    "app/(public)/blog/[slug]/page.tsx",
-    "app/(public)/en/blog/[slug]/page.tsx",
-    "app/(public)/de/blog/[slug]/page.tsx",
+    "app/(public)/blog/[slug]/locale-page.tsx",
+    "app/(public)/en/blog/[slug]/locale-page.tsx",
+    "app/(public)/de/blog/[slug]/locale-page.tsx",
   ],
   [
-    "app/(public)/liste/[token]/page.tsx",
-    "app/(public)/en/liste/[token]/page.tsx",
-    "app/(public)/de/liste/[token]/page.tsx",
+    "app/(public)/liste/[token]/locale-page.tsx",
+    "app/(public)/en/liste/[token]/locale-page.tsx",
+    "app/(public)/de/liste/[token]/locale-page.tsx",
   ],
   [
-    "app/(public)/v/[token]/page.tsx",
-    "app/(public)/en/v/[token]/page.tsx",
-    "app/(public)/de/v/[token]/page.tsx",
+    "app/(public)/v/[token]/locale-page.tsx",
+    "app/(public)/en/v/[token]/locale-page.tsx",
+    "app/(public)/de/v/[token]/locale-page.tsx",
   ],
 ];
 
@@ -67,10 +67,10 @@ describe("1) blog + token sayfalarının TR/EN/DE route dosyaları var", () => {
 
   it("EN/DE route'ları TR ile AYNI gövdeyi kullanıyor (kopya JSX yok)", () => {
     const bodies: Record<string, string> = {
-      "blog/page.tsx": "BlogIndexPageBody",
-      "blog/[slug]/page.tsx": "BlogDetailPageBody",
-      "liste/[token]/page.tsx": "SharedListPageBody",
-      "v/[token]/page.tsx": "PrivateVillaPageBody",
+      "blog/locale-page.tsx": "BlogIndexPageBody",
+      "blog/[slug]/locale-page.tsx": "BlogDetailPageBody",
+      "liste/[token]/locale-page.tsx": "SharedListPageBody",
+      "v/[token]/locale-page.tsx": "PrivateVillaPageBody",
     };
     for (const [key, body] of Object.entries(bodies)) {
       for (const prefix of ["app/(public)/", "app/(public)/en/", "app/(public)/de/"]) {
@@ -286,10 +286,10 @@ const SOURCE_LOCKED = [
   "app/components/blog/blog-metadata.ts",
   "app/components/private-villa/PrivateVillaPageBody.tsx",
   "app/components/private-villa/private-villa-metadata.ts",
-  "app/(public)/blog/page.tsx",
-  "app/(public)/blog/[slug]/page.tsx",
-  "app/(public)/liste/[token]/page.tsx",
-  "app/(public)/v/[token]/page.tsx",
+  "app/(public)/blog/locale-page.tsx",
+  "app/(public)/blog/[slug]/locale-page.tsx",
+  "app/(public)/liste/[token]/locale-page.tsx",
+  "app/(public)/v/[token]/locale-page.tsx",
 ];
 
 describe("6) source-lock — yeni public gövdelerde hardcoded TR metin yok", () => {

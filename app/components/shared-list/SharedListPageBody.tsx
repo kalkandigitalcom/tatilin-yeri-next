@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Users, MapPin, CalendarRange } from "lucide-react";
@@ -130,7 +131,7 @@ export default async function SharedListPageBody({
   locale?: Locale;
 }) {
   const dict = getDictionary(locale).sharedList;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
   const { token } = await params;
 
   /* 1) Token resolve — revoke/expire guard service içinde.
@@ -398,7 +399,7 @@ export default async function SharedListPageBody({
                   privateHref={
                     v.is_active === true
                       ? undefined
-                      : `${localePrefix}/v/${privateTokenOf(v)}`
+                      : localeHref(`/v/${privateTokenOf(v)}`, locale)
                   }
                 />
               );
@@ -411,7 +412,7 @@ export default async function SharedListPageBody({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p>{dict.footerNote}</p>
             <Link
-              href={`${localePrefix}/arama`}
+              href={localeHref(`/arama`, locale)}
               className="
                 inline-flex items-center gap-1.5
                 text-[var(--color-stone-700)] hover:text-[var(--color-stone-900)]

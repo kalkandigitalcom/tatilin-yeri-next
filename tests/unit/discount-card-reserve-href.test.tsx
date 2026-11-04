@@ -166,15 +166,15 @@ describe("İndirimli kart CTA — fırsat tarihlerini rezervasyona taşır", () 
     expect(url.searchParams.get("end")).toBe(d.end_date);
   });
 
-  it("8) EN locale → /en/rezervasyon/...", () => {
+  it("8) EN locale → /en/booking/...", () => {
     renderDiscountCard({ locale: "en" });
     clickCta("Book Now");
     expect(pushSpy.mock.calls[0][0]).toBe(
-      "/en/rezervasyon/ornek-villa?start=2026-10-08&end=2026-10-14"
+      "/en/booking/ornek-villa?start=2026-10-08&end=2026-10-14"
     );
   });
 
-  it("9) DE locale → /de/rezervasyon/...", () => {
+  it("9) DE locale → /de/buchung/...", () => {
     renderDiscountCard({ locale: "de" });
     const btn = screen.getAllByRole("button").find((b) =>
       (b.textContent || "").trim().length > 0 &&
@@ -182,7 +182,7 @@ describe("İndirimli kart CTA — fırsat tarihlerini rezervasyona taşır", () 
     )!;
     fireEvent.click(btn);
     expect(pushSpy.mock.calls[0][0]).toBe(
-      "/de/rezervasyon/ornek-villa?start=2026-10-08&end=2026-10-14"
+      "/de/buchung/ornek-villa?start=2026-10-08&end=2026-10-14"
     );
   });
 

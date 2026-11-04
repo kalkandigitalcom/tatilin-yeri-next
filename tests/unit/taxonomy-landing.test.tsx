@@ -300,11 +300,11 @@ describe("D) metadata", () => {
     const m = await buildTaxonomyLandingMetadata("category", "muhafazakar-villalar", "en", sp());
     expect(m.title).toBe("Conservative Villas | Balayı Villanız");
     expect(m.alternates).toEqual({
-      canonical: "/en/villa-turleri/muhafazakar-villalar",
+      canonical: "/en/villa-types/muhafazakar-villalar",
       languages: {
         tr: "/villa-turleri/muhafazakar-villalar",
-        en: "/en/villa-turleri/muhafazakar-villalar",
-        de: "/de/villa-turleri/muhafazakar-villalar",
+        en: "/en/villa-types/muhafazakar-villalar",
+        de: "/de/villa-typen/muhafazakar-villalar",
         "x-default": "/villa-turleri/muhafazakar-villalar",
       },
     });
@@ -458,7 +458,8 @@ describe("F) sitemap", () => {
   it("sitemap.ts landing entry'lerini ekliyor (kaynak kilidi)", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "app/sitemap.ts"), "utf-8");
     expect(src).toContain("getTaxonomyLandingSitemapPaths");
-    expect(src).toMatch(/\.\.\.staticEntries,\s*\.\.\.landingEntries,/);
+    /* Faz 3 — çok dilli sitemap: landing yolları dil bazlı girdilere açılır. */
+    expect(src).toMatch(/for \(const path of \[\.\.\.categories, \.\.\.regions\]\)/);
   });
 });
 
@@ -513,15 +514,15 @@ describe("H) route dosyaları", () => {
   const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf-8");
   for (const [seg, kind] of [["villa-turleri", "category"], ["bolgeler", "region"]] as const) {
     it(`${seg}: TR/EN/DE dosyaları ortak gövdeyi doğru locale ile çağırır`, () => {
-      const trSrc = read(`app/(public)/${seg}/[slug]/page.tsx`);
+      const trSrc = read(`app/(public)/${seg}/[slug]/locale-page.tsx`);
       expect(trSrc).toContain(`kind="${kind}"`);
       expect(trSrc).toContain('locale="tr"');
       expect(trSrc).not.toContain("requirePublicLocaleEnabled");
       for (const loc of ["en", "de"]) {
-        const s = read(`app/(public)/${loc}/${seg}/[slug]/page.tsx`);
+        const s = read(`app/(public)/${loc}/${seg}/[slug]/locale-page.tsx`);
         expect(s).toContain(`locale="${loc}"`);
         expect(s).toContain(`setRequestLocale("${loc}")`);
-        expect(s).toContain("await requirePublicLocaleEnabled();");
+        expect(s).toContain(`await requirePublicLocaleEnabled("${loc}");`);
       }
     });
   }

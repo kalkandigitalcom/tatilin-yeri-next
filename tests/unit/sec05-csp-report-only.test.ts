@@ -118,7 +118,7 @@ describe("SEC-05 — next.config headers()", () => {
 
   it("public kaynak deseni: sayfalar eşleşir; api/_next/admin eşleşmez", () => {
     const re = /^\/((?!api|_next\/static|_next\/image|favicon.ico|maki-admin).*)$/;
-    for (const p of ["/", "/kiralik-villa/x", "/v/tok", "/en/iletisim", "/bu-sayfa-yok"]) {
+    for (const p of ["/", "/kiralik-villa/x", "/v/tok", "/en/contact", "/bu-sayfa-yok"]) {
       expect(re.test(p)).toBe(true);
     }
     for (const p of ["/api/csp-report", "/_next/static/chunks/a.js", "/_next/image", "/maki-admin", "/maki-admin/login"]) {

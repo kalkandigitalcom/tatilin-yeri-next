@@ -5,7 +5,7 @@
      Villa detay sayfasındaki "Rezervasyon Yap" butonu
      (`useBookingEngine > handleReservation`) hedefi PREFIX'SİZ
      üretiyordu: `/rezervasyon/<slug>?...`. Bu kod yazıldığında
-     `/en|/de/rezervasyon/[slug]` route'ları `LocaleRouteComingSoon`
+     `/en|/de/buchung/[slug]` route'ları `LocaleRouteComingSoon`
      placeholder'ıydı ve locale yalnız `&locale=` query param'ı ile
      taşınıyordu — ancak `/rezervasyon/[slug]/page.tsx` o param'ı HİÇ
      okumuyor. Sonuç: `/de/...` üzerindeki kullanıcı TR route'una
@@ -114,14 +114,14 @@ describe("1-3) Rezervasyon hedefi aktif locale prefix'ini TAŞIR", () => {
     expect(url).not.toContain("locale=");
   });
 
-  it("2) EN → /en/rezervasyon/...", async () => {
+  it("2) EN → /en/booking/...", async () => {
     const url = await reserveWith("en");
-    expect(url.startsWith("/en/rezervasyon/deniz-villa?")).toBe(true);
+    expect(url.startsWith("/en/booking/deniz-villa?")).toBe(true);
   });
 
-  it("3) DE → /de/rezervasyon/... (bildirilen hata senaryosu)", async () => {
+  it("3) DE → /de/buchung/... (bildirilen hata senaryosu)", async () => {
     const url = await reserveWith("de");
-    expect(url.startsWith("/de/rezervasyon/deniz-villa?")).toBe(true);
+    expect(url.startsWith("/de/buchung/deniz-villa?")).toBe(true);
     /* REGRESYON: prefix'siz TR route'una ASLA düşmemeli. */
     expect(url.startsWith("/rezervasyon/")).toBe(false);
   });
@@ -141,7 +141,8 @@ describe("4) Query sözleşmesi AYNEN korunur", () => {
   it("4b) TR ile EN/DE arasındaki TEK fark path prefix'i (+ mevcut &locale=)", async () => {
     const tr = await reserveWith("tr");
     const de = await reserveWith("de");
-    expect(de).toBe(`/de${tr}&locale=de`);
+    /* 🌐 Faz 2 — dil öneki + o dilin SEO segmenti (rezervasyon → buchung). */
+    expect(de).toBe(`${tr.replace("/rezervasyon/", "/de/buchung/")}&locale=de`);
   });
 });
 
@@ -196,6 +197,6 @@ describe("7) Mevcut davranışlar KORUNDU (regresyon)", () => {
 
   it("7b) slug URL'de AYNEN korunur", async () => {
     const url = await reserveWith("en");
-    expect(url).toContain("/rezervasyon/deniz-villa?");
+    expect(url).toContain("/en/booking/deniz-villa?");
   });
 });

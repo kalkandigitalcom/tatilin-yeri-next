@@ -1,12 +1,12 @@
 "use client";
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronUp } from "lucide-react";
 
 /* 🛡️ PHASE 11 — locale, Header/Footer ile AYNI desenle pathname'den.
    scrollY/visibility/scrollToTop davranışına DOKUNULMADI. */
-import { localeFromPathname } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
 /* ===============================================================
@@ -35,7 +35,7 @@ const SCROLL_THRESHOLD = 400;
 
 export default function ScrollToTopButton() {
   const pathname = usePathname();
-  const dict = getDictionary(localeFromPathname(pathname)).layout.scrollTop;
+  const dict = getDictionary(localeOfPath(pathname)).layout.scrollTop;
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {

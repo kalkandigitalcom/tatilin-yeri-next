@@ -2,7 +2,10 @@ import type { MetadataRoute } from "next";
 
 /* 🛡️ Public locale prefix'leri — `lib/i18n/config.ts`'in TEK doğruluk
    kaynağından türetilir (yeni bir locale listesi İCAT EDİLMEZ). */
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/i18n/config";
+import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/config";
+import { primeRoutingContext } from "@/lib/i18n/routing/context.server";
+import { getRoutingContext } from "@/lib/i18n/routing/context";
+import { localizeHref } from "@/lib/i18n/routing/url";
 
 /* ===============================================================
    🛡️ ROBOTS — Next.js App Router (production-grade crawl policy)
@@ -68,17 +71,29 @@ const DISALLOW_PATHS: readonly string[] = [
 /** `/maki-admin` ve `/api` locale-routed DEĞİLDİR → prefix üretilmez. */
 const LOCALE_PREFIXED_EXCLUDES: readonly string[] = ["/maki-admin", "/api"];
 
-/**
- * Her TR path'i + (uygulanabilirse) `/en` ve `/de` varyantları.
- * Sıra: önce TÜM TR girdileri (mevcut çıktı BİREBİR korunur), sonra
- * prefix'li varyantlar.
- */
+/* 🌐 Faz 2 — dil bazlı yollar merkezi URL üreticisinden: her dil için
+   (ana dil öneksiz, diğerleri önekli) o dilin SEO segmenti kullanılır
+   (ör. EN: /en/search, /en/booking/). Sonu "/" olan girdiler önek
+   kuralıdır (alt yolları kapsar). */
+function localizedDisallow(trPath: string, locale: Locale): string {
+  const isPrefixRule = trPath.endsWith("/");
+  const probe = isPrefixRule ? `${trPath}__x__` : trPath;
+  const out = localizeHref(probe, locale);
+  return isPrefixRule ? out.replace(/__x__$/, "") : out;
+}
+
 function withLocalePrefixes(paths: readonly string[]): string[] {
-  const prefixes = SUPPORTED_LOCALES.filter((l) => l !== DEFAULT_LOCALE);
-  const localized = paths
-    .filter((p) => !LOCALE_PREFIXED_EXCLUDES.includes(p))
-    .flatMap((p) => prefixes.map((l) => `/${l}${p}`));
-  return [...paths, ...localized];
+  const out = new Set<string>();
+  /* Önce ana dilin (öneksiz) girdileri — politika sırası AYNEN; sonra
+     diğer diller sırayla. */
+  const root = getRoutingContext().root;
+  const order = [root, ...SUPPORTED_LOCALES.filter((l) => l !== root)];
+  for (const l of order) {
+    for (const p of paths) {
+      out.add(LOCALE_PREFIXED_EXCLUDES.includes(p) ? p : localizedDisallow(p, l));
+    }
+  }
+  return [...out];
 }
 
 const SITE_URL = (
@@ -86,7 +101,8 @@ const SITE_URL = (
   ""
 ).replace(/\/+$/, "");
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  await primeRoutingContext();
   if (!SITE_URL) {
     console.warn(
       "[robots] NEXT_PUBLIC_SITE_URL tanımsız — sitemap/host referansı OMIT edildi; prod'da SET EDİLMELİ."

@@ -232,20 +232,20 @@ describe("Footer — villa tipi adı locale-aware", () => {
   });
 
   it("15) EN path → EN adı", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(<Footer {...FOOTER_BASE} villaTypes={[TYPE_ITEM]} />);
     expect(screen.getByText("Luxury Villa")).toBeInTheDocument();
     expect(screen.queryByText("Lüks Villa")).not.toBeInTheDocument();
   });
 
   it("16) DE path → DE adı", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/de/villa/test");
     render(<Footer {...FOOTER_BASE} villaTypes={[TYPE_ITEM]} />);
     expect(screen.getByText("Luxusvilla")).toBeInTheDocument();
   });
 
   it("17) EN çevirisi YOKSA → TR fallback", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(
       <Footer
         {...FOOTER_BASE}
@@ -256,7 +256,7 @@ describe("Footer — villa tipi adı locale-aware", () => {
   });
 
   it("18) nameByLocale HİÇ YOKSA (eski caller) → TR adı, çökme yok", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/de/villa/test");
     render(
       <Footer
         {...FOOTER_BASE}
@@ -271,20 +271,20 @@ describe("Footer — villa tipi adı locale-aware", () => {
      locale prefix'ini alır. Eski "prefix'siz" beklentisi EN/DE'de
      locale kaybına yol açıyordu. */
   it("19) 🛡️ SLUG/TOKEN DEĞİŞMEDİ — EN'de canonical token + '/en' prefix", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(<Footer {...FOOTER_BASE} villaTypes={[TYPE_ITEM]} />);
     expect(
       screen.getByRole("link", { name: "Luxury Villa" })
     /* 🛡️ SEO landing — slug'lı kategori `/villa-turleri/<slug>`'e gider;
        token (slug) ve '/en' prefix'i AYNEN. */
-    ).toHaveAttribute("href", "/en/villa-turleri/luks-villa");
+    ).toHaveAttribute("href", "/en/villa-types/luks-villa");
   });
 });
 
 describe("FooterWrapper — multilingual gate + prop-passing", () => {
   beforeEach(() => {
     usePathnameMock.mockReset();
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     getPublicSettingsMock.mockReset();
     findAllVillaLocationsMock.mockReset();
     findAllVillaTypesMock.mockReset();
@@ -366,7 +366,7 @@ describe("Header — kategori menü adı locale-aware", () => {
   });
 
   it("25) EN path → EN adı (masaüstü + mobil menüde)", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(
       <Header
         menu={[{ ...CATEGORY_MENU_ITEM, nameByLocale: { en: "Luxury Villa" } }]}
@@ -378,7 +378,7 @@ describe("Header — kategori menü adı locale-aware", () => {
   });
 
   it("26) DE path → DE adı", () => {
-    usePathnameMock.mockReturnValue("/de/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/de/villa/test");
     render(
       <Header
         menu={[{ ...CATEGORY_MENU_ITEM, nameByLocale: { de: "Luxusvilla" } }]}
@@ -389,7 +389,7 @@ describe("Header — kategori menü adı locale-aware", () => {
   });
 
   it("27) çeviri yoksa TR fallback; nameByLocale olmayan öğeler etkilenmez", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(
       <Header
         menu={[
@@ -404,7 +404,7 @@ describe("Header — kategori menü adı locale-aware", () => {
   });
 
   it("28) alt menü (children) öğeleri de locale-aware", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(
       <Header
         menu={[
@@ -431,7 +431,7 @@ describe("Header — kategori menü adı locale-aware", () => {
      locale prefix'ini alır. Eski "prefix'siz" beklentisi EN/DE'de
      locale kaybına yol açıyordu. */
   it("29) 🛡️ SLUG/TOKEN DEĞİŞMEDİ — EN'de canonical token + '/en' prefix", () => {
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     render(
       <Header
         menu={[{ ...CATEGORY_MENU_ITEM, nameByLocale: { en: "Luxury Villa" } }]}
@@ -443,7 +443,7 @@ describe("Header — kategori menü adı locale-aware", () => {
     for (const l of links) {
       expect(l).toHaveAttribute(
         "href",
-        "/en/arama?villa-turleri=luks-villa"
+        "/en/search?villa-turleri=luks-villa"
       );
     }
   });
@@ -452,7 +452,7 @@ describe("Header — kategori menü adı locale-aware", () => {
 describe("HeaderWrapper — multilingual gate + ağaç birleştirme", () => {
   beforeEach(() => {
     usePathnameMock.mockReset();
-    usePathnameMock.mockReturnValue("/en/kiralik-villa/test");
+    usePathnameMock.mockReturnValue("/en/villa/test");
     getPublicSettingsMock.mockReset();
     getMenuMock.mockReset();
     findManyForLocaleMock.mockReset();

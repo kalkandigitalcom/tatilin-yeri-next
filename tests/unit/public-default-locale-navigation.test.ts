@@ -18,6 +18,19 @@ import { resolvePublicHome } from "@/lib/i18n/public-home";
 import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
 import { DEFAULT_LOCALE, localeFromPathname } from "@/lib/i18n/config";
 import { localeHref } from "@/lib/i18n/locale-href";
+import { setRoutingContext } from "@/lib/i18n/routing/context";
+import { resolveIncomingPath } from "@/lib/i18n/routing/url";
+
+/* 🌐 Faz 2 — ana dil DE senaryosu artık routing bağlamıyla kurulur
+   (ana dil kökte: DE "/", TR "/tr", EN "/en"). */
+function withRoot<T>(root: "tr" | "en" | "de", fn: () => T): T {
+  setRoutingContext({ root, enabled: ["tr", "en", "de"], slugs: {} });
+  try {
+    return fn();
+  } finally {
+    setRoutingContext(null);
+  }
+}
 
 const ML_ON_DE = { multilingual_enabled: true, public_default_locale: "de" };
 const ML_ON_TR = { multilingual_enabled: true, public_default_locale: "tr" };
@@ -33,18 +46,14 @@ function homeHrefFor(locale: "tr" | "en" | "de", trHomeHref: string) {
 }
 
 describe("10) Dil değiştirici — TÜRKÇE seçimi varsayılan dile GERİ DÜŞÜRMEZ", () => {
-  it("MOD B: /de ana sayfasında TR hedefi '/tr' (yönlendirilen '/' DEĞİL)", () => {
-    const t = getLocaleSwitchTargets("/de", "", TR_HOME_B);
-    expect(t.tr).toBe("/tr");
-    expect(t.en).toBe("/en");
-    expect(t.de).toBe("/de");
+  it("ana dil DE: DE ana sayfasında (/) TR hedefi '/tr'", () => {
+    const t = withRoot("de", () => getLocaleSwitchTargets("/", "", TR_HOME_B));
+    expect(t).toEqual({ tr: "/tr", en: "/en", de: "/" });
   });
 
-  it("MOD B: /tr üzerindeyken hedefler doğru (TR kendisi, EN/DE kökleri)", () => {
-    const t = getLocaleSwitchTargets("/tr", "", TR_HOME_B);
-    expect(t.tr).toBe("/tr");
-    expect(t.en).toBe("/en");
-    expect(t.de).toBe("/de");
+  it("ana dil DE: /tr üzerindeyken hedefler doğru (TR kendisi, EN önekli, DE kök)", () => {
+    const t = withRoot("de", () => getLocaleSwitchTargets("/tr", "", TR_HOME_B));
+    expect(t).toEqual({ tr: "/tr", en: "/en", de: "/" });
   });
 
   it("MOD A: TR hedefi '/' — BYTE-IDENTICAL (bugünkü davranış)", () => {
@@ -56,31 +65,31 @@ describe("10) Dil değiştirici — TÜRKÇE seçimi varsayılan dile GERİ DÜ�
 
   it("trHomePath hiç verilmezse eski davranış AYNEN korunur", () => {
     expect(getLocaleSwitchTargets("/de").tr).toBe("/");
-    expect(getLocaleSwitchTargets("/en/iletisim").tr).toBe("/iletisim");
+    expect(getLocaleSwitchTargets("/en/contact").tr).toBe("/iletisim");
   });
 });
 
 describe("9) İç TR route'ları ETKİLENMEZ (prefix'siz mimari korunur)", () => {
   it("MOD B'de bile /kiralik-villalar, /arama, /iletisim TR hedefleri prefix'siz", () => {
-    expect(getLocaleSwitchTargets("/de/kiralik-villalar", "", TR_HOME_B).tr).toBe(
+    expect(getLocaleSwitchTargets("/de/ferienvillen", "", TR_HOME_B).tr).toBe(
       "/kiralik-villalar"
     );
-    expect(getLocaleSwitchTargets("/de/arama", "", TR_HOME_B).tr).toBe("/arama");
-    expect(getLocaleSwitchTargets("/de/iletisim", "", TR_HOME_B).tr).toBe(
+    expect(getLocaleSwitchTargets("/de/suche", "", TR_HOME_B).tr).toBe("/arama");
+    expect(getLocaleSwitchTargets("/de/kontakt", "", TR_HOME_B).tr).toBe(
       "/iletisim"
     );
   });
 
   it("query string MOD B'de de AYNEN taşınır", () => {
     expect(
-      getLocaleSwitchTargets("/de/arama", "villa-turleri=x&flexible=3", TR_HOME_B).tr
+      getLocaleSwitchTargets("/de/suche", "villa-turleri=x&flexible=3", TR_HOME_B).tr
     ).toBe("/arama?villa-turleri=x&flexible=3");
   });
 
   it("localeHref DEĞİŞMEDİ — iç TR path'leri prefix ALMAZ", () => {
     expect(localeHref("/kiralik-villalar", "tr")).toBe("/kiralik-villalar");
     expect(localeHref("/arama?a=1", "tr")).toBe("/arama?a=1");
-    expect(localeHref("/kiralik-villalar", "de")).toBe("/de/kiralik-villalar");
+    expect(localeHref("/kiralik-villalar", "de")).toBe("/de/ferienvillen");
   });
 });
 
@@ -130,19 +139,23 @@ describe("12) SEO — hiçbir hreflang hedefi redirect'e düşmez", () => {
     return { canonical: l[locale], languages: l };
   }
 
-  it("MOD B: tr → /tr, x-default → /de, canonical'lar doğru", () => {
-    const de = homeAlternates(ML_ON_DE, "de");
-    expect(de.languages.tr).toBe("/tr");
-    expect(de.languages["x-default"]).toBe("/de");
-    expect(de.canonical).toBe("/de");
-
-    const tr = homeAlternates(ML_ON_DE, "tr");
-    expect(tr.canonical).toBe("/tr");
+  it("ana dil DE: tr → /tr, de ve x-default → / (kök), canonical'lar doğru", () => {
+    withRoot("de", () => {
+      const de = buildLocaleAlternates("/", "de");
+      expect(de.languages).toEqual({ tr: "/tr", en: "/en", de: "/", "x-default": "/" });
+      expect(de.canonical).toBe("/");
+      expect(buildLocaleAlternates("/", "tr").canonical).toBe("/tr");
+    });
   });
 
-  it("MOD B: hiçbir hreflang değeri '/' (yönlendirici) DEĞİL", () => {
-    const { languages } = homeAlternates(ML_ON_DE, "de");
-    expect(Object.values(languages)).not.toContain("/");
+  it("ana dil DE: hiçbir hreflang hedefi yönlendirmeye düşmez (hepsi rewrite)", () => {
+    withRoot("de", () => {
+      const { languages } = buildLocaleAlternates("/", "de");
+      const ctx = { root: "de" as const, enabled: ["tr", "en", "de"] as const, slugs: {} };
+      for (const v of Object.values(languages)) {
+        expect(resolveIncomingPath(v, ctx).type, v).toBe("rewrite");
+      }
+    });
   });
 
   it("MOD A: çıktı buildLocaleAlternates ile BYTE-IDENTICAL", () => {

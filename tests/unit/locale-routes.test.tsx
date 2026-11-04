@@ -325,7 +325,7 @@ const RESERVATION_GATE_ROUTES: Array<
   [string, "en" | "de", Record<string, unknown>]
 > = [
   [
-    "@/app/(public)/en/rezervasyon/[slug]/page",
+    "@/app/(public)/en/rezervasyon/[slug]/locale-page",
     "en",
     {
       params: Promise.resolve({ slug: "test-villa" }),
@@ -333,7 +333,7 @@ const RESERVATION_GATE_ROUTES: Array<
     },
   ],
   [
-    "@/app/(public)/de/rezervasyon/[slug]/page",
+    "@/app/(public)/de/rezervasyon/[slug]/locale-page",
     "de",
     {
       params: Promise.resolve({ slug: "test-villa" }),
@@ -349,12 +349,12 @@ const RESERVATION_SUCCESS_GATE_ROUTES: Array<
   [string, "en" | "de", Record<string, unknown>]
 > = [
   [
-    "@/app/(public)/en/rezervasyon/basarili/page",
+    "@/app/(public)/en/rezervasyon/basarili/locale-page",
     "en",
     { searchParams: Promise.resolve({}) },
   ],
   [
-    "@/app/(public)/de/rezervasyon/basarili/page",
+    "@/app/(public)/de/rezervasyon/basarili/locale-page",
     "de",
     { searchParams: Promise.resolve({}) },
   ],
@@ -367,12 +367,12 @@ const SEARCH_GATE_ROUTES: Array<
   [string, "en" | "de", Record<string, unknown>]
 > = [
   [
-    "@/app/(public)/en/arama/page",
+    "@/app/(public)/en/arama/locale-page",
     "en",
     { searchParams: Promise.resolve({}) },
   ],
   [
-    "@/app/(public)/de/arama/page",
+    "@/app/(public)/de/arama/locale-page",
     "de",
     { searchParams: Promise.resolve({}) },
   ],
@@ -386,12 +386,12 @@ const ARCHIVE_GATE_ROUTES: Array<
   [string, "en" | "de", Record<string, unknown>]
 > = [
   [
-    "@/app/(public)/en/kiralik-villalar/page",
+    "@/app/(public)/en/kiralik-villalar/locale-page",
     "en",
     { searchParams: Promise.resolve({}) },
   ],
   [
-    "@/app/(public)/de/kiralik-villalar/page",
+    "@/app/(public)/de/kiralik-villalar/locale-page",
     "de",
     { searchParams: Promise.resolve({}) },
   ],
@@ -428,8 +428,8 @@ describe.each(ARCHIVE_GATE_ROUTES)("%s", (modulePath, locale, pageProps) => {
    assertion'ı ortak `ContactPageBody` + locale prop'u. Sayfa prop
    ALMAZ (searchParams yok). */
 const CONTACT_GATE_ROUTES: Array<[string, "en" | "de"]> = [
-  ["@/app/(public)/en/iletisim/page", "en"],
-  ["@/app/(public)/de/iletisim/page", "de"],
+  ["@/app/(public)/en/iletisim/locale-page", "en"],
+  ["@/app/(public)/de/iletisim/locale-page", "de"],
 ];
 
 describe.each(CONTACT_GATE_ROUTES)("%s", (modulePath, locale) => {
@@ -469,8 +469,8 @@ describe.each(CONTACT_GATE_ROUTES)("%s", (modulePath, locale) => {
 const VILLA_DETAIL_GATE_ROUTES: Array<
   [string, "en" | "de", Record<string, unknown> | undefined]
 > = [
-  ["@/app/(public)/en/kiralik-villa/[slug]/page", "en", VILLA_PAGE_PROPS],
-  ["@/app/(public)/de/kiralik-villa/[slug]/page", "de", VILLA_PAGE_PROPS],
+  ["@/app/(public)/en/kiralik-villa/[slug]/locale-page", "en", VILLA_PAGE_PROPS],
+  ["@/app/(public)/de/kiralik-villa/[slug]/locale-page", "de", VILLA_PAGE_PROPS],
 ];
 
 describe.each(RESERVATION_GATE_ROUTES)(
@@ -614,8 +614,8 @@ describe.each(VILLA_DETAIL_GATE_ROUTES)(
    `CollapsibleDescription`'a/fallback'e ilettiği doğrulanıyor.
    =============================================================== */
 const VILLA_DETAIL_ROUTES: Array<[string, "en" | "de"]> = [
-  ["@/app/(public)/en/kiralik-villa/[slug]/page", "en"],
-  ["@/app/(public)/de/kiralik-villa/[slug]/page", "de"],
+  ["@/app/(public)/en/kiralik-villa/[slug]/locale-page", "en"],
+  ["@/app/(public)/de/kiralik-villa/[slug]/locale-page", "de"],
 ];
 
 describe.each(VILLA_DETAIL_ROUTES)(

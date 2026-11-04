@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidateLocaleSlugs } from "@/lib/i18n/routing/slug-map.server";
+
 import {
   callerHasPermission,
   requirePermission,
@@ -45,5 +47,8 @@ export async function saveTypeTranslationAction(
     return { ok: false, error: "Yetkisiz" };
   }
 
-  return upsertTypeTranslation(input);
+  const result = await upsertTypeTranslation(input);
+  /* 🌐 Faz 2 — dil slug'ı değiştiyse URL haritası + sayfalar yenilenir. */
+  if (result.ok && input.slug !== undefined) revalidateLocaleSlugs();
+  return result;
 }

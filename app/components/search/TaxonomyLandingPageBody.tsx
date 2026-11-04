@@ -8,12 +8,11 @@ import KiralikVillalarPageBody, {
 import { getCachedSettings } from "@/lib/cache.helpers";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import { getVillaTypeNamesByLocale } from "@/lib/i18n/get-villa-type-translations.server";
 import { resolveTaxonomyName } from "@/lib/i18n/taxonomy-name.helper";
 import {
@@ -146,14 +145,13 @@ export async function buildTaxonomyLandingMetadata(
 
   const { canonical, languages } = buildLocaleAlternates(resolved.trPath, locale);
   const canonicalUrl = `${canonical}${pageQuery}`;
-  const alternates = isMultilingualEnabled(settings)
-    ? {
-        canonical: canonicalUrl,
-        languages: Object.fromEntries(
-          Object.entries(languages).map(([k, v]) => [k, `${v}${pageQuery}`])
-        ),
-      }
-    : { canonical: canonicalUrl };
+  const alternates = pickSeoAlternates(
+    settings,
+    canonicalUrl,
+    Object.fromEntries(
+      Object.entries(languages).map(([k, v]) => [k, `${v}${pageQuery}`])
+    )
+  );
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
   const pageUrl = siteUrl ? `${siteUrl}${canonicalUrl}` : canonicalUrl;

@@ -86,6 +86,11 @@ export const TR_HOME_PATH = "/tr";
  * Ana sayfa giriş davranışını `settings`ten çözer. SAF fonksiyon:
  * aynı girdi → aynı çıktı, side-effect YOK, asla throw etmez.
  */
+/* 🌐 Çok Dilli Mimari Faz 2 — MOD B YÖNLENDİRİCİSİ KALKTI.
+   Ana dil artık kök URL'de DOĞRUDAN render edilir (proxy `/` →
+   `/<ana dil>` iç yoluna rewrite eder); `/` hiçbir zaman yönlendirici
+   değildir. TR ana sayfa: ana dil TR ise "/", değilse "/tr" (merkezi
+   kural — lib/i18n/routing/url.ts ile aynı). */
 export function resolvePublicHome(
   settings: PublicHomeSettings | null | undefined
 ): PublicHomeResolution {
@@ -96,7 +101,7 @@ export function resolvePublicHome(
 
   return {
     defaultLocale,
-    redirectsFromRoot: true,
+    redirectsFromRoot: false,
     trHomeHref: TR_HOME_PATH,
   };
 }

@@ -35,6 +35,11 @@ import { localeHref } from "@/lib/i18n/locale-href";
 import { getLocaleSwitchTargets } from "@/lib/i18n/locale-switch.helper";
 import { localeFromPathname, SUPPORTED_LOCALES } from "@/lib/i18n/config";
 
+/* 🌐 Faz 2 — beklenen iç link: dil öneki + o dilin SEO segmenti
+   (merkezi üretici). `p` = PREFIX[locale] ("" | "/en" | "/de"). */
+const LH = (path: string, p: string) =>
+  localeHref(path, (p ? p.slice(1) : "tr") as "tr" | "en" | "de");
+
 /* ---------------- mock katmanı ---------------- */
 const usePathnameMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -63,8 +68,8 @@ const PREFIX: Record<L, string> = { tr: "", en: "/en", de: "/de" };
 /** O locale'in "bulunduğu sayfa" pathname'i. */
 const ON_PAGE: Record<L, string> = {
   tr: "/kiralik-villa/villa-lorien",
-  en: "/en/kiralik-villa/villa-lorien",
-  de: "/de/kiralik-villa/villa-lorien",
+  en: "/en/villa/villa-lorien",
+  de: "/de/villa/villa-lorien",
 };
 
 const MENU = [
@@ -111,15 +116,15 @@ describe("localeHref — birim davranışı", () => {
   it("2) EN/DE prefix uygular; kök için çifte slash üretmez", () => {
     expect(localeHref("/", "en")).toBe("/en");
     expect(localeHref("/", "de")).toBe("/de");
-    expect(localeHref("/teklif-al", "en")).toBe("/en/teklif-al");
+    expect(localeHref("/teklif-al", "en")).toBe("/en/request-a-quote");
     expect(localeHref("/p/hakkimizda", "de")).toBe("/de/p/hakkimizda");
   });
 
   it("3) query ve hash AYNEN taşınır (kontrat değişmez)", () => {
     expect(localeHref("/arama?villa-turleri=balayi&flexible=3", "en")).toBe(
-      "/en/arama?villa-turleri=balayi&flexible=3"
+      "/en/search?villa-turleri=balayi&flexible=3"
     );
-    expect(localeHref("/arama#sonuc", "de")).toBe("/de/arama#sonuc");
+    expect(localeHref("/arama#sonuc", "de")).toBe("/de/suche#sonuc");
     expect(localeHref("/?a=1", "en")).toBe("/en?a=1");
   });
 
@@ -162,15 +167,15 @@ describe("Header — iç linkler aktif locale'i taşır", () => {
     );
     /* CTA "Teklif Al" */
     expect(
-      container.querySelector(`a[href="${p}/teklif-al"]`)
+      container.querySelector(`a[href="${LH("/teklif-al", p)}"]`)
     ).toBeTruthy();
     /* Menü (page) + alt menü (category, query'li) */
     expect(
-      container.querySelector(`a[href="${p}/p/hakkimizda"]`)
+      container.querySelector(`a[href="${LH("/p/hakkimizda", p)}"]`)
     ).toBeTruthy();
     expect(
       container.querySelector(
-        `a[href="${p}/arama?villa-turleri=balayi"]`
+        `a[href="${LH("/arama?villa-turleri=balayi", p)}"]`
       )
     ).toBeTruthy();
   });
@@ -250,8 +255,8 @@ describe("Dil değiştirici hedefleri", () => {
   it("12) TR → EN / DE: aynı içeriğin locale karşılığı", () => {
     const t = getLocaleSwitchTargets("/kiralik-villa/villa-lorien");
     expect(t.tr).toBe("/kiralik-villa/villa-lorien");
-    expect(t.en).toBe("/en/kiralik-villa/villa-lorien");
-    expect(t.de).toBe("/de/kiralik-villa/villa-lorien");
+    expect(t.en).toBe("/en/villa/villa-lorien");
+    expect(t.de).toBe("/de/villa/villa-lorien");
   });
 
   it("13) EN → DE ve DE → EN: aynı sayfada kalır (mapping korunur)", () => {
@@ -264,13 +269,13 @@ describe("Dil değiştirici hedefleri", () => {
   });
 
   it("14) EN → TR: canonical TR route'una döner", () => {
-    expect(getLocaleSwitchTargets("/en/teklif-al").tr).toBe("/teklif-al");
+    expect(getLocaleSwitchTargets("/en/request-a-quote").tr).toBe("/teklif-al");
   });
 
   it("15) query korunur (mevcut /arama davranışı BOZULMADI)", () => {
     const t = getLocaleSwitchTargets("/arama", "villa-turleri=balayi&flexible=3");
-    expect(t.en).toBe("/en/arama?villa-turleri=balayi&flexible=3");
-    expect(t.de).toBe("/de/arama?villa-turleri=balayi&flexible=3");
+    expect(t.en).toBe("/en/search?villa-turleri=balayi&flexible=3");
+    expect(t.de).toBe("/de/suche?villa-turleri=balayi&flexible=3");
   });
 
   it("16) hedef, o locale'de GEÇERLİ bir route'tur (switch → yeni sayfa → locale korunur)", () => {
@@ -303,10 +308,10 @@ describe("Uçtan uca: locale seç → navigasyon → locale korunuyor", () => {
       usePathnameMock.mockReturnValue(target);
       const { container } = render(<Header menu={MENU} siteLogo={null} />);
       const p = PREFIX[to];
-      expect(container.querySelector(`a[href="${p}/teklif-al"]`)).toBeTruthy();
+      expect(container.querySelector(`a[href="${LH("/teklif-al", p)}"]`)).toBeTruthy();
 
       /* 4) Kullanıcı o linke tıklayıp gitseydi locale yine `to` olurdu. */
-      expect(localeFromPathname(`${p}/teklif-al`)).toBe(to);
+      expect(localeFromPathname(`${LH("/teklif-al", p)}`)).toBe(to);
     }
   );
 
@@ -317,19 +322,19 @@ describe("Uçtan uca: locale seç → navigasyon → locale korunuyor", () => {
         <Header menu={MENU} siteLogo={null} />
       );
       const p = PREFIX[loc];
-      expect(container.querySelector(`a[href="${p}/teklif-al"]`)).toBeTruthy();
+      expect(container.querySelector(`a[href="${LH("/teklif-al", p)}"]`)).toBeTruthy();
       unmount();
       /* İkinci render (refresh) → BİREBİR aynı sonuç (state'siz). */
       usePathnameMock.mockReturnValue(ON_PAGE[loc]);
       const again = render(<Header menu={MENU} siteLogo={null} />);
       expect(
-        again.container.querySelector(`a[href="${p}/teklif-al"]`)
+        again.container.querySelector(`a[href="${LH("/teklif-al", p)}"]`)
       ).toBeTruthy();
       again.unmount();
     }
   });
 
-  it("19) çok adımlı gezinti: /en → menü → /en/p/... → CTA → /en/teklif-al", () => {
+  it("19) çok adımlı gezinti: /en → menü → /en/p/... → CTA → /en/request-a-quote", () => {
     usePathnameMock.mockReturnValue("/en");
     const first = render(<Header menu={MENU} siteLogo={null} />);
     const menuHref = href(
@@ -341,7 +346,7 @@ describe("Uçtan uca: locale seç → navigasyon → locale korunuyor", () => {
     usePathnameMock.mockReturnValue(menuHref);
     const second = render(<Header menu={MENU} siteLogo={null} />);
     expect(
-      second.container.querySelector('a[href="/en/teklif-al"]')
+      second.container.querySelector('a[href="/en/request-a-quote"]')
     ).toBeTruthy();
     expect(localeFromPathname(menuHref)).toBe("en");
   });
@@ -396,8 +401,8 @@ const ROOT = process.cwd();
 /** Bilinçli canonical (locale prefix'i ALMAMASI GEREKEN) yerler. */
 const INTENTIONAL_CANONICAL: Record<string, string[]> = {
   /* TR-only route'ların kendi inline blokları. */
-  "app/(public)/kiralik-villa/[slug]/page.tsx": ["/arama"],
-  "app/p/[slug]/page.tsx": ["/"],
+  "app/(public)/kiralik-villa/[slug]/locale-page.tsx": ["/arama"],
+  "app/p/[slug]/locale-page.tsx": ["/"],
   /* Menü href ÜRETİCİLERİ canonical kalır — locale, Header/Footer
      render'ında `localeHref` ile uygulanır (tek kaynak korunur). */
   "lib/menu-resolver.ts": [

@@ -5,11 +5,10 @@ import type { Metadata } from "next";
 import { getCachedSettings } from "@/lib/cache.helpers";
 import {
   DEFAULT_LOCALE,
-  isMultilingualEnabled,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
+import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 
 /* ===============================================================
    🛡️ /rezervasyon-kontrol METADATA (TR / EN / DE ORTAK)
@@ -32,9 +31,7 @@ export async function buildReservationLookupMetadata(
     RESERVATION_LOOKUP_TR_PATH,
     locale
   );
-  const alternates = isMultilingualEnabled(settings)
-    ? { canonical, languages }
-    : { canonical };
+  const alternates = pickSeoAlternates(settings, canonical, languages);
 
   return {
     title: dict.metaTitle,

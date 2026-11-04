@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Heart, Sparkles, ArrowUpRight } from "lucide-react";
@@ -34,7 +35,7 @@ export default async function SharedFavoritesPageBody({
   locale?: Locale;
 }) {
   const dict = getDictionary(locale).favoritesPage;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
   const { token } = await params;
   const data = await getSharedFavoritesList(token);
   if (!data) {
@@ -201,7 +202,7 @@ export default async function SharedFavoritesPageBody({
             </div>
             <div className="flex items-center gap-3 flex-wrap shrink-0">
               <Link
-                href={`${localePrefix}/kiralik-villalar`}
+                href={localeHref(`/kiralik-villalar`, locale)}
                 className="
                   inline-flex items-center gap-2
                   px-5 py-2.5 rounded-full
@@ -217,7 +218,7 @@ export default async function SharedFavoritesPageBody({
                 <ArrowUpRight size={14} aria-hidden />
               </Link>
               <Link
-                href={`${localePrefix}/favoriler`}
+                href={localeHref(`/favoriler`, locale)}
                 className="
                   inline-flex items-center gap-2
                   px-5 py-2.5 rounded-full

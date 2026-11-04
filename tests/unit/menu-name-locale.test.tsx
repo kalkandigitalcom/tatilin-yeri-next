@@ -538,7 +538,7 @@ describe("HeaderWrapper — menü adı çevirisi", () => {
     render(await HeaderWrapper());
     for (const link of screen.getAllByRole("link", { name: "Rental Villas" })) {
       /* slug canonical TR ("kiralik-villalar") KALIR. */
-      expect(link).toHaveAttribute("href", "/en/kiralik-villalar");
+      expect(link).toHaveAttribute("href", "/en/villas-for-rent");
     }
   });
 
@@ -707,7 +707,7 @@ describe("Header (client) — nameByLocale sözleşmesi", () => {
     render(<Header menu={[ITEM]} />);
     const links = screen.getAllByRole("link", { name: "Rental Villas" });
     expect(links.length).toBeGreaterThan(0);
-    expect(links[0]).toHaveAttribute("href", "/en/kiralik-villalar");
+    expect(links[0]).toHaveAttribute("href", "/en/villas-for-rent");
     expect(links[0]).not.toHaveAttribute("href", "/kiralik-villalar");
   });
 
@@ -746,7 +746,7 @@ describe("Header (client) — nameByLocale sözleşmesi", () => {
     /* Token (`luks-villa`) ve query kontratı AYNEN; yalnız prefix. */
     expect(child).toHaveAttribute(
       "href",
-      "/en/arama?villa-turleri=luks-villa"
+      "/en/search?villa-turleri=luks-villa"
     );
   });
 });

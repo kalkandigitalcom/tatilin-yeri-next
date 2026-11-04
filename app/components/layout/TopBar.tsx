@@ -1,5 +1,6 @@
 "use client";
 
+import { localeOfPath } from "@/lib/i18n/routing/url";
 import {
   Suspense,
   useEffect,
@@ -32,9 +33,7 @@ import { useCurrency } from "@/app/context/CurrencyContext";
    Bu dropdown currency seçiciyle YALNIZ görsel/mekanik olarak
    ÖZDEŞ — state/ref/dışa-tık efekti TAMAMEN AYRI (aşağıda). */
 import {
-  isMultilingualEnabled,
-  localeFromPathname,
-  SUPPORTED_LOCALES,
+  getEnabledPublicLocales,
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
@@ -205,11 +204,15 @@ function LocaleSwitchOptions({
   label,
   onSelect,
   trHomePath,
+  locales,
 }: {
   locale: Locale;
   pathname: string | null;
   label: string;
   onSelect: () => void;
+  /* 🌐 Faz 1 — yalnız AKTİF diller (getEnabledPublicLocales). Kapalı
+     dile link üretilmez. */
+  locales: readonly Locale[];
   /* 🔄 Varsayılan dil EN/DE iken TR ana sayfanın yolu ("/tr").
      Varsayılan "tr" iken "/" gelir → davranış BYTE-IDENTICAL. */
   trHomePath: string;
@@ -227,7 +230,7 @@ function LocaleSwitchOptions({
       aria-label={label}
       className="absolute right-0 mt-2 z-50 min-w-[90px] bg-white rounded-xl border border-[var(--color-stone-100)] shadow-[0_16px_36px_-14px_rgb(11_31_58/0.35)] overflow-hidden py-1"
     >
-      {SUPPORTED_LOCALES.map((l: Locale) =>
+      {locales.map((l: Locale) =>
         l === locale ? (
           <li key={l}>
             <span
@@ -309,7 +312,7 @@ export default function TopBar() {
      tespit edilir. TopBar zaten "use client" — middleware/headers()
      gerektirmez, yeni bir cache/fetch katmanı YOK. */
   const pathname = usePathname();
-  const locale = localeFromPathname(pathname);
+  const locale = localeOfPath(pathname);
   const dictionary = getDictionary(locale);
 
   /* 🛡️ Dil seçici dropdown — currency seçiciyle (`curOpen`/`curRef`)
@@ -336,7 +339,10 @@ export default function TopBar() {
      settings null/fetch-hatası durumunu üstte fail-safe kapatıyor).
      `getLocaleSwitchTargets` yalnız switcher görünürken hesaplanır
      (gereksiz iş yok). */
-  const multilingualEnabled = isMultilingualEnabled(settings);
+  /* 🌐 Faz 1 — dil seçici yalnız ≥2 AKTİF dil varken görünür
+     (çoklu dil kapalı → tek dil → gizli; eski davranışla aynı). */
+  const enabledLocales = getEnabledPublicLocales(settings);
+  const multilingualEnabled = enabledLocales.length >= 2;
 
   /* 🔄 TR ana sayfa yolu — `settings` ZATEN yukarıda okundu, ek fetch
      YOK. Kural tek kaynaktan gelir (lib/i18n/public-home.ts, saf).
@@ -660,6 +666,7 @@ export default function TopBar() {
                   label={dictionary.common.language}
                   onSelect={() => setLangOpen(false)}
                   trHomePath={trHomeHref}
+                  locales={enabledLocales}
                 />
               </Suspense>
             )}

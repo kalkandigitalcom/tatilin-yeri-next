@@ -1,3 +1,4 @@
+import { localeHref } from "@/lib/i18n/locale-href";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -133,7 +134,7 @@ export default async function ReservationShareView({
   locale?: Locale;
 }) {
   const dict = getDictionary(locale).reservationLookup;
-  const localePrefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
   /* Locale'i tek yerde bağlayan ince sarmalayıcılar — çağrı yerleri
      (aşağıdaki `TL(...)` / `formatDate(...)`) değişmedi. */
   const TL = (v: number | null): string => formatShareAmount(v, locale);
@@ -459,7 +460,7 @@ export default async function ReservationShareView({
 
       <div className="mt-8 text-center">
         <Link
-          href={`${localePrefix}/rezervasyon-kontrol`}
+          href={localeHref(`/rezervasyon-kontrol`, locale)}
           className="text-[13px] text-[var(--color-stone-500)] hover:text-[var(--color-stone-900)] underline underline-offset-4 transition-colors"
         >
           {dict.shareLookupAgain}
