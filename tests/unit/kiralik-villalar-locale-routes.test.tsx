@@ -34,6 +34,10 @@ import { PUBLIC_SORT_LABELS } from "@/lib/pagination";
 /* ---------------- mock katmanı ---------------- */
 const requirePublicLocaleEnabledMock = vi.fn();
 const setRequestLocaleMock = vi.fn();
+const routingEnabled = vi.hoisted(() => ({ value: ["tr", "en", "de"] as string[] }));
+vi.mock("@/lib/i18n/routing/context.server", () => ({
+  primeRoutingContext: async () => ({ root: "tr", enabled: routingEnabled.value, slugs: {}, redirects: {} }),
+}));
 vi.mock("@/lib/i18n/public-locale-gate.server", () => ({
   requirePublicLocaleEnabled: () => requirePublicLocaleEnabledMock(),
 }));
@@ -62,10 +66,40 @@ vi.mock("@/app/services/exchange-rate.service", () => ({
   }),
 }));
 
-const typeNamesMock = vi.fn();
-vi.mock("@/lib/i18n/get-villa-type-translations.server", () => ({
-  getVillaTypeNamesByLocale: (ids: string[]) => typeNamesMock(ids),
+/* 🌐 Faz 6 Dalga 2 — çevrilebilir içerik (villa tipi adı, kart rozeti)
+   MERKEZİ okuma servisinden gelir. Servis burada sahte: tablo verisinden
+   Faz 3 zinciriyle çözer (istenen → ana dil TR → aktif diller). Servis
+   hata durumunda gerçek davranışı gibi BOŞ Map döner. */
+type Rows = Record<string, Record<string, Record<string, string | null>>>;
+const contentTables: Record<string, Rows> = {};
+function resolveContent(entity: string, ids: readonly string[], locale: string) {
+  const chain = [locale, "tr", "en", "de"].filter((v, i, a) => a.indexOf(v) === i);
+  const out = new Map<string, unknown>();
+  for (const id of ids) {
+    const rows = contentTables[entity]?.[id];
+    if (!rows) continue;
+    const fields = Array.from(new Set(Object.values(rows).flatMap((r) => Object.keys(r))));
+    const values: Record<string, string | null> = {};
+    const sourceLocale: Record<string, string | null> = {};
+    const missing: string[] = [];
+    for (const f of fields) {
+      const l = chain.find((c) => typeof rows[c]?.[f] === "string" && rows[c][f]!.trim() !== "");
+      values[f] = l ? rows[l][f] : null;
+      sourceLocale[f] = l ?? null;
+      if (!l) missing.push(f);
+    }
+    out.set(id, { values, sourceLocale, missing, isFallback: !rows[locale], requestedLocale: locale });
+  }
+  return out;
+}
+const contentManyMock = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", () => ({
+  getContentMany: (...a: unknown[]) => contentManyMock(...a),
+  getContent: async (e: string, id: string, l: string) =>
+    ((await contentManyMock(e, [id], l)) as Map<string, unknown>).get(id) ?? null,
 }));
+const callsFor = (entity: string) =>
+  contentManyMock.mock.calls.filter((c) => c[0] === entity) as Array<[string, string[], string]>;
 
 /* 🛡️ ADDITIVE — sidebar "Villa Özellikleri" seçenekleri `loadHeroFeatures`
    üzerinden gelir (/arama ve Hero ile AYNI action). Yalnız en alttaki
@@ -90,14 +124,11 @@ vi.mock("@/app/(public)/arama/FilterSidebar", () => ({
 }));
 
 const cardProps: Record<string, unknown>[] = [];
-/* 🛡️ Kart rozeti çevirisi — `getVillaBadgesByLocale` MOCK'lanır.
+/* (Faz 6 Dalga 2 öncesi) Kart rozeti çevirisi — `getVillaBadgesByLocale` MOCK'lanırdı;
+   artık merkezi servis (yukarıdaki contentManyMock).
    Mock'suz hâlde servis fail-soft davranıp boş Map döndüğü için
    mevcut testlerin çıktısı DEĞİŞMEZ; mock yalnız aşağıdaki rozet
    testlerini deterministik yapar. */
-const villaBadgesMock = vi.fn();
-vi.mock("@/lib/i18n/get-villa-badge-translations.server", () => ({
-  getVillaBadgesByLocale: (...a: unknown[]) => villaBadgesMock(...a),
-}));
 
 vi.mock("@/app/components/villa/VillaCard", () => ({
   default: (props: Record<string, unknown>) => {
@@ -270,86 +301,67 @@ beforeEach(() => {
   });
   cardProps.length = 0;
   requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
+  routingEnabled.value = ["tr", "en", "de"];
   villasMock.mockResolvedValue(MANY_VILLAS);
   locationsMock.mockResolvedValue(REGION_OPTIONS);
   typesMock.mockResolvedValue(TYPE_OPTIONS);
   settingsMock.mockResolvedValue({ site_name: "Tatilin Yeri" });
-  typeNamesMock.mockResolvedValue({
-    t1: { en: "Conservative Villas", de: "Konservative Villen" },
-    t2: { en: "Honeymoon Villas", de: "Flitterwochen-Villen" },
-  });
-  villaBadgesMock.mockResolvedValue(new Map());
+  for (const k of Object.keys(contentTables)) delete contentTables[k];
+  contentTables.villa_type = {
+    t1: { tr: { name: "Muhafazakar Villalar" }, en: { name: "Conservative Villas" }, de: { name: "Konservative Villen" } },
+    t2: { tr: { name: "Balayı Villaları" }, en: { name: "Honeymoon Villas" }, de: { name: "Flitterwochen-Villen" } },
+  };
+  contentTables.villa = {};
+  contentManyMock.mockImplementation(async (e: string, ids: string[], l: string) => resolveContent(e, ids, l));
 });
 
 /* ===============================================================
    A) ROUTE DAVRANIŞI
    =============================================================== */
-const LOCALE_ROUTES: Array<[string, "en" | "de"]> = [
-  ["@/app/(public)/en/kiralik-villalar/locale-page", "en"],
-  ["@/app/(public)/de/kiralik-villalar/locale-page", "de"],
-];
+/* 🌐 Faz 6 Dalga 2 — /kiralik-villalar artık TEK, dile duyarlı route
+   modülü (app/(public)/_routes/villas.tsx) + dil dispatcher'ı. Eski üç
+   `locale-page.tsx` eşdeğerlik testinden sonra kaldırıldı. Testler GERÇEK
+   dispatcher üzerinden yürür: dil kapısı = aktif dil kontrolü
+   (pasif dil → notFound), `setRequestLocale` BÜTÜN dillerde çağrılır
+   (TR istisnası yok). */
+const DISPATCHER = "@/app/(public)/[lang]/(site)/kiralik-villalar/page";
 
-describe.each(LOCALE_ROUTES)("%s", (modulePath, locale) => {
+async function dispatch(lang: "tr" | "en" | "de", sp: Promise<Record<string, string>>) {
+  const { default: Page } = await import(DISPATCHER);
+  const outer = await Page({ params: Promise.resolve({ lang }), searchParams: sp });
+  return (outer.type as (p: unknown) => { type: unknown; props: Record<string, unknown> })(outer.props);
+}
+
+describe.each(["tr", "en", "de"] as const)("kiralik-villalar dispatcher — %s", (locale) => {
   const sp = Promise.resolve({});
 
   it(`1) ORTAK KiralikVillalarPageBody'yi locale="${locale}" ile render eder`, async () => {
-    const { default: Page } = await import(modulePath);
-    const element = await Page({ searchParams: sp });
+    const element = await dispatch(locale, sp);
 
     expect(setRequestLocaleMock).toHaveBeenCalledWith(locale);
-    expect(requirePublicLocaleEnabledMock).toHaveBeenCalledTimes(1);
+    expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
     expect(element.type).toBe(KiralikVillalarPageBody);
     expect(element.props.locale).toBe(locale);
     /* searchParams AYNEN geçirilir — URL kontratı değişmedi. */
     expect(element.props.searchParams).toBe(sp);
   });
 
-  it("2) multilingual KAPALI → notFound() PROPAGATE eder", async () => {
-    requirePublicLocaleEnabledMock.mockRejectedValue(
-      new Error("NEXT_NOT_FOUND")
-    );
-    const { default: Page } = await import(modulePath);
-    await expect(Page({ searchParams: sp })).rejects.toThrow("NEXT_NOT_FOUND");
+  it("2) pasif dil → notFound() PROPAGATE eder (gövde render edilmez)", async () => {
+    routingEnabled.value = ["tr", "en", "de"].filter((l) => l !== locale);
+    await expect(dispatch(locale, sp)).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
   });
 
-  it("3) placeholder koşulsuz noindex metadata'sı KALDIRILDI, generateMetadata var", async () => {
-    const mod = await import(modulePath);
+  it("3) koşulsuz noindex `metadata` YOK, generateMetadata var ve dile göre üretir", async () => {
+    const mod = await import(DISPATCHER);
     expect(mod.metadata).toBeUndefined();
     expect(typeof mod.generateMetadata).toBe("function");
+    const meta = await mod.generateMetadata({ params: Promise.resolve({ lang: locale }), searchParams: sp });
+    expect(meta.robots).toBeUndefined();
+    expect(meta.alternates.canonical).toBe(archivePath(locale));
   });
 
-  it("4) route segment config EKLENMEDİ (TR ile aynı: dynamic/revalidate yok)", async () => {
-    const mod = await import(modulePath);
-    expect(mod.dynamic).toBeUndefined();
-    expect(mod.revalidate).toBeUndefined();
-  });
-});
-
-describe("app/(public)/kiralik-villalar/locale-page.tsx — TR", () => {
-  it("5) ORTAK gövdeyi locale='tr' ile render eder", async () => {
-    const sp = Promise.resolve({});
-    const { default: Page } = await import(
-      "@/app/(public)/kiralik-villalar/locale-page"
-    );
-    const element = await Page({ searchParams: sp });
-    expect(element.type).toBe(KiralikVillalarPageBody);
-    expect(element.props.locale).toBe("tr");
-    expect(element.props.searchParams).toBe(sp);
-  });
-
-  it("6) TR'de locale gate'i ÇAĞRILMAZ (davranış değişmedi)", async () => {
-    const { default: Page } = await import(
-      "@/app/(public)/kiralik-villalar/locale-page"
-    );
-    await Page({ searchParams: Promise.resolve({}) });
-    expect(setRequestLocaleMock).not.toHaveBeenCalled();
-    expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
-  });
-
-  it("7) TR'de de route segment config YOK (mevcut davranış korundu)", async () => {
-    const mod: Record<string, unknown> = await import(
-      "@/app/(public)/kiralik-villalar/locale-page"
-    );
+  it("4) route segment config EKLENMEDİ (dynamic/revalidate yok)", async () => {
+    const mod = await import(DISPATCHER);
     expect(mod.dynamic).toBeUndefined();
     expect(mod.revalidate).toBeUndefined();
   });
@@ -573,12 +585,11 @@ describe("FilterSidebar sözleşmesi", () => {
    F) VİLLA TİPİ ÇEVİRİSİ
    =============================================================== */
 describe("Villa tipi çevirisi", () => {
-  it("22) TR'de çeviri sorgusu HİÇ atılmaz (sorgu sayısı değişmedi)", async () => {
+  it("22) TR dahil bütün dillerde AYNI merkezi yol (TR kısayolu yok); TR adı TR satırından", async () => {
     await renderBody("tr");
-    expect(typeNamesMock).not.toHaveBeenCalled();
-    expect(sidebarProps[0].categoryOptions).toBe(
-      await typesMock.mock.results[0].value
-    );
+    expect(callsFor("villa_type")).toEqual([["villa_type", ["t1", "t2"], "tr"]]);
+    const opts = sidebarProps[0].categoryOptions as Array<{ id: string; name: string; slug: string }>;
+    expect(opts).toEqual(TYPE_OPTIONS);
   });
 
   it.each([
@@ -597,10 +608,9 @@ describe("Villa tipi çevirisi", () => {
     }
   );
 
-  it("24) TEK batch `.in()` sorgusu — N+1 YOK", async () => {
+  it("24) TEK batch merkezi okuma — N+1 YOK", async () => {
     await renderBody("en");
-    expect(typeNamesMock).toHaveBeenCalledTimes(1);
-    expect(typeNamesMock).toHaveBeenCalledWith(["t1", "t2"]);
+    expect(callsFor("villa_type")).toEqual([["villa_type", ["t1", "t2"], "en"]]);
   });
 
   it("25) CANONICAL id/slug DEĞİŞMEZ — yalnız görünen `name` çevrilir", async () => {
@@ -616,14 +626,23 @@ describe("Villa tipi çevirisi", () => {
     ]);
   });
 
-  it("26) çeviri okuması hata verirse TR canonical adına DÜŞER (sayfa çökmez)", async () => {
-    typeNamesMock.mockRejectedValue(new Error("db down"));
+  it("26) merkezi okuma hata verirse (servis boş Map döner) sayfa çökmez; seçenekler ve filtre değerleri KORUNUR, ad sözlükteki genel etiket (TR ana kolona düşülmez)", async () => {
+    contentManyMock.mockImplementation(async () => new Map());
     await renderBody("en");
-    const opts = sidebarProps[0].categoryOptions as Array<{ name: string }>;
+    const opts = sidebarProps[0].categoryOptions as Array<{ id: string; name: string; slug: string }>;
+    expect(opts.map((o) => o.id)).toEqual(["t1", "t2"]);
+    expect(opts.map((o) => o.slug)).toEqual(["muhafazakar-villalar", "balayi-villalari"]);
     expect(opts.map((o) => o.name)).toEqual([
-      "Muhafazakar Villalar",
-      "Balayı Villaları",
+      en.taxonomyLanding.categoryHeroEyebrow,
+      en.taxonomyLanding.categoryHeroEyebrow,
     ]);
+  });
+
+  it("26b) ad istenen dilde yoksa ana dil zinciri (ana dil TR)", async () => {
+    delete contentTables.villa_type.t2.de;
+    await renderBody("de");
+    const opts = sidebarProps[0].categoryOptions as Array<{ name: string }>;
+    expect(opts.map((o) => o.name)).toEqual(["Konservative Villen", "Balayı Villaları"]);
   });
 
   it("27) VillaCard `locale` prop'u alır (kart metinleri + detay linki)", async () => {
@@ -806,14 +825,18 @@ describe("F) villa rozeti locale davranışı", () => {
     { ...villa(2), badge: "Popüler" },
   ];
 
-  it("30) EN — çeviri VARSA EN rozet VillaCard'a ulaşır", async () => {
-    villasMock.mockResolvedValue(BADGED);
-    villaBadgesMock.mockResolvedValue(
-      new Map([
-        ["v1", "New"],
-        ["v2", "Popular"],
+  const badgeRows = (rows: Record<string, Record<string, string>>) => {
+    contentTables.villa = Object.fromEntries(
+      Object.entries(rows).map(([id, byLoc]) => [
+        id,
+        Object.fromEntries(Object.entries(byLoc).map(([l, badge]) => [l, { badge }])),
       ])
     );
+  };
+
+  it("30) EN — çeviri VARSA EN rozet VillaCard'a ulaşır", async () => {
+    villasMock.mockResolvedValue(BADGED);
+    badgeRows({ v1: { tr: "Yeni", en: "New" }, v2: { tr: "Popüler", en: "Popular" } });
     await renderBody("en");
 
     const badges = cardProps.map((p) => p.badge);
@@ -825,12 +848,7 @@ describe("F) villa rozeti locale davranışı", () => {
 
   it("31) DE — çeviri VARSA DE rozet VillaCard'a ulaşır", async () => {
     villasMock.mockResolvedValue(BADGED);
-    villaBadgesMock.mockResolvedValue(
-      new Map([
-        ["v1", "Neu"],
-        ["v2", "Beliebt"],
-      ])
-    );
+    badgeRows({ v1: { tr: "Yeni", de: "Neu" }, v2: { tr: "Popüler", de: "Beliebt" } });
     await renderBody("de");
 
     const badges = cardProps.map((p) => p.badge);
@@ -839,9 +857,9 @@ describe("F) villa rozeti locale davranışı", () => {
     expect(badges).not.toContain("Yeni");
   });
 
-  it("32) EN — çeviri YOKSA canonical TR rozet FALLBACK olarak kalır", async () => {
+  it("32) EN — çeviri YOKSA ana dil (TR) rozeti merkezi zincirden gelir", async () => {
     villasMock.mockResolvedValue(BADGED);
-    villaBadgesMock.mockResolvedValue(new Map());
+    badgeRows({ v1: { tr: "Yeni" }, v2: { tr: "Popüler" } });
     await renderBody("en");
 
     const badges = cardProps.map((p) => p.badge);
@@ -849,9 +867,9 @@ describe("F) villa rozeti locale davranışı", () => {
     expect(badges).toContain("Popüler");
   });
 
-  it("33) EN — KISMİ çeviri: çevrili olan çevrilir, olmayan TR kalır", async () => {
+  it("33) EN — KISMİ çeviri: çevrili olan çevrilir, olmayan ana dilden (TR) gelir", async () => {
     villasMock.mockResolvedValue(BADGED);
-    villaBadgesMock.mockResolvedValue(new Map([["v1", "New"]]));
+    badgeRows({ v1: { tr: "Yeni", en: "New" }, v2: { tr: "Popüler" } });
     await renderBody("en");
 
     const badges = cardProps.map((p) => p.badge);
@@ -859,26 +877,32 @@ describe("F) villa rozeti locale davranışı", () => {
     expect(badges).toContain("Popüler");
   });
 
-  it("34) N+1 YOK — 30 villalık sayfada rozet sorgusu TEK çağrı, TÜM id'ler TEK batch'te", async () => {
+  it("33b) rozet hiçbir aktif dilde yoksa gösterilmez — ana tablo kolonuna (villa.badge) düşülmez", async () => {
+    villasMock.mockResolvedValue(BADGED);
+    badgeRows({});
+    await renderBody("en");
+    expect(cardProps.map((p) => p.badge)).toEqual([undefined, undefined]);
+  });
+
+  it("34) N+1 YOK — 30 villalık sayfada rozet okuması TEK çağrı, TÜM id'ler TEK batch'te", async () => {
     villasMock.mockResolvedValue(MANY_VILLAS);
-    villaBadgesMock.mockResolvedValue(new Map());
     await renderBody("en");
 
-    expect(villaBadgesMock).toHaveBeenCalledTimes(1);
-    const [ids, locale] = villaBadgesMock.mock.calls[0] as [string[], string];
+    const calls = callsFor("villa");
+    expect(calls).toHaveLength(1);
+    const [, ids, locale] = calls[0];
     expect(locale).toBe("en");
-    /* Sayfadaki kart sayısı kadar id TEK dizide gider. */
     expect(Array.isArray(ids)).toBe(true);
     expect(ids.length).toBe(cardProps.length);
     expect(ids.length).toBeGreaterThan(1);
   });
 
-  it("35) TR — canonical rozet BİREBİR korunur, servis 'tr' ile çağrılır", async () => {
+  it("35) TR — rozet TR satırından, servis 'tr' ile çağrılır", async () => {
     villasMock.mockResolvedValue(BADGED);
-    villaBadgesMock.mockResolvedValue(new Map());
+    badgeRows({ v1: { tr: "Yeni" }, v2: { tr: "Popüler" } });
     await renderBody("tr");
 
-    expect(villaBadgesMock.mock.calls[0][1]).toBe("tr");
+    expect(callsFor("villa")[0][2]).toBe("tr");
     const badges = cardProps.map((p) => p.badge);
     expect(badges).toContain("Yeni");
     expect(badges).toContain("Popüler");

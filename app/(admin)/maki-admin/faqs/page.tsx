@@ -14,6 +14,8 @@ import {
 } from "./faq-translations.action";
 import { revalidateFaqs } from "@/app/services/revalidate.actions";
 import { useNotify } from "@/app/components/admin/notifications/NotificationProvider";
+import type { Locale } from "@/lib/i18n/config";
+import { ADMIN_LOCALE_LABELS } from "@/lib/i18n/content/content-admin";
 
 /* ===============================================================
    🛡️ /maki-admin/faqs — Global FAQ admin page (Faz 25)
@@ -42,22 +44,23 @@ const MAX_FAQS = 15;
 /* 🛡️ ÇOKLU DİL — EN/DE OPSİYONEL. Kaynak tablo `faq_translations`
    (migration 082, ZATEN VAR). TR alanları canonical `faqs` tablosunda
    kalır ve bu bloktan ETKİLENMEZ. */
-type WritableLocale = "en" | "de";
+/* 🌐 Faz 5 — çeviri dilleri ANA DİLE göre kurulur (ana dil TR → EN, DE;
+   ana dil EN → TR, DE …). Ana listedeki Soru/Cevap ANA DİLDİR. */
+type WritableLocale = Locale;
 
-const LOCALE_LABELS: Record<WritableLocale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
+const LOCALE_LABELS: Record<WritableLocale, string> = ADMIN_LOCALE_LABELS;
 
 const LOCALE_FIELD_LABELS: Record<
   WritableLocale,
   { question: string; answer: string }
 > = {
+  tr: { question: "Soru", answer: "Cevap" },
   en: { question: "Question", answer: "Answer" },
   de: { question: "Frage", answer: "Antwort" },
 };
 
-const EMPTY_TRANSLATIONS: Record<WritableLocale, FaqTranslationFields> = {
+const EMPTY_TRANSLATIONS: Partial<Record<WritableLocale, FaqTranslationFields>> = {
+  tr: { question: "", answer: "" },
   en: { question: "", answer: "" },
   de: { question: "", answer: "" },
 };
@@ -70,7 +73,7 @@ type FaqRow = {
   id?: string;
   question: string;
   answer: string;
-  translations: Record<WritableLocale, FaqTranslationFields>;
+  translations: Partial<Record<WritableLocale, FaqTranslationFields>>;
 };
 
 export default function FaqsAdminPage() {
@@ -83,6 +86,7 @@ export default function FaqsAdminPage() {
   const [openTranslationIdx, setOpenTranslationIdx] = useState<number | null>(
     null
   );
+  const [transLocales, setTransLocales] = useState<WritableLocale[]>(["en", "de"]);
 
   /* Initial load */
   useEffect(() => {
@@ -100,7 +104,10 @@ export default function FaqsAdminPage() {
       if (data.length > 0) {
         const res = await loadFaqTranslationsAction(data.map((d) => d.id));
         if (cancelled) return;
-        if (res.ok) translationMap = res.map;
+        if (res.ok) {
+          translationMap = res.map;
+          if (res.layout?.translations?.length) setTransLocales(res.layout.translations);
+        }
       }
 
       /* Boş tabloda 1 placeholder row aç (admin doğrudan yazsın). */
@@ -110,16 +117,15 @@ export default function FaqsAdminPage() {
               id: d.id,
               question: d.question,
               answer: d.answer,
-              translations: {
-                en: {
-                  question: translationMap[d.id]?.en?.question ?? "",
-                  answer: translationMap[d.id]?.en?.answer ?? "",
-                },
-                de: {
-                  question: translationMap[d.id]?.de?.question ?? "",
-                  answer: translationMap[d.id]?.de?.answer ?? "",
-                },
-              },
+              translations: Object.fromEntries(
+                (["tr", "en", "de"] as WritableLocale[]).map((l) => [
+                  l,
+                  {
+                    question: translationMap[d.id]?.[l]?.question ?? "",
+                    answer: translationMap[d.id]?.[l]?.answer ?? "",
+                  },
+                ])
+              ),
             }))
           : [
               {
@@ -158,7 +164,7 @@ export default function FaqsAdminPage() {
         ...row,
         translations: {
           ...row.translations,
-          [locale]: { ...row.translations[locale], [key]: value },
+          [locale]: { question: "", answer: "", ...row.translations[locale], [key]: value },
         },
       };
       return next;
@@ -217,8 +223,8 @@ export default function FaqsAdminPage() {
     for (let idx = 0; idx < nextItems.length; idx++) {
       const row = nextItems[idx];
       if (!row.id) continue;
-      for (const locale of ["en", "de"] as WritableLocale[]) {
-        const t = row.translations[locale];
+      for (const locale of transLocales) {
+        const t = row.translations[locale] ?? { question: "", answer: "" };
         const originallyHadId = !!kept[idx].id;
         /* Yeni satırda boş çeviri için gereksiz istek atma. */
         if (!t.question.trim() && !t.answer.trim() && !originallyHadId) {
@@ -397,9 +403,7 @@ export default function FaqsAdminPage() {
 
                       {openTranslationIdx === idx && (
                         <div className="mt-3 space-y-4 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg-soft)] p-3 md:p-4">
-                          {(
-                            Object.keys(LOCALE_LABELS) as WritableLocale[]
-                          ).map((locale) => (
+                          {transLocales.map((locale) => (
                             <div key={locale} className="space-y-3">
                               <p className="text-[10px] tracking-[0.16em] uppercase font-semibold text-[var(--admin-muted)]">
                                 {LOCALE_LABELS[locale]}
@@ -411,7 +415,7 @@ export default function FaqsAdminPage() {
                                 <input
                                   type="text"
                                   aria-label={`${LOCALE_LABELS[locale]} ${LOCALE_FIELD_LABELS[locale].question}`}
-                                  value={row.translations[locale].question}
+                                  value={row.translations[locale]?.question ?? ""}
                                   onChange={(e) =>
                                     updateTranslation(
                                       idx,
@@ -430,7 +434,7 @@ export default function FaqsAdminPage() {
                                 </label>
                                 <textarea
                                   aria-label={`${LOCALE_LABELS[locale]} ${LOCALE_FIELD_LABELS[locale].answer}`}
-                                  value={row.translations[locale].answer}
+                                  value={row.translations[locale]?.answer ?? ""}
                                   onChange={(e) =>
                                     updateTranslation(
                                       idx,

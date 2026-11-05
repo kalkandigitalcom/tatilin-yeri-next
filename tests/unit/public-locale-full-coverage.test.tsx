@@ -29,13 +29,10 @@ const LOCALES: Locale[] = ["tr", "en", "de"];
    1) ROUTE DOSYALARI — her public route'un TR/EN/DE karşılığı
    =============================================================== */
 
+/* 🌐 Faz 6 Dalga 3 — blog listesi ve detayı artık TEK, dile duyarlı route
+   modülü (app/(public)/_routes/blog.tsx); üç kopya kaldırıldı (aşağıda
+   ayrı kilit). Token sayfaları kopya yapısını koruyor. */
 const ROUTE_TRIPLETS: Array<[string, string, string]> = [
-  ["app/(public)/blog/locale-page.tsx", "app/(public)/en/blog/locale-page.tsx", "app/(public)/de/blog/locale-page.tsx"],
-  [
-    "app/(public)/blog/[slug]/locale-page.tsx",
-    "app/(public)/en/blog/[slug]/locale-page.tsx",
-    "app/(public)/de/blog/[slug]/locale-page.tsx",
-  ],
   [
     "app/(public)/liste/[token]/locale-page.tsx",
     "app/(public)/en/liste/[token]/locale-page.tsx",
@@ -65,10 +62,24 @@ describe("1) blog + token sayfalarının TR/EN/DE route dosyaları var", () => {
     }
   });
 
+  it("blog: tek modül her iki ortak gövdeyi dispatcher'dan gelen dille çağırır; eski kopyalar YOK", () => {
+    const mod = readFileSync(resolve(process.cwd(), "app/(public)/_routes/blog.tsx"), "utf8");
+    expect(mod).toContain("<BlogIndexPageBody locale={locale} />");
+    expect(mod).toContain("<BlogDetailPageBody params={Promise.resolve({ slug: params.slug })} locale={locale} />");
+    expect(mod).not.toMatch(/locale="(tr|en|de)"/);
+    for (const [route, key] of [["blog/page.tsx", "blog"], ["blog/[slug]/page.tsx", "blogPost"]]) {
+      const page = readFileSync(resolve(process.cwd(), `app/(public)/[lang]/(site)/${route}`), "utf8");
+      expect(page).toContain(`localeRouteFor("${key}"`);
+    }
+    for (const prefix of ["app/(public)/", "app/(public)/en/", "app/(public)/de/"]) {
+      for (const f of ["blog/locale-page.tsx", "blog/[slug]/locale-page.tsx"]) {
+        expect(existsSync(resolve(process.cwd(), prefix + f)), prefix + f).toBe(false);
+      }
+    }
+  });
+
   it("EN/DE route'ları TR ile AYNI gövdeyi kullanıyor (kopya JSX yok)", () => {
     const bodies: Record<string, string> = {
-      "blog/locale-page.tsx": "BlogIndexPageBody",
-      "blog/[slug]/locale-page.tsx": "BlogDetailPageBody",
       "liste/[token]/locale-page.tsx": "SharedListPageBody",
       "v/[token]/locale-page.tsx": "PrivateVillaPageBody",
     };
@@ -286,8 +297,7 @@ const SOURCE_LOCKED = [
   "app/components/blog/blog-metadata.ts",
   "app/components/private-villa/PrivateVillaPageBody.tsx",
   "app/components/private-villa/private-villa-metadata.ts",
-  "app/(public)/blog/locale-page.tsx",
-  "app/(public)/blog/[slug]/locale-page.tsx",
+  "app/(public)/_routes/blog.tsx",
   "app/(public)/liste/[token]/locale-page.tsx",
   "app/(public)/v/[token]/locale-page.tsx",
 ];

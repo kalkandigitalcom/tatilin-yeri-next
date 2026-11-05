@@ -24,6 +24,7 @@
 =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 /* 🛡️ PHASE 10B — GERÇEK (mock'lanmamış) dictionary. Villa detay artık
    ComingSoon yerine gerçek locale metni render ediyor; assertion'lar
@@ -32,8 +33,24 @@ import { render, screen, fireEvent } from "@testing-library/react";
    gibi ayrı testlerde zaten doğrulanıyor — burada yalnız page.tsx'in
    doğru anahtarı render ettiği kontrol ediliyor). */
 import { getDictionary } from "@/lib/i18n/get-dictionary";
+/* 🌐 Faz 6 Dalga 2 — villa detay + villa listeleme TEK, dile duyarlı route
+   modülüne taşındı (eski EN/DE `locale-page.tsx` dosyaları eşdeğerlik
+   testinden sonra kaldırıldı). Bu dosyadaki villa / arşiv testleri artık
+   GERÇEK dil dispatcher'ı (localeRouteFor) üzerinden yürür; dil kapısı
+   `requirePublicLocaleEnabled` yerine dispatcher'ın aktif dil kontrolüdür.
+   Çevrilebilir içerik MERKEZİ servisten (tablo tabanlı sahte; TR satırı
+   ana tablonun aynası — migration 107). */
+import { contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
 
 const requirePublicLocaleEnabledMock = vi.fn();
+const contentSpy = vi.fn();
+const routingState = vi.hoisted(() => ({ enabled: ["tr", "en", "de"] as string[] }));
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock((...a) => contentSpy(...a))
+);
+vi.mock("@/lib/i18n/routing/context.server", () => ({
+  primeRoutingContext: async () => ({ root: "tr", enabled: routingState.enabled, slugs: {}, redirects: {} }),
+}));
 const getVillaBySlugMock = vi.fn();
 const getVillaTranslatedDescriptionMock = vi.fn();
 /* 🛡️ PHASE 8D-2 — location/features/rules/priceIncludes/distances ham veri
@@ -285,7 +302,40 @@ beforeEach(() => {
     (_villaId: string, originalDescription: string) =>
       Promise.resolve(originalDescription)
   );
+  /* 🌐 Faz 6 Dalga 2 — merkezi içerik: TR satırı = ana tablo aynası. */
+  resetContentTables();
+  contentSpy.mockReset();
+  routingState.enabled = ["tr", "en", "de"];
+  contentTables.villa = { "test-villa-id": { tr: { description: "<p>Test villa description.</p>" } } };
 });
+
+/* 🌐 Faz 6 Dalga 2 — villa detay / arşiv sayfaları tek modülden, gerçek
+   dispatcher üzerinden. Diğer route grupları (iletişim, arama,
+   rezervasyon) kendi modüllerini AYNEN import eder. */
+type AnyEl = { type: unknown; props: Record<string, unknown> };
+type PageProps = { params?: Promise<Record<string, string>>; searchParams?: Promise<Record<string, string>> };
+type PageEl = React.ReactElement<Record<string, unknown>> & { type: unknown; props: Record<string, unknown> };
+async function pageFor(modulePath: string): Promise<(props?: PageProps) => Promise<PageEl>> {
+  const isVilla = modulePath.includes("/kiralik-villa/[slug]/");
+  const isArchive = modulePath.includes("/kiralik-villalar/");
+  if (!isVilla && !isArchive) {
+    return (await import(/* @vite-ignore */ modulePath)).default as (props?: PageProps) => Promise<PageEl>;
+  }
+  const lang = modulePath.includes("/de/") ? "de" : modulePath.includes("/en/") ? "en" : "tr";
+  const { localeRouteFor } = await import("@/lib/i18n/routing/locale-route");
+  const mod = isVilla
+    ? (await import("@/app/(public)/_routes/villa")).villaRouteModule
+    : (await import("@/app/(public)/_routes/villas")).villasRouteModule;
+  const route = localeRouteFor(isVilla ? "villa" : "villas", mod);
+  return async (props?: PageProps) => {
+    const params = { ...((await props?.params) ?? {}), lang };
+    const outer = (await route.Page({
+      params: Promise.resolve(params),
+      searchParams: props?.searchParams ?? Promise.resolve({}),
+    } as never)) as AnyEl;
+    return (await (outer.type as (p: unknown) => unknown)(outer.props)) as PageEl;
+  };
+}
 
 /* 🛡️ PHASE 6B — kiralik-villa/[slug] route'ları artık `params` (slug)
    okuyor; testte sabit bir slug ile Promise geçiriyoruz. Diğer 6 route
@@ -398,29 +448,23 @@ const ARCHIVE_GATE_ROUTES: Array<
 ];
 
 describe.each(ARCHIVE_GATE_ROUTES)("%s", (modulePath, locale, pageProps) => {
-  it(`gate geçtiğinde ortak KiralikVillalarPageBody'yi locale="${locale}" ile render eder`, async () => {
-    requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
-
-    const { default: Page } = await import(modulePath);
+  it(`aktif dilde ortak KiralikVillalarPageBody'yi locale="${locale}" ile render eder (searchParams AYNEN)`, async () => {
+    const Page = await pageFor(modulePath);
     const { default: KiralikVillalarPageBody } = await import(
       "@/app/components/search/KiralikVillalarPageBody"
     );
     const element = await Page(pageProps);
 
-    expect(requirePublicLocaleEnabledMock).toHaveBeenCalledTimes(1);
+    expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
     expect(element.type).toBe(KiralikVillalarPageBody);
     expect(element.props.locale).toBe(locale);
     expect(element.props.searchParams).toBe(pageProps.searchParams);
   });
 
-  it("gate notFound() fırlattığında sayfa bunu YUTMAZ (aynen propagate eder)", async () => {
-    requirePublicLocaleEnabledMock.mockRejectedValue(
-      new Error("NEXT_NOT_FOUND")
-    );
-
-    const { default: Page } = await import(modulePath);
-
-    await expect(Page(pageProps)).rejects.toThrow("NEXT_NOT_FOUND");
+  it("pasif dilde dispatcher notFound() fırlatır ve sayfa bunu YUTMAZ", async () => {
+    routingState.enabled = ["tr", "en", "de"].filter((l) => l !== locale);
+    const Page = await pageFor(modulePath);
+    await expect(Page(pageProps)).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
   });
 });
 
@@ -436,7 +480,7 @@ describe.each(CONTACT_GATE_ROUTES)("%s", (modulePath, locale) => {
   it(`gate geçtiğinde ortak ContactPageBody'yi locale="${locale}" ile render eder`, async () => {
     requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
 
-    const { default: Page } = await import(modulePath);
+    const Page = await pageFor(modulePath);
     const { default: ContactPageBody } = await import(
       "@/app/components/contact/ContactPageBody"
     );
@@ -452,7 +496,7 @@ describe.each(CONTACT_GATE_ROUTES)("%s", (modulePath, locale) => {
       new Error("NEXT_NOT_FOUND")
     );
 
-    const { default: Page } = await import(modulePath);
+    const Page = await pageFor(modulePath);
 
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
   });
@@ -479,7 +523,7 @@ describe.each(RESERVATION_GATE_ROUTES)(
     it(`gate geçtiğinde ortak ReservationPageBody'yi locale="${locale}" ile render eder`, async () => {
       requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const { default: ReservationPageBody } = await import(
         "@/app/components/reservation/ReservationPageBody"
       );
@@ -497,7 +541,7 @@ describe.each(RESERVATION_GATE_ROUTES)(
         new Error("NEXT_NOT_FOUND")
       );
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
 
       await expect(Page(pageProps)).rejects.toThrow("NEXT_NOT_FOUND");
     });
@@ -510,7 +554,7 @@ describe.each(RESERVATION_SUCCESS_GATE_ROUTES)(
     it(`gate geçtiğinde ortak ReservationSuccessBody'yi locale="${locale}" ile render eder`, async () => {
       requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const { default: ReservationSuccessBody } = await import(
         "@/app/components/reservation/ReservationSuccessBody"
       );
@@ -527,7 +571,7 @@ describe.each(RESERVATION_SUCCESS_GATE_ROUTES)(
         new Error("NEXT_NOT_FOUND")
       );
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
 
       await expect(Page(pageProps)).rejects.toThrow("NEXT_NOT_FOUND");
     });
@@ -538,7 +582,7 @@ describe.each(SEARCH_GATE_ROUTES)("%s", (modulePath, locale, pageProps) => {
   it(`gate geçtiğinde ortak AramaPageBody'yi locale="${locale}" ile render eder`, async () => {
     requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
 
-    const { default: Page } = await import(modulePath);
+    const Page = await pageFor(modulePath);
     const { default: AramaPageBody } = await import(
       "@/app/components/search/AramaPageBody"
     );
@@ -556,7 +600,7 @@ describe.each(SEARCH_GATE_ROUTES)("%s", (modulePath, locale, pageProps) => {
       new Error("NEXT_NOT_FOUND")
     );
 
-    const { default: Page } = await import(modulePath);
+    const Page = await pageFor(modulePath);
 
     await expect(Page(pageProps)).rejects.toThrow("NEXT_NOT_FOUND");
   });
@@ -571,14 +615,12 @@ describe.each(SEARCH_GATE_ROUTES)("%s", (modulePath, locale, pageProps) => {
 describe.each(VILLA_DETAIL_GATE_ROUTES)(
   "%s",
   (modulePath, locale, pageProps) => {
-    it(`gate geçtiğinde (multilingual_enabled=true) locale="${locale}" ile GERÇEK villa detay render eder (ComingSoon YOK)`, async () => {
-      requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
-
-      const { default: Page } = await import(modulePath);
+    it(`aktif dilde locale="${locale}" ile GERÇEK villa detay render eder (ComingSoon YOK)`, async () => {
+      const Page = await pageFor(modulePath);
       const element = await Page(pageProps);
       render(element);
 
-      expect(requirePublicLocaleEnabledMock).toHaveBeenCalledTimes(1);
+      expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
       expect(
         screen.queryByText(/this page isn't translated yet/i)
       ).not.toBeInTheDocument();
@@ -591,14 +633,12 @@ describe.each(VILLA_DETAIL_GATE_ROUTES)(
       ).toBeGreaterThan(0);
     });
 
-    it("gate notFound() fırlattığında sayfa bunu YUTMAZ (aynen propagate eder)", async () => {
-      requirePublicLocaleEnabledMock.mockRejectedValue(
-        new Error("NEXT_NOT_FOUND")
-      );
+    it("pasif dilde dispatcher notFound() fırlatır ve sayfa bunu YUTMAZ; villa okunmaz", async () => {
+      routingState.enabled = ["tr", "en", "de"].filter((l) => l !== locale);
+      const Page = await pageFor(modulePath);
 
-      const { default: Page } = await import(modulePath);
-
-      await expect(Page(pageProps)).rejects.toThrow("NEXT_NOT_FOUND");
+      await expect(Page(pageProps)).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
+      expect(getVillaBySlugMock).not.toHaveBeenCalled();
     });
   }
 );
@@ -626,11 +666,9 @@ describe.each(VILLA_DETAIL_ROUTES)(
     });
 
     it("8) çevrilmiş description CollapsibleDescription'a (sanitize edilmiş HTML olarak) geçer", async () => {
-      getVillaTranslatedDescriptionMock.mockResolvedValue(
-        `<p>Resolved ${locale} description.</p>`
-      );
+      contentTables.villa["test-villa-id"][locale] = { description: `<p>Resolved ${locale} description.</p>` };
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -639,19 +677,17 @@ describe.each(VILLA_DETAIL_ROUTES)(
       expect(
         screen.getByText(`Resolved ${locale} description.`)
       ).toBeInTheDocument();
-      expect(getVillaTranslatedDescriptionMock).toHaveBeenCalledWith(
-        "test-villa-id",
-        "<p>Test villa description.</p>",
-        locale
-      );
+      /* Merkezi servis — istenen dil, villa kimliği (teknik anahtar değil). */
+      expect(contentSpy).toHaveBeenCalledWith("villa", ["test-villa-id"], locale);
+      expect(getVillaTranslatedDescriptionMock).not.toHaveBeenCalled();
     });
 
     it("8b) sanitize mekanizması korunuyor — çeviri HTML'i içinde script/tehlikeli attribute varsa render'a SIZMAZ", async () => {
-      getVillaTranslatedDescriptionMock.mockResolvedValue(
-        '<p onclick="alert(1)">Safe text</p><script>alert(2)</script>'
-      );
+      contentTables.villa["test-villa-id"][locale] = {
+        description: '<p onclick="alert(1)">Safe text</p><script>alert(2)</script>',
+      };
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -669,10 +705,10 @@ describe.each(VILLA_DETAIL_ROUTES)(
       expect(container.innerHTML).not.toContain("onclick");
     });
 
-    it("9) resolved description boş/whitespace → locale-aware fallback (Phase 10B — artık dictionary'den, TR hardcoded metin DEĞİL)", async () => {
-      getVillaTranslatedDescriptionMock.mockResolvedValue("   ");
+    it("9) açıklama HİÇBİR aktif dilde yoksa (boş/whitespace) → locale-aware boş durum metni (sözlükten)", async () => {
+      contentTables.villa["test-villa-id"] = { tr: { description: "   " }, [locale]: { description: "   " } };
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -682,6 +718,19 @@ describe.each(VILLA_DETAIL_ROUTES)(
       expect(
         screen.getByText(dict.villa.descriptionEmpty)
       ).toBeInTheDocument();
+    });
+
+    it("9b) istenen dilde açıklama boşsa ana dil (TR) zinciri — ana tablo kolonu değil, TR satırı", async () => {
+      contentTables.villa["test-villa-id"] = { tr: { description: "<p>TR satırı.</p>" }, [locale]: { description: "  " } };
+
+      const Page = await pageFor(modulePath);
+      const element = await Page({
+        params: Promise.resolve({ slug: "test-villa" }),
+      });
+      render(element);
+
+      expect(screen.getByText("TR satırı.")).toBeInTheDocument();
+      expect(screen.queryByText("Test villa description.")).not.toBeInTheDocument();
     });
   }
 );
@@ -732,7 +781,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         return Promise.resolve(new Map());
       });
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -749,6 +798,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         expect.anything(),
         expect.anything()
       );
+      expect(contentSpy).not.toHaveBeenCalledWith("villa_location", expect.anything(), expect.anything());
     });
 
     it("11) location_id DOLU + çeviri yok → canonical villa.location gösterilir", async () => {
@@ -767,7 +817,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
       /* getTranslationsForParentsMock varsayılan (beforeEach'ten) boş Map
          döner — loc-2 için çeviri YOK. */
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -780,7 +830,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("12) location_id null ise de canonical villa.location kullanılır, çeviri sorgusu atılmaz", async () => {
       /* beforeEach'in varsayılan villa mock'u zaten location_id: null. */
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -794,21 +844,17 @@ describe.each(VILLA_DETAIL_ROUTES)(
       );
     });
 
-    it("13) features: çevirisi olan çevrilmiş isimle, olmayan orijinal TR isimle render edilir", async () => {
+    it("13) features: çevirisi olan çevrilmiş isimle, olmayan ana dil (TR) satırından render edilir", async () => {
       getVillaFeaturesByVillaMock.mockResolvedValue([
         { id: "f1", name: "Deniz Manzarası" },
         { id: "f2", name: "Havuz" },
       ]);
-      getTranslationsForParentsMock.mockImplementation((entity: string) => {
-        if (entity === "villa_feature") {
-          return Promise.resolve(
-            new Map([["f1", { name: `Sea View (${locale})` }]])
-          );
-        }
-        return Promise.resolve(new Map());
-      });
+      contentTables.villa_feature = {
+        f1: { tr: { name: "Deniz Manzarası" }, [locale]: { name: `Sea View (${locale})` } },
+        f2: { tr: { name: "Havuz" } },
+      };
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -817,23 +863,23 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
       expect(screen.getByText(`Sea View (${locale})`)).toBeInTheDocument();
       expect(screen.getByText("Havuz")).toBeInTheDocument();
+      /* Koleksiyon başına TEK merkezi okuma (N+1 yok). */
+      expect(contentSpy.mock.calls.filter((c) => c[0] === "villa_feature")).toEqual([
+        ["villa_feature", ["f1", "f2"], locale],
+      ]);
     });
 
-    it("14) rules: çevirisi olan çevrilmiş başlıkla, olmayan orijinal TR başlıkla render edilir", async () => {
+    it("14) rules: çevirisi olan çevrilmiş başlıkla, olmayan ana dil (TR) satırından render edilir", async () => {
       getRuleItemsByVillaMock.mockResolvedValue([
         { id: "r1", title: "Evcil hayvan kabul edilmez" },
         { id: "r2", title: "Sigara içilmez" },
       ]);
-      getTranslationsForParentsMock.mockImplementation((entity: string) => {
-        if (entity === "rule_item") {
-          return Promise.resolve(
-            new Map([["r1", { title: `No pets allowed (${locale})` }]])
-          );
-        }
-        return Promise.resolve(new Map());
-      });
+      contentTables.rule_item = {
+        r1: { tr: { title: "Evcil hayvan kabul edilmez" }, [locale]: { title: `No pets allowed (${locale})` } },
+        r2: { tr: { title: "Sigara içilmez" } },
+      };
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -845,21 +891,17 @@ describe.each(VILLA_DETAIL_ROUTES)(
       expect(screen.getByText("Sigara içilmez")).toBeInTheDocument();
     });
 
-    it("15) priceIncludes: çevirisi olan çevrilmiş başlıkla, olmayan orijinal TR başlıkla render edilir", async () => {
+    it("15) priceIncludes: çevirisi olan çevrilmiş başlıkla, olmayan ana dil (TR) satırından render edilir", async () => {
       getPriceIncludeItemsByVillaMock.mockResolvedValue([
         { id: "p1", title: "Temizlik dahil" },
         { id: "p2", title: "Havlu ve nevresim dahil" },
       ]);
-      getTranslationsForParentsMock.mockImplementation((entity: string) => {
-        if (entity === "price_include_item") {
-          return Promise.resolve(
-            new Map([["p1", { title: `Cleaning included (${locale})` }]])
-          );
-        }
-        return Promise.resolve(new Map());
-      });
+      contentTables.price_include_item = {
+        p1: { tr: { title: "Temizlik dahil" }, [locale]: { title: `Cleaning included (${locale})` } },
+        p2: { tr: { title: "Havlu ve nevresim dahil" } },
+      };
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -898,7 +940,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         },
       ]);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -927,6 +969,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         (call: unknown[]) => call[0] === "villa_distance"
       );
       expect(distanceCalls).toHaveLength(0);
+      expect(contentSpy.mock.calls.filter((c) => c[0] === "villa_distance")).toHaveLength(0);
     });
 
     it("16b) 🛡️ MIGRATION 090 — DB'de `villa_distance` çevirisi OLSA BİLE kullanılmaz; canonical/custom başlık davranışı değişmez", async () => {
@@ -948,7 +991,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
             : new Map()
       );
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -975,7 +1018,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         },
       ]);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -993,7 +1036,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("18) boş koleksiyonlar (distances/features/rules/priceIncludes) sayfayı ÇÖKERTMEZ, hardcoded boş-durum metinleri render edilir", async () => {
       /* beforeEach varsayılanı zaten tüm koleksiyonlar için []. */
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -1037,7 +1080,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
     it("19) PHASE 10E — AccommodationLayout EN/DE sayfasında RENDER EDİLİR", async () => {
       getVillaBySlugMock.mockResolvedValueOnce(VILLA_WITH_LAYOUT);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       const dict = getDictionary(locale);
@@ -1049,7 +1092,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
     it("20) 🛡️ PHASE 10F — oda/banyo adları SÖZLÜKTEN çevrilir (villa bazlı çeviri YOK)", async () => {
       getVillaBySlugMock.mockResolvedValueOnce(VILLA_WITH_LAYOUT);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       const dict = getDictionary(locale);
@@ -1071,7 +1114,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         ],
       });
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       expect(screen.getByText("Deniz Manzaralı Süit")).toBeInTheDocument();
@@ -1080,7 +1123,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
     it("22) 🛡️ PHASE 10F — numaralı banyo adı locale şablonundan üretilir", async () => {
       getVillaBySlugMock.mockResolvedValueOnce(VILLA_WITH_LAYOUT);
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       const dict = getDictionary(locale);
@@ -1090,7 +1133,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("23) PHASE 10E — layout YOKSA section HİÇ render edilmez", async () => {
       /* beforeEach varsayılan villa'sında layout alanı yok. */
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       const dict = getDictionary(locale);
@@ -1111,7 +1154,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         child_pool: true,
       });
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       const dict = getDictionary(locale);
@@ -1135,7 +1178,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         child_pool: false,
       });
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       const dict = getDictionary(locale);
@@ -1150,7 +1193,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
         title: "Villa Aşkım",
       });
 
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       render(await Page({ params: Promise.resolve({ slug: "test-villa" }) }));
 
       /* Title birden fazla yerde render edilir (başlık + VillaInfoBar) —
@@ -1190,7 +1233,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("19) Gallery boş-durum metni doğru locale ile render edilir (component gerçekten mount edildi)", async () => {
       const dict = getDictionary(locale);
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -1201,7 +1244,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("20) PriceList boş-durum metni doğru locale ile render edilir", async () => {
       const dict = getDictionary(locale);
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -1212,7 +1255,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("21) AvailabilityInlineCalendar doğru locale aria-label'larla render edilir", async () => {
       const dict = getDictionary(locale);
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -1228,7 +1271,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
     });
 
     it("22) JSON-LD: vacationRentalLd + breadcrumbLd 'inLanguage' alanı sayfanın locale'iyle eşleşir", async () => {
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });
@@ -1258,7 +1301,7 @@ describe.each(VILLA_DETAIL_ROUTES)(
 
     it("23) JSON-LD breadcrumb isimleri locale-aware (dict.header.home/villas + çevrilmiş title)", async () => {
       const dict = getDictionary(locale);
-      const { default: Page } = await import(modulePath);
+      const Page = await pageFor(modulePath);
       const element = await Page({
         params: Promise.resolve({ slug: "test-villa" }),
       });

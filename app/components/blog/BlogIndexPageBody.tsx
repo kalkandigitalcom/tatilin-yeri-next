@@ -20,7 +20,9 @@ import {
   type Locale,
 } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { resolveBlogListContent } from "@/lib/i18n/get-blog-translation.server";
+/* 🌐 Faz 6 Dalga 3 — liste içeriği MERKEZİ servisten, TEK batch. */
+import { loadTextContentMany } from "@/lib/i18n/content/public-text-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 
 /* ===============================================================
    🛡️ BLOG INDEX GÖVDESİ — /blog · /en/blog · /de/blog
@@ -53,8 +55,16 @@ export default async function BlogIndexPageBody({
   const dict = getDictionary(locale).blog;
   /* 🌐 Faz 2 — linkler merkezi URL üreticisinden (localeHref). */
 
-  const posts = await getBlogPosts();
-  const translated = await resolveBlogListContent(posts, locale);
+  /* Yayın filtresi + sıralama (is_active, published_at DESC) AYNEN. */
+  const allPosts = await getBlogPosts();
+  const translated = await loadTextContentMany(
+    publicContentReader,
+    "blog_post",
+    allPosts.map((p) => String(p.id)),
+    locale
+  );
+  /* İçeriği hiçbir aktif dilde olmayan yazı listede gösterilmez (detayı 404). */
+  const posts = allPosts.filter((p) => translated.has(String(p.id)));
   /* 🛡️ Kapak `?v=<R2 ETag>` versiyonları — `blog/<slug>.webp` aynı
      path'e overwrite edildiği için URL görsel değişince değişmeli. */
   const coverVersions = await getSiteAssetVersions(
@@ -87,9 +97,9 @@ export default async function BlogIndexPageBody({
                 coverVersions,
                 post.cover_image
               );
-              const content = translated.get(post.id);
-              const title = content?.title || post.title;
-              const excerpt = content?.excerpt ?? post.excerpt;
+              const content = translated.get(String(post.id))?.resolved;
+              const title = content?.title || "";
+              const excerpt = content?.excerpt ?? null;
               return (
                 <Link
                   key={post.id}

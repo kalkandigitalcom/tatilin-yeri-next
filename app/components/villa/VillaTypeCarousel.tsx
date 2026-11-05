@@ -22,8 +22,8 @@ import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { localeHref } from "@/lib/i18n/locale-href";
 import { categoryLinkHref } from "@/lib/taxonomy-landing";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { getVillaTypeNamesByLocale } from "@/lib/i18n/get-villa-type-translations.server";
-import { resolveTaxonomyName } from "@/lib/i18n/taxonomy-name.helper";
+import { loadContentLabels } from "@/lib/i18n/content/public-villa-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 
 /* ===============================================================
    🛡️ VILLA TYPE CAROUSEL — homepage "Villa Tiplerini Keşfedin"
@@ -112,14 +112,17 @@ export default async function VillaTypeCarousel({
 
   if (!types?.length) return null;
 
-  /* 🛡️ PHASE 11 — TEK batch sorgu (N+1 YOK). TR'de HİÇ çağrılmaz →
-     sorgu sayısı ve çıktı BİREBİR eskisi gibi kalır. */
-  const nameByLocale =
-    locale === DEFAULT_LOCALE
-      ? {}
-      : await getVillaTypeNamesByLocale(types.map((t) => String(t.id))).catch(
-          () => ({})
-        );
+  /* 🌐 Faz 6 Dalga 4 — kategori adları merkezi servisten, TEK batch
+     (istenen dil → ana dil → diğer aktif diller; pasif dil yok). Hiçbir
+     aktif dilde adı olmayan kategori kartı gösterilmez (eski "boş ad →
+     gizle" filtresiyle aynı sonuç). Sıra, görsel ve sayaç AYNEN. */
+  const nameById = await loadContentLabels(
+    publicContentReader,
+    "villa_type",
+    "name",
+    types.map((t) => String(t.id)),
+    locale
+  ).catch(() => new Map<string, string>());
 
   const items: Item[] = types
     .map((t) => {
@@ -145,12 +148,7 @@ export default async function VillaTypeCarousel({
       return {
         id: tid,
         slug,
-        /* Çeviri varsa o, yoksa canonical TR adı (resolveTaxonomyName). */
-        name: resolveTaxonomyName(
-          String(t.name || "").trim(),
-          nameByLocale[tid],
-          locale
-        ).trim(),
+        name: (nameById.get(tid) ?? "").trim(),
         count: covers[tid]?.villaCount ?? 0,
         coverUrl,
         show_on_homepage:

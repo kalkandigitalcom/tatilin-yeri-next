@@ -1,5 +1,6 @@
 "use client";
 
+import TechnicalKeyNote, { NewTechnicalKeyNote } from "@/app/components/admin/shared/TechnicalKeyNote";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -33,6 +34,11 @@ export type BlogFormInitial = {
   seo_title?: string | null;
   seo_description?: string | null;
   is_active?: boolean;
+  /* 🌐 Faz 5 dalga 2 — merkezi okuma: `slug` = ana dilin URL slug'ı;
+     teknik anahtar (blog_posts.slug) ayrı ve değişmez. */
+  technical_key?: string | null;
+  root_locale?: "tr" | "en" | "de";
+  slug_separated?: boolean;
 };
 
 /* TR→ASCII slugify (pages/taxonomy slug paterniyle uyumlu, inline). */
@@ -62,7 +68,7 @@ export default function BlogPostForm({
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
-  const [slugTouched, setSlugTouched] = useState(!!initial?.slug);
+  const [slugTouched, setSlugTouched] = useState(!!initial?.slug || mode === "edit");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
   const [coverPath, setCoverPath] = useState<string | null>(
@@ -78,6 +84,9 @@ export default function BlogPostForm({
     initial?.seo_description ?? ""
   );
   const [isActive, setIsActive] = useState(initial?.is_active ?? false);
+  /* 🌐 Faz 5 dalga 2 — merkezi düzenleme (GET teknik anahtarı döndürdüyse). */
+  const centralEdit = mode === "edit" && typeof initial?.technical_key === "string";
+  const slugLocked = centralEdit && (initial?.root_locale ?? "tr") === "tr" && initial?.slug_separated === false;
 
   const [coverUploading, setCoverUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,7 +98,8 @@ export default function BlogPostForm({
   };
 
   const uploadCover = async (file: File) => {
-    const s = slug.trim() || slugify(title);
+    /* Kapak yolu teknik anahtardan (dil URL slug'ı değişse de aynı dosya). */
+    const s = (initial?.technical_key ?? "").trim() || slug.trim() || slugify(title);
     if (!s) {
       toast.error("Önce başlık/slug girin", { id: "blog-cover" });
       return;
@@ -124,7 +134,7 @@ export default function BlogPostForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !slug.trim()) {
+    if (!title.trim() || (!slug.trim() && !centralEdit)) {
       toast.error("Başlık ve slug zorunlu", { id: "blog-save" });
       return;
     }
@@ -196,16 +206,29 @@ export default function BlogPostForm({
           />
         </div>
         <div className="space-y-1.5">
-          <label className={labelCls}>Slug</label>
+          <label className={labelCls}>
+            {centralEdit ? `URL slug'ı — ${(initial?.root_locale ?? "tr").toUpperCase()} (ana dil)` : "Slug"}
+          </label>
           <input
-            className="input font-mono text-sm"
+            className="input font-mono text-sm disabled:opacity-60"
             value={slug}
+            disabled={slugLocked}
             onChange={(e) => {
               setSlugTouched(true);
               setSlug(slugify(e.target.value));
             }}
-            placeholder="kasta-7-gunluk-rota"
+            placeholder={centralEdit ? initial?.technical_key ?? "" : "kasta-7-gunluk-rota"}
           />
+          {centralEdit ? (
+            <TechnicalKeyNote
+              technicalKey={initial?.technical_key ?? null}
+              rootLocale={initial?.root_locale ?? "tr"}
+              locked={slugLocked}
+              testId="blog-technical-key"
+            />
+          ) : mode === "create" ? (
+            <NewTechnicalKeyNote />
+          ) : null}
         </div>
       </div>
 

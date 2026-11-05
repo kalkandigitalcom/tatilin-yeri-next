@@ -76,11 +76,15 @@ export type PublicSitePopup = {
   dismiss: PopupDismissDuration;
   startsAt: string | null;
   endsAt: string | null;
-  /** EN/DE içerik (migration 096) — Türkçe fallback'i SERVER'da
-   *  uygulanmış hâli. Yalnız çevirisi olan diller bulunur; yoksa
-   *  o dilde yukarıdaki Türkçe alanlar gösterilir. */
-  translations: Partial<Record<PopupTranslationLocale, PopupContent>>;
+  /** Dil içerikleri — yedek SERVER'da uygulanmış hâli. Eski yol: yalnız
+   *  çevirisi olan EN/DE. 🌐 Faz 6 Dalga 4 (merkezi kural, `localeCtx`
+   *  verilince): BÜTÜN aktif diller (TR dahil). Haritada olmayan dilde
+   *  yukarıdaki Türkçe alanlar gösterilir. */
+  translations: Partial<Record<"tr" | "en" | "de", PopupContent>>;
 };
+
+/** 🌐 Faz 6 Dalga 4 — merkezi tekil kayıt kuralı için dil bağlamı. */
+export type PopupLocaleCtx = { root: "tr" | "en" | "de"; enabled: readonly ("tr" | "en" | "de")[] };
 
 /* ---------------- ÇOKLU DİL (migration 096) ----------------
    TR canonical = site_popup satırı. EN/DE `site_popup_translations`
@@ -163,7 +167,8 @@ export function popupButton(
  *  uygulanmış) varsa onu, yoksa Türkçe içeriği döner. Dil-bağımsız
  *  alanlar (görsel, sürüm, kapsam, tarih, süre) AYNEN kalır. */
 export function localizeSitePopup(popup: PublicSitePopup, locale: string): PublicSitePopup {
-  if (!isPopupTranslationLocale(locale)) return popup;
+  /* 🌐 Faz 6 Dalga 4 — merkezi haritada TR dahil her aktif dil olabilir. */
+  if (locale !== "tr" && locale !== "en" && locale !== "de") return popup;
   const content = popup.translations?.[locale];
   return content ? { ...popup, ...content } : popup;
 }
@@ -294,7 +299,8 @@ export function toPublicSitePopup(
   row: SitePopupRow | null | undefined,
   resolveImageUrl: (path: string, version: string) => string | null,
   nowMs: number = Date.now(),
-  translationRows: readonly SitePopupTranslationRow[] | null | undefined = null
+  translationRows: readonly SitePopupTranslationRow[] | null | undefined = null,
+  localeCtx: PopupLocaleCtx | null = null
 ): PublicSitePopup | null {
   if (!row || row.is_enabled !== true) return null;
   if (row.ends_at && Number.isFinite(Date.parse(row.ends_at)) && nowMs >= Date.parse(row.ends_at)) {
@@ -311,7 +317,14 @@ export function toPublicSitePopup(
   const showButton = row.show_button !== false;
   const button = popupButton(buttonText, buttonUrl, showButton);
 
-  if (!imageUrl && !title && !description && !highlight && stats.length === 0 && !button) {
+  const baseText: PopupTextFields = { title, description, highlight, stats, buttonText, buttonUrl: buttonUrl || null };
+  /* 🌐 Faz 6 Dalga 4 — merkezi kural: içerik ANA DİLİN çözümüne göre
+     tanımlıdır (ana dil TR iken eski "TR boşsa popup yok" ile birebir). */
+  const central = localeCtx ? buildPopupTranslationsCentral(baseText, showButton, translationRows, localeCtx) : null;
+  const rootContent = central?.[localeCtx!.root];
+  const isEmpty = (c: PopupContent | undefined | null) =>
+    !c || (!c.title && !c.description && !c.highlight && c.stats.length === 0 && !c.button);
+  if (central ? !imageUrl && isEmpty(rootContent) : !imageUrl && !title && !description && !highlight && stats.length === 0 && !button) {
     return null;
   }
 
@@ -327,11 +340,7 @@ export function toPublicSitePopup(
     dismiss: isPopupDismissDuration(row.dismiss_duration) ? row.dismiss_duration : "session",
     startsAt: row.starts_at,
     endsAt: row.ends_at,
-    translations: buildPopupTranslations(
-      { title, description, highlight, stats, buttonText, buttonUrl: buttonUrl || null },
-      showButton,
-      translationRows
-    ),
+    translations: central ?? buildPopupTranslations(baseText, showButton, translationRows),
   };
 }
 
@@ -346,6 +355,59 @@ export function popupTranslationText(t: SitePopupTranslationRow): PopupTextField
     buttonText: cleanPopupText(t.button_text, POPUP_LIMITS.buttonText),
     buttonUrl: isSafePopupUrl(url) ? url : null,
   };
+}
+
+/* 🌐 Faz 6 Dalga 4 — TEKİL KAYIT KURALI (public-shared-content ile aynı):
+   alan bazında a) istenen dil aktif ve doluysa o; b) ana dil satırı
+   varsa onun değeri OLDUĞU GİBİ (boş = admin bilinçli boşalttı → gizli;
+   başka dilden doldurulmaz); c) ana dil satırı yoksa diğer AKTİF
+   dillerden ilk dolu. Pasif dil hiçbir adımda kullanılmaz. TR satırı
+   çeviri tablosunda yoksa ana tablo (site_popup) TR satırıdır. */
+type PopupLocale = "tr" | "en" | "de";
+const POPUP_FIELDS = ["title", "description", "highlight", "stats", "buttonText", "buttonUrl"] as const;
+function popupFieldFilled(t: PopupTextFields, f: (typeof POPUP_FIELDS)[number]): boolean {
+  const v = t[f];
+  return Array.isArray(v) ? v.length > 0 : !!v;
+}
+export function buildPopupTranslationsCentral(
+  baseTr: PopupTextFields,
+  showButton: boolean,
+  rows: readonly SitePopupTranslationRow[] | null | undefined,
+  ctx: PopupLocaleCtx
+): Partial<Record<PopupLocale, PopupContent>> {
+  const enabled: PopupLocale[] = ctx.enabled.includes(ctx.root) ? [...ctx.enabled] : [ctx.root, ...ctx.enabled];
+  const byLocale: Partial<Record<PopupLocale, PopupTextFields>> = {};
+  for (const r of rows || []) {
+    if (r.locale === "tr" || r.locale === "en" || r.locale === "de") byLocale[r.locale] = popupTranslationText(r);
+  }
+  if (!byLocale.tr && enabled.includes("tr")) byLocale.tr = baseTr;
+  const out: Partial<Record<PopupLocale, PopupContent>> = {};
+  for (const l of enabled) {
+    const m = {} as Record<(typeof POPUP_FIELDS)[number], unknown>;
+    for (const f of POPUP_FIELDS) {
+      const own = byLocale[l];
+      if (own && popupFieldFilled(own, f)) {
+        m[f] = own[f];
+        continue;
+      }
+      const root = byLocale[ctx.root];
+      if (root) {
+        m[f] = root[f];
+        continue;
+      }
+      const other = enabled.find((x) => x !== l && x !== ctx.root && byLocale[x] && popupFieldFilled(byLocale[x]!, f));
+      m[f] = other ? byLocale[other]![f] : f === "stats" ? [] : null;
+    }
+    const t = m as unknown as PopupTextFields;
+    out[l] = {
+      title: t.title,
+      description: t.description,
+      highlight: t.highlight,
+      stats: t.stats ?? [],
+      button: popupButton(t.buttonText, t.buttonUrl, showButton),
+    };
+  }
+  return out;
 }
 
 function buildPopupTranslations(

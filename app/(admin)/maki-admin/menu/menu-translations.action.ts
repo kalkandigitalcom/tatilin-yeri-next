@@ -4,45 +4,44 @@ import {
   callerHasPermission,
   requirePermission,
 } from "@/lib/auth/action-authz";
-import {
-  getMenuTranslations,
-  upsertMenuTranslation,
-  type MenuTranslationInput,
-  type MenuTranslationsListResult,
-  type MenuTranslationResult,
-} from "@/app/services/menu-translation.service";
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
+import type { Locale } from "@/lib/i18n/config";
+import type {
+  LocaleTranslationsLoadResult,
+  LocaleTranslationsSaveResult,
+} from "@/app/components/admin/shared/LocaleTranslationsPanel";
+import {
+  loadTranslationRows,
+  saveTranslationRow,
+} from "@/app/(admin)/maki-admin/_content/simple-content.server";
 
 /* ===============================================================
-   🛡️ MENÜ ÇEVİRİ SERVER ACTION'LARI (migration 086)
+   🌐 Faz 5 — Menü adı çevirileri (ana dil DIŞINDAKİ diller)
    ===============================================================
-   `app/(admin)/maki-admin/types/type-translations.action.ts` ile
-   BİREBİR AYNI desen.
-
-   Okuma: sayfa zaten middleware ile korunuyor — ekstra auth gerekmez.
-   Yazma: `authorizeAdminSession()` İLK kontrol — yetkisiz çağrıda
-   servis/DB'ye HİÇ ulaşılmaz.
-
-   ⚠️ Bu dosya yalnız ince wrapper — iş mantığı YOK
-   (`app/services/menu-translation.service.ts`'e delege eder).
-   Mevcut menü CRUD'u (`/api/admin/menu` route handler) DEĞİŞMEDİ.
+   Okuma: requirePermission("menu"). Yazma: authorizeAdminSession +
+   callerHasPermission (eski desen) → merkezi saveContent + denetim
+   kaydı. Eski çeviri servisi yazması bu modül için KAPALI.
    =============================================================== */
+
+export type MenuTranslationInput = { menuId: string; locale: Locale; name: string };
 
 export async function loadMenuTranslationsAction(
   menuId: string
-): Promise<MenuTranslationsListResult> {
+): Promise<LocaleTranslationsLoadResult> {
   await requirePermission("menu");
-  return getMenuTranslations(menuId);
+  return loadTranslationRows("menu", menuId, ["name"]);
 }
 
 export async function saveMenuTranslationAction(
   input: MenuTranslationInput
-): Promise<MenuTranslationResult> {
+): Promise<LocaleTranslationsSaveResult> {
   const auth = await authorizeAdminSession();
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
   if (!(await callerHasPermission(auth.caller.id, "menu"))) {
     return { ok: false, error: "Yetkisiz" };
   }
-
-  return upsertMenuTranslation(input);
+  const name = (input?.name ?? "").toString();
+  return saveTranslationRow(auth.caller, "menu", input.menuId, input.locale, { name }, {
+    route: "/maki-admin/menu",
+  });
 }

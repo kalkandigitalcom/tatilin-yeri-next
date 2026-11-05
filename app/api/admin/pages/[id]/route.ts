@@ -6,6 +6,11 @@ import {
   FORBIDDEN_MESSAGE,
 } from "@/lib/auth/action-authz";
 import { pagesServerRepository } from "@/lib/db/pages.repository.server";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import {
+  overlayPageRoot,
+  updatePageCentral,
+} from "@/app/(admin)/maki-admin/pages/_content/page-content.server";
 
 /* ===============================================================
    🛡️ /api/admin/pages/[id] — PAGE DETAIL (admin-only)
@@ -84,7 +89,11 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ ok: true, data });
+  /* 🌐 Faz 5 dalga 2 — ana form ANA DİLİ düzenler. */
+  return NextResponse.json({
+    ok: true,
+    data: isContentWriteMigrated("page") ? await overlayPageRoot(data as Record<string, unknown>) : data,
+  });
 }
 
 /* ---------------- PATCH input shape ----------------
@@ -150,6 +159,19 @@ export async function PATCH(
       { ok: false, error: "Geçersiz istek" },
       { status: 400 }
     );
+  }
+
+  /* 🌐 Faz 5 dalga 2 — merkezi yazma: içerik ana dile; noindex /
+     yayın / menü / kapak aynı transaction'da ana tabloya. Teknik anahtar
+     (`pages.slug`) ve eski `content` kolonu YAZILMAZ. Gövde boşaltılırsa
+     "" yazılır → eski `content` metni geri gelmez. */
+  if (isContentWriteMigrated("page")) {
+    const r = await updatePageCentral(auth.caller, id, body as Record<string, unknown>);
+    if (!r.ok) {
+      console.error("[admin.pages.detail.patch] FAILED", r.error);
+      return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
+    }
+    return NextResponse.json({ ok: true, data: r.data });
   }
 
   const patch: Record<string, unknown> = {};

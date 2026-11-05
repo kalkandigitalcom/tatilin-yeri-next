@@ -5,11 +5,10 @@ import { revalidateTag } from "next/cache";
 import { callerHasPermission, requirePermission } from "@/lib/auth/action-authz";
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
 import {
-  getSitePopupForAdmin,
-  saveSitePopup,
-  type SitePopupAdminValues,
-  type SitePopupSaveResult,
-} from "@/app/services/site-popup.service";
+  getSitePopupForAdminCentral,
+  saveSitePopupCentral,
+  type SitePopupAdminValuesV2,
+} from "./popup-content.server";
 import { SITE_POPUP_CACHE_TAG } from "@/lib/site-popup.cache";
 
 /* ===============================================================
@@ -23,18 +22,22 @@ import { SITE_POPUP_CACHE_TAG } from "@/lib/site-popup.cache";
    (settings/menu/villa cache'leri etkilenmez).
    =============================================================== */
 
-export async function loadSitePopupAction(): Promise<SitePopupAdminValues | null> {
+/* 🌐 Faz 5 dalga 2 — popup metinleri merkezi içerik servisinden (ana form =
+   ana dil, diğer iki dil sekmelerde). Eski saveSitePopup yolu KAPALI. */
+export async function loadSitePopupAction(): Promise<SitePopupAdminValuesV2 | null> {
   await requirePermission("settings");
-  return getSitePopupForAdmin();
+  return getSitePopupForAdminCentral();
 }
 
-export async function saveSitePopupAction(input: unknown): Promise<SitePopupSaveResult> {
+export async function saveSitePopupAction(
+  input: unknown
+): Promise<{ ok: true; values: SitePopupAdminValuesV2 } | { ok: false; error: string }> {
   const auth = await authorizeAdminSession();
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
   if (!(await callerHasPermission(auth.caller.id, "settings"))) {
     return { ok: false, error: "Yetkisiz" };
   }
-  const result = await saveSitePopup(input);
+  const result = await saveSitePopupCentral(auth.caller, input);
   if (result.ok) {
     revalidateTag(SITE_POPUP_CACHE_TAG, { expire: 0 });
   }

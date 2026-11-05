@@ -1,5 +1,9 @@
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { PriceIncludeItemTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /**
  * 🛡️ PHASE 10D — Batch 1 — Fiyata Dahil (price_include_items) Çeviri Servisi
@@ -62,6 +66,11 @@ export async function getPriceIncludeTranslations(
 export async function upsertPriceIncludeTranslation(
   input: PriceIncludeTranslationInput
 ): Promise<PriceIncludeTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("price_include_item")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const includeId = (input.includeId ?? "").toString().trim();
   if (!includeId) return { ok: false, error: "Geçersiz fiyata dahil öğe" };
 

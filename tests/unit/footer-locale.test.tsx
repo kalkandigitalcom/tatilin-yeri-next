@@ -133,6 +133,24 @@ vi.mock("@/lib/db/pages.repository", () => ({
   },
 }));
 
+/* 🌐 Faz 6 Dalga 4 — FooterWrapper etiketleri merkezi servisten okur;
+   TR satırı = ana tablo adları (107 aynası), EN/DE çevirisi yok. */
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const { legacyRepoCentralMock } = await import("../fixtures/faz6/legacy-repo-central");
+  return legacyRepoCentralMock({
+    findManyForLocale: async () => ({ data: [], error: null }),
+    trRows: async () => {
+      const types = ((await findAllVillaTypesMock.getMockImplementation()?.())?.data ?? []) as { id: string; name: string }[];
+      const pages = ((await findActivePagesMock.getMockImplementation()?.())?.data ?? []) as { id: string; title: string }[];
+      return {
+        villa_type: Object.fromEntries(types.map((t) => [t.id, { name: t.name }])),
+        page: Object.fromEntries(pages.map((p) => [p.id, { title: p.title }])),
+      };
+    },
+    settings: () => getPublicSettingsMock(),
+  });
+});
+
 import FooterWrapper from "@/app/components/layout/FooterWrapper";
 
 describe("FooterWrapper — Phase 9B prop-passing (DB/service mock'lanır, gerçek DB'ye dokunulmaz)", () => {

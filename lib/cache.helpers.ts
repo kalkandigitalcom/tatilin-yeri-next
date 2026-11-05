@@ -303,6 +303,11 @@ export type HomepageCollectionVilla = {
   title: string;
   /* custom_title varsa override edilmiş ad, yoksa villa.title */
   display_title: string;
+  /* 🌐 Faz 6 Dalga 4 — koleksiyon satırı kimliği (çevrilmiş özel başlık
+     merkezi servisten bu kimlikle okunur). Ek alan; opsiyonel: alanın
+     eklenmesinden önceki cache girdilerinde yoktur → çağıran
+     `display_title`'a düşer. */
+  collection_id?: string;
   location: string;
   price: number | null;
   currency: string;
@@ -456,6 +461,7 @@ export const getCachedHomepageCollectionVillas = unstable_cache(
 
       result.push({
         id: v.id,
+        collection_id: String(r.id),
         slug: String(v.slug || ""),
         title: String(v.title || ""),
         display_title:
@@ -814,6 +820,7 @@ export const getCachedDiscountCollectionVillas = unstable_cache(
 
       result.push({
         id: v.id,
+        collection_id: String(r.id),
         slug: String(v.slug || ""),
         title: String(v.title || ""),
         display_title:

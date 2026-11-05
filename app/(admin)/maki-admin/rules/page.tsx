@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote, { MissingLocalesBadge } from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 import {
   getRuleItemsAction as getRuleItems,
@@ -109,6 +110,7 @@ export default function RulesPage() {
         <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
           Mülk kuralları
         </h1>
+        <RootLocaleNote />
         <p className="text-sm text-[var(--color-stone-500)] mt-2">
           Mülk detayında &ldquo;Kurallar&rdquo; listesi olarak gösterilir.
         </p>
@@ -164,6 +166,7 @@ export default function RulesPage() {
                   }}
                   className="input flex-1"
                 />
+                <MissingLocalesBadge missing={r.missing_locales} />
 
                 <button
                   onClick={() => handleUpdate(r.id, r.title)}

@@ -8,6 +8,8 @@ import {
 } from "@/lib/auth/action-authz";
 import { blogServerRepository } from "@/lib/db/blog.repository.server";
 import { sanitizeHtml } from "@/lib/html-sanitize";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import { createBlogCentral, localizeBlogList } from "@/app/(admin)/maki-admin/blog/blog-content.server";
 
 /* ===============================================================
    🛡️ /api/admin/blog — BLOG CRUD partial (admin-only)
@@ -53,7 +55,12 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  return NextResponse.json({ ok: true, data: data || [] });
+  /* 🌐 Faz 5 dalga 2 — liste başlığı ANA DİLİN değeri + eksik diller. */
+  const list = (data || []) as Array<{ id: string }>;
+  return NextResponse.json({
+    ok: true,
+    data: isContentWriteMigrated("blog_post") ? await localizeBlogList(list) : list,
+  });
 }
 
 /* POST — blog_posts insert. body sanitize + is_active→published_at. */
@@ -103,6 +110,21 @@ export async function POST(req: Request): Promise<NextResponse> {
       { ok: false, error: "Geçersiz istek" },
       { status: 400 }
     );
+  }
+
+  /* 🌐 Faz 5 dalga 2 — merkezi oluşturma (createContent: ana tablo +
+     ana dil içeriği tek transaction). Eski doğrudan insert KAPALI. */
+  if (isContentWriteMigrated("blog_post")) {
+    const r = await createBlogCentral(auth.caller, body as Record<string, unknown>);
+    if (!r.ok) {
+      console.error("[admin.blog.insert] FAILED", r.error);
+      return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
+    }
+    revalidatePath("/blog");
+    revalidatePath("/tr/blog");
+    revalidatePath("/en/blog");
+    revalidatePath("/de/blog");
+    return NextResponse.json({ ok: true, id: r.id });
   }
 
   const title = str(body.title);

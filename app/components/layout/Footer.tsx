@@ -28,7 +28,7 @@ import type { TaxonomyItem, CorporatePage } from "./FooterWrapper";
    riski YOK (bkz. Phase 9B audit — bu tasarımın seçilme nedeni). */
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
-import { DEFAULT_LOCALE } from "@/lib/i18n/config";
+import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { resolvePublicHome } from "@/lib/i18n/public-home";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — footer iç linkleri aktif locale'i
    taşır (bkz. lib/i18n/locale-href.ts). Dış bağlantılar (sosyal medya,
@@ -207,6 +207,10 @@ type FooterProps = {
   /** Geliştirici kredisi logosu (Admin Logo, versiyonlu URL). Yoksa
    *  "KalkanDigital" metni gösterilir. */
   developerCreditLogoUrl?: string | null;
+  /** 🌐 Faz 6 Dalga 4 — telif metni, AKTİF dil başına merkezi servisle
+   *  çözülmüş (tekil kayıt kuralı). Verilirse `settings.translations`
+   *  yolu YERİNE kullanılır. */
+  copyrightByLocale?: Partial<Record<Locale, string | null>> | null;
 };
 
 export default function Footer({
@@ -218,6 +222,7 @@ export default function Footer({
   siteName,
   phoneDigits,
   developerCreditLogoUrl = null,
+  copyrightByLocale = null,
 }: FooterProps) {
   /* Logo yüklenemezse (silinmiş/erişilemiyor) metne düş. */
   const [creditLogoFailed, setCreditLogoFailed] = useState(false);
@@ -244,12 +249,14 @@ export default function Footer({
      göre çözülür. `settings` prop'u zaten `getPublicSettings()`'ten
      geliyor; YENİ PROP EKLENMEDİ. TR'de sonuç canonical değerin
      KENDİSİDİR (aynı string referansı). */
-  const copyrightTemplate = resolveSettingsText(
-    settings?.footer_copyright,
-    settings?.translations,
-    locale,
-    "footer_copyright"
-  );
+  const copyrightTemplate = copyrightByLocale
+    ? copyrightByLocale[locale] ?? null
+    : resolveSettingsText(
+        settings?.footer_copyright,
+        settings?.translations,
+        locale,
+        "footer_copyright"
+      );
 
   return (
     <footer

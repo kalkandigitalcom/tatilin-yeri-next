@@ -515,6 +515,9 @@ export const de: Dictionary = {
     seo: {
       websiteDescription:
         "Privatpools, Meerblick und Boutique-Komfort in den schönsten Villen am Mittelmeer.",
+      metaTitleFallback: "Villenvermietung — Ein luxuriöses Villenerlebnis",
+      metaDescriptionFallback:
+        "Privatpools, Meerblick und Boutique-Komfort in den schönsten Villen am Mittelmeer. Entdecken Sie Ihren Traumurlaub.",
     },
     months: {
       1: "Januar",

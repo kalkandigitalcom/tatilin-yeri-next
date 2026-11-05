@@ -1,7 +1,12 @@
 /* ===============================================================
    🛡️ PHASE 7C — TR VILLA DETAIL generateMetadata: CANONICAL + HREFLANG
    ===============================================================
-   Hedef: app/(public)/kiralik-villa/[slug]/locale-page.tsx > generateMetadata
+   Hedef (🌐 Faz 6 Dalga 2): tek villa route modülü
+     app/(public)/_routes/villa.tsx > villaRouteMetadata (locale "tr").
+   Eski TR modülü (`(public)/kiralik-villa/[slug]/locale-page.tsx`) eşdeğerlik
+   testinden sonra kaldırıldı. Çevrilebilir alanlar (seo_title,
+   seo_description, description) artık MERKEZİ servisten; TR satırı ana
+   tablonun aynasıdır (107) → test verisi TR satırına da yazılır.
 
    Bu dosya TR sayfasının generateMetadata'sını GERÇEK modül olarak
    import eder (dynamic import) — yalnız `@/app/services/villa.service`
@@ -23,6 +28,7 @@
    =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
 
 const getVillaBySlugMock = vi.fn();
 const getCachedSettingsMock = vi.fn();
@@ -32,6 +38,10 @@ const getCachedVillaReviewStatsMock = vi.fn();
 vi.mock("@/app/services/villa.service", () => ({
   getVillaBySlug: (...args: unknown[]) => getVillaBySlugMock(...args),
 }));
+const contentSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock((...a) => contentSpy(...a))
+);
 vi.mock("@/lib/cache.helpers", () => ({
   getCachedSettings: (...args: unknown[]) => getCachedSettingsMock(...args),
   getCachedVillaReviews: (...args: unknown[]) =>
@@ -41,6 +51,8 @@ vi.mock("@/lib/cache.helpers", () => ({
 }));
 
 beforeEach(() => {
+  resetContentTables();
+  contentSpy.mockReset();
   getVillaBySlugMock.mockReset();
   getCachedSettingsMock.mockReset();
   getCachedVillaReviewsMock.mockReset();
@@ -58,16 +70,26 @@ const BASE_VILLA = {
   noindex: false,
 };
 
+/** Villa'yı sahte servise ve TR satırını (ayna) merkezi tabloya yazar. */
+function useVilla(v: (typeof BASE_VILLA & Record<string, unknown>) | null) {
+  getVillaBySlugMock.mockResolvedValue(v);
+  if (v) {
+    contentTables.villa = {
+      [v.id]: { tr: { description: v.description, seo_title: v.seo_title, seo_description: v.seo_description, badge: null } },
+    };
+  }
+}
+
 async function callGenerateMetadata(slug = "villa-in-love") {
-  const mod = await import("@/app/(public)/kiralik-villa/[slug]/locale-page");
-  return mod.generateMetadata({ params: Promise.resolve({ slug }) });
+  const { villaRouteMetadata } = await import("@/app/(public)/_routes/villa");
+  return villaRouteMetadata({ locale: "tr", params: { slug }, searchParams: Promise.resolve({}) });
 }
 
 describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () => {
   /* --- 1) TR locale canonical prefix-free --- */
   it("1) canonical prefix-free TR path'tir ('/tr' YOK)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     expect(result.alternates?.canonical).toBe("/kiralik-villa/villa-in-love");
@@ -76,7 +98,7 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
   /* --- 4) multilingual_enabled=true iken dört hreflang key'i --- */
   it("4) multilingual_enabled=true iken languages tr/en/de/x-default TAMAMI mevcut", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     const languages = result.alternates?.languages as
@@ -92,7 +114,7 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
   /* --- 5) x-default TR --- */
   it("5) x-default HER ZAMAN TR path'tir (flag true iken de)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     const languages = result.alternates?.languages as
@@ -105,7 +127,7 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
      YANLIŞLIKLA 404 URL olarak üretilmemesi --- */
   it("6) multilingual_enabled=false iken alternates'te `languages` key'i HİÇ YOK (EN/DE'ye işaret eden 404 hreflang üretilmez)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     expect(result.alternates).toEqual({
@@ -118,7 +140,7 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
 
   it("6b) getCachedSettings null/reject ederse (fail-safe) → flag false davranışıyla AYNI (languages YOK)", async () => {
     getCachedSettingsMock.mockRejectedValue(new Error("settings down"));
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     expect(
@@ -128,17 +150,26 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
   });
 
   /* --- 7) mevcut robots/noindex davranışının korunması --- */
-  it("7) villa.noindex=false → robots index:true,follow:true (ÖNCEKİ davranışla AYNI)", async () => {
+  it("7) villa.noindex=false → sayfa robots VERMEZ; kök layout politikası (settings.robots_index/follow) miras — 🌐 Faz 6 Dalga 2 bilinçli değişiklik (EN/DE ile aynı kural)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue({ ...BASE_VILLA, noindex: false });
+    useVilla({ ...BASE_VILLA, noindex: false });
 
     const result = await callGenerateMetadata();
-    expect(result.robots).toEqual({ index: true, follow: true });
+    expect(result.robots).toBeUndefined();
+  });
+
+  it("7d) hiçbir aktif dilde içerik yoksa noindex,follow (Faz 3.1 villa kuralı)", async () => {
+    getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
+    useVilla(BASE_VILLA);
+    contentTables.villa = { [BASE_VILLA.id]: { tr: { description: null, seo_title: null, seo_description: null } } };
+
+    const result = await callGenerateMetadata();
+    expect(result.robots).toEqual({ index: false, follow: true });
   });
 
   it("7b) villa.noindex=true → robots index:false,follow:false (ÖNCEKİ davranışla AYNI)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue({ ...BASE_VILLA, noindex: true });
+    useVilla({ ...BASE_VILLA, noindex: true });
 
     const result = await callGenerateMetadata();
     expect(result.robots).toEqual({ index: false, follow: false });
@@ -146,19 +177,21 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
 
   it("7c) villa bulunamazsa (null) → title 'Villa bulunamadı' + noindex (ÖNCEKİ davranışla AYNI, DEĞİŞMEDİ)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-    getVillaBySlugMock.mockResolvedValue(null);
+    useVilla(null);
 
     const result = await callGenerateMetadata("olmayan-slug");
     expect(result.title).toBe("Villa bulunamadı");
     expect(result.robots).toEqual({ index: false, follow: false });
     // Not-found dalı Phase 7C'de HİÇ dokunulmadı — alternates hâlâ yok.
     expect(result.alternates).toBeUndefined();
+    /* Kayıt yoksa merkezi içerik okunmaz. */
+    expect(contentSpy).not.toHaveBeenCalled();
   });
 
   /* --- 8) mevcut TR metadata title/description davranışının korunması --- */
   it("8) seo_title/seo_description doluysa ONLAR kullanılır (ÖNCEKİ davranış)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue({
+    useVilla({
       ...BASE_VILLA,
       seo_title: "Özel SEO Başlığı",
       seo_description: "Özel SEO açıklaması",
@@ -167,11 +200,12 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
     const result = await callGenerateMetadata();
     expect(result.title).toBe("Özel SEO Başlığı");
     expect(result.description).toBe("Özel SEO açıklaması");
+    expect(contentSpy).toHaveBeenCalledWith("villa", [BASE_VILLA.id], "tr");
   });
 
   it("8b) seo_title/seo_description boşsa villa.title + description excerpt'ine düşer (ÖNCEKİ davranış)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     expect(result.title).toBe("Villa Aşkım");
@@ -182,7 +216,7 @@ describe("TR villa detail generateMetadata — Phase 7C canonical/hreflang", () 
      dolaylı kanıtı: EN/DE canonical'ı locale='tr' çağrısı üretmez --- */
   it("ek) openGraph.url canonical ile AYNI (küçük, güvenli hizalama — Phase 7C §6)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-    getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+    useVilla(BASE_VILLA);
 
     const result = await callGenerateMetadata();
     expect(result.openGraph?.url).toBe(result.alternates?.canonical);

@@ -27,6 +27,8 @@
    =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { cmsPageFor, registerPageSource, resetTranslations, setTranslationRow } from "../fixtures/faz6/cms-adapter";
+import { resetContentTables } from "../fixtures/faz6/content-table-mock";
 import { render, screen } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
@@ -45,6 +47,26 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+/* 🌐 Faz 6 Dalga 3 — CMS route'u TEK modüle taşındı ve içerik MERKEZİ
+   servisten okunuyor (bkz. tests/fixtures/faz6/cms-adapter.ts). Eski
+   `getTranslationMock` yalnız eski `resolvePageContent` yardımcısı için
+   duruyor; route testleri çeviri satırını `setTranslationRow` ile verir. */
+const contentSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const tm = await import("../fixtures/faz6/content-table-mock");
+  const ad = await import("../fixtures/faz6/cms-adapter");
+  const base = tm.contentReadServerMock((...a) => contentSpy(...a));
+  return {
+    getContentMany: async (e: string, ids: string[], l: string) => {
+      await ad.syncPageContent();
+      return base.getContentMany(e, ids, l);
+    },
+    getContent: async (e: string, id: string, l: string) => {
+      await ad.syncPageContent();
+      return base.getContent(e, id, l);
+    },
+  };
+});
 const getPageBySlugMock = vi.fn();
 vi.mock("@/app/services/page.service", () => ({
   getPageBySlug: (...a: unknown[]) => getPageBySlugMock(...a),
@@ -147,16 +169,20 @@ const ROUTES = {
 } as const;
 
 async function renderRoute(locale: keyof typeof ROUTES) {
-  const { default: Page } = await import(ROUTES[locale]);
+  const Page = cmsPageFor(ROUTES[locale]);
   const element = await Page({ params: Promise.resolve({ slug: SLUG }) });
   render(element);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetContentTables();
+  resetTranslations();
+  contentSpy.mockReset();
+  registerPageSource(() => getPageBySlugMock.mock.results.at(-1)?.value);
   requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
   getPageBySlugMock.mockResolvedValue(TR_PAGE);
-  getTranslationMock.mockResolvedValue(null);
+  setTranslationRow(null);
 });
 
 /* ===============================================================
@@ -176,7 +202,7 @@ describe("CMS bölümleri (sections) — locale-aware render", () => {
   });
 
   it("3) EN: EN bölüm metinleri gösterilir, TR metinleri DOM'da YOK", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("en", EN_SECTIONS));
+    setTranslationRow(translationRow("en", EN_SECTIONS));
     await renderRoute("en");
     expect(screen.getByText(/unforgettable holiday in Kalkan bays/)).toBeInTheDocument();
     expect(screen.getByText(/The sea heals everything/)).toBeInTheDocument();
@@ -188,7 +214,7 @@ describe("CMS bölümleri (sections) — locale-aware render", () => {
   });
 
   it("4) DE: DE bölüm metinleri gösterilir, TR metinleri DOM'da YOK", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("de", DE_SECTIONS));
+    setTranslationRow(translationRow("de", DE_SECTIONS));
     await renderRoute("de");
     expect(screen.getByText(/unvergesslicher Urlaub in Kalkan/)).toBeInTheDocument();
     expect(screen.getByText(/Das Meer heilt alles/)).toBeInTheDocument();
@@ -204,7 +230,7 @@ describe("CMS bölümleri — canonical TR fallback", () => {
   it.each(["en", "de"] as const)(
     "5) %s: çeviri SATIRI yoksa canonical TR bölümleri gösterilir",
     async (locale) => {
-      getTranslationMock.mockResolvedValue(null);
+      setTranslationRow(null);
       await renderRoute(locale);
       expect(screen.getByText(/Kalkan koylarinda/)).toBeInTheDocument();
       expect(screen.getByAltText("Kalkan koyu manzarasi")).toBeInTheDocument();
@@ -214,7 +240,7 @@ describe("CMS bölümleri — canonical TR fallback", () => {
   it.each(["en", "de"] as const)(
     "6) %s: sections NULL ise canonical TR bölümleri gösterilir",
     async (locale) => {
-      getTranslationMock.mockResolvedValue(translationRow(locale, null));
+      setTranslationRow(translationRow(locale, null));
       await renderRoute(locale);
       expect(screen.getByText(/Kalkan koylarinda/)).toBeInTheDocument();
     }
@@ -223,7 +249,7 @@ describe("CMS bölümleri — canonical TR fallback", () => {
   it.each(["en", "de"] as const)(
     "7) %s: sections BOŞ DİZİ ise canonical TR bölümleri gösterilir",
     async (locale) => {
-      getTranslationMock.mockResolvedValue(translationRow(locale, []));
+      setTranslationRow(translationRow(locale, []));
       await renderRoute(locale);
       expect(screen.getByText(/Kalkan koylarinda/)).toBeInTheDocument();
     }
@@ -232,7 +258,7 @@ describe("CMS bölümleri — canonical TR fallback", () => {
   it.each(["en", "de"] as const)(
     "8) %s: sections BOZUK/geçersiz ise canonical TR bölümleri gösterilir",
     async (locale) => {
-      getTranslationMock.mockResolvedValue(
+      setTranslationRow(
         translationRow(locale, [{ type: "bilinmeyen", foo: 1 }, "metin", null])
       );
       await renderRoute(locale);
@@ -243,7 +269,7 @@ describe("CMS bölümleri — canonical TR fallback", () => {
   it("9) `sections` anahtarı HİÇ YOKSA (migration uygulanmamış satır) canonical", async () => {
     const row = translationRow("en", undefined) as Record<string, unknown>;
     delete row.sections;
-    getTranslationMock.mockResolvedValue(row);
+    setTranslationRow(row);
     await renderRoute("en");
     expect(screen.getByText(/Kalkan koylarinda/)).toBeInTheDocument();
   });
@@ -254,21 +280,21 @@ describe("CMS bölümleri — canonical TR fallback", () => {
    =============================================================== */
 describe("CMS bölümleri — alan bazında davranış", () => {
   it("10) image.path ÇEVRİLMEZ — asset yolu her locale'de AYNI", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("en", EN_SECTIONS));
+    setTranslationRow(translationRow("en", EN_SECTIONS));
     await renderRoute("en");
     const img = screen.getByAltText("View of Kalkan bay") as HTMLImageElement;
     expect(img.src).toContain("pages/kalkan.webp");
   });
 
   it("11) quote.author çevirisi uygulanır", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("en", EN_SECTIONS));
+    setTranslationRow(translationRow("en", EN_SECTIONS));
     await renderRoute("en");
     expect(screen.getByText(/Founding Partner/)).toBeInTheDocument();
     expect(screen.queryByText(/Kurucu Ortak/)).not.toBeInTheDocument();
   });
 
   it("12) mevcut section TİPLERİ korunur (richtext + image + quote hepsi render)", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("de", DE_SECTIONS));
+    setTranslationRow(translationRow("de", DE_SECTIONS));
     const { container } = render(<div />);
     container.remove();
     await renderRoute("de");
@@ -278,7 +304,7 @@ describe("CMS bölümleri — alan bazında davranış", () => {
   });
 
   it("13) mevcut page translation alanları (title) ÇALIŞMAYA DEVAM EDİYOR", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("en", EN_SECTIONS));
+    setTranslationRow(translationRow("en", EN_SECTIONS));
     await renderRoute("en");
     expect(
       screen.getByRole("heading", { name: "An Unforgettable Holiday" })
@@ -291,18 +317,18 @@ describe("CMS bölümleri — alan bazında davranış", () => {
    =============================================================== */
 describe("CMS bölümleri — N+1 yok", () => {
   it("14) EN: sayfa başına TEK çeviri okuması; bölüm BAŞINA sorgu YOK", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("en", EN_SECTIONS));
+    setTranslationRow(translationRow("en", EN_SECTIONS));
     await renderRoute("en");
-    /* 3 bölüm var; yine de TEK `getTranslation("page", …)` çağrısı. */
-    expect(getTranslationMock).toHaveBeenCalledTimes(1);
-    expect(getTranslationMock).toHaveBeenCalledWith("page", PAGE_ID, "en");
+    /* 3 bölüm var; yine de TEK merkezi okuma (🌐 Faz 6 Dalga 3). */
+    expect(contentSpy.mock.calls).toEqual([["page", [PAGE_ID], "en"]]);
+    expect(getTranslationMock).not.toHaveBeenCalled();
   });
 
   it("15) DE: aynı — bölüm sayısından BAĞIMSIZ tek sorgu", async () => {
-    getTranslationMock.mockResolvedValue(translationRow("de", DE_SECTIONS));
+    setTranslationRow(translationRow("de", DE_SECTIONS));
     await renderRoute("de");
-    expect(getTranslationMock).toHaveBeenCalledTimes(1);
-    expect(getTranslationMock).toHaveBeenCalledWith("page", PAGE_ID, "de");
+    expect(contentSpy.mock.calls).toEqual([["page", [PAGE_ID], "de"]]);
+    expect(getTranslationMock).not.toHaveBeenCalled();
   });
 });
 
@@ -387,15 +413,17 @@ describe("STRUCTURAL INVARIANT — pages.sections resolver zinciri", () => {
     expect(src).not.toMatch(/getTranslation\(|resolvePageContent\(/);
   });
 
-  it("21) TR/EN/DE üç route da `resolvedSections` prop'unu geçer", () => {
+  it("21) 🌐 Faz 6 Dalga 3 — tek CMS route modülü `resolvedSections` prop'unu MERKEZİ okumadan geçer; eski üç kopya YOK", () => {
+    const src = read("app/(public)/_routes/cms-page.tsx");
+    expect(src).toMatch(/resolvedSections=\{resolved\.sections\}/);
+    expect(src).toMatch(/loadTextContent\(\s*publicContentReader,\s*"page"/);
+    expect(src).not.toMatch(/resolvePageContent\(/);
     for (const rel of [
       "app/p/[slug]/locale-page.tsx",
       "app/(public)/en/p/[slug]/locale-page.tsx",
       "app/(public)/de/p/[slug]/locale-page.tsx",
     ]) {
-      const src = read(rel);
-      expect(src, rel).toMatch(/resolvedSections=\{resolved\.sections\}/);
-      expect(src, rel).toMatch(/resolvePageContent\(/);
+      expect(fs.existsSync(path.join(process.cwd(), rel)), rel).toBe(false);
     }
   });
 

@@ -185,6 +185,9 @@ export function buildOrganization(opts: {
 ---------------------------------------------- */
 export type VacationRentalInput = {
   slug: string;
+  /** 🌐 Faz 6 Dalga 2 — opsiyonel: sayfanın dile göre kanonik yolu.
+   *  Verilmezse (diğer çağıranlar) eski `/kiralik-villa/<slug>` aynen. */
+  path?: string;
   title: string;
   description?: string | null;
   images: string[];
@@ -213,7 +216,7 @@ export type VacationRentalInput = {
 };
 
 export function buildVacationRental(v: VacationRentalInput) {
-  const url = abs(`/kiralik-villa/${v.slug}`);
+  const url = abs(v.path ?? `/kiralik-villa/${v.slug}`);
   const data: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "VacationRental",
@@ -350,7 +353,9 @@ export function buildFaqJsonLd(
    🔥 ItemList — listing sayfası
 ---------------------------------------------- */
 export function buildItemList(
-  items: { slug: string; title: string; image?: string }[]
+  /* 🌐 Faz 6 Dalga 2 — `path` opsiyonel (dile göre kanonik yol);
+     verilmezse eski `/kiralik-villa/<slug>` aynen. */
+  items: { slug: string; title: string; image?: string; path?: string }[]
 ) {
   return {
     "@context": "https://schema.org",
@@ -358,7 +363,7 @@ export function buildItemList(
     itemListElement: items.map((it, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      url: abs(`/kiralik-villa/${it.slug}`),
+      url: abs(it.path ?? `/kiralik-villa/${it.slug}`),
       name: it.title,
       ...(it.image ? { image: abs(it.image) } : {}),
     })),
@@ -370,6 +375,8 @@ export function buildItemList(
 ---------------------------------------------- */
 export function buildArticle(opts: {
   slug: string;
+  /** 🌐 Faz 6 Dalga 3 — opsiyonel dile göre kanonik yol; verilmezse eski `/blog/<slug>`. */
+  path?: string;
   title: string;
   description?: string | null;
   image?: string | null;
@@ -377,7 +384,7 @@ export function buildArticle(opts: {
   dateModified?: string | null;
   author?: string | null;
 }) {
-  const canonical = abs(`/blog/${opts.slug}`);
+  const canonical = abs(opts.path ?? `/blog/${opts.slug}`);
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",

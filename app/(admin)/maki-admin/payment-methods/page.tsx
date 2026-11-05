@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminLocaleLayout } from "@/app/components/admin/shared/useAdminLocaleLayout";
+import { PAYMENT_METHOD_TR_NAME_REQUIRED } from "@/lib/i18n/content/payment-method-tr";
 import { useEffect, useState } from "react";
 /* 🛡️ Migration PB1 — client boundary: runtime payment-method.service import'u
    yerine server action. Böylece service (ve ileride native server-only repo)
@@ -23,6 +25,10 @@ export default function PaymentMethodsPage() {
   const confirm = useConfirm();
   const [items, setItems] = useState<any[]>([]);
   const [name, setName] = useState("");
+  /* 🌐 Faz 5 dalga 2 — ana dil TR değilken Türkçe ad (voucher/e-posta) zorunlu. */
+  const layout = useAdminLocaleLayout();
+  const needsTr = layout.root !== "tr";
+  const [nameTr, setNameTr] = useState("");
   const [loading, setLoading] = useState(false);
   /* 🛡️ Aynı anda YALNIZ tek satırın çeviri paneli açık (faqs/types
      ekranlarındaki AYNI davranış). */
@@ -44,10 +50,15 @@ export default function PaymentMethodsPage() {
       toast.error("İsim gerekli", { id: "payment-method-create" });
       return;
     }
+    if (needsTr && !nameTr.trim()) {
+      toast.error(PAYMENT_METHOD_TR_NAME_REQUIRED, { id: "payment-method-create" });
+      return;
+    }
     setLoading(true);
     try {
-      await createPaymentMethod({ name });
+      await createPaymentMethod(needsTr ? { name, name_tr: nameTr } : { name });
       setName("");
+      setNameTr("");
       fetchData();
       toast.success("Ödeme yöntemi eklendi", { id: "payment-method-create" });
     } catch (err) {
@@ -96,9 +107,19 @@ export default function PaymentMethodsPage() {
           className="input flex-1"
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
         />
+        {needsTr ? (
+          <input
+            placeholder="Türkçe ad (voucher / e-posta)"
+            aria-label="Türkçe ad (voucher ve e-postalar için zorunlu)"
+            value={nameTr}
+            onChange={(e) => setNameTr(e.target.value)}
+            className="input flex-1"
+            data-testid="payment-method-name-tr"
+          />
+        ) : null}
         <button
           onClick={handleAdd}
-          disabled={loading || !name}
+          disabled={loading || !name || (needsTr && !nameTr.trim())}
           className="btn-primary"
         >
           <Plus size={15} />

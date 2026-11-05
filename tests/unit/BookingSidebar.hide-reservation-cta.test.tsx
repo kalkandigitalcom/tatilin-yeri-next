@@ -94,10 +94,10 @@ describe("prop yalnız gizli link (pasif villa) için", () => {
     );
   });
 
+  /* 🌐 Faz 6 Dalga 2 — normal villa detay artık TEK modül (üç dil). */
   it.each([
-    "app/(public)/kiralik-villa/[slug]/locale-page.tsx",
-    "app/(public)/en/kiralik-villa/[slug]/locale-page.tsx",
-    "app/(public)/de/kiralik-villa/[slug]/locale-page.tsx",
+    "app/(public)/_routes/villa.tsx",
+    "app/(public)/[lang]/(site)/kiralik-villa/[slug]/page.tsx",
   ])("normal villa detay sayfası prop'u VERMEZ: %s", (rel) => {
     expect(read(rel)).not.toContain("hideReservationCta");
   });

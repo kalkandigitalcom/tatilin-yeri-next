@@ -10,6 +10,22 @@ import { LOCALE_META } from "@/lib/i18n/locale-registry";
 import { primeRoutingContext } from "@/lib/i18n/routing/context.server";
 import { ROUTE_BY_KEY, type RouteKey } from "@/lib/i18n/routing/route-registry";
 import { buildRoutePath } from "@/lib/i18n/routing/url";
+import { setRequestLocale } from "@/lib/i18n/request-locale.server";
+import { getCachedSettings } from "@/lib/cache.helpers";
+import { applySiteIndexingPolicy } from "@/lib/seo-site-policy";
+
+/* 🌐 Faz 6 Dalga 5 — site geneli indeksleme politikası (lib/seo-site-policy):
+   sayfanın kendi robots kararı, "indeksleme kapalı" ayarını ezemez.
+   Ayar okunamazsa (veya test sahtesinde yoksa) sayfa kararı AYNEN. */
+async function withSitePolicy(meta: Metadata): Promise<Metadata> {
+  let settings: Awaited<ReturnType<typeof getCachedSettings>> | null = null;
+  try {
+    settings = await getCachedSettings();
+  } catch {
+    settings = null;
+  }
+  return applySiteIndexingPolicy(meta, settings);
+}
 
 /* ===============================================================
    🌐 LOCALE ROUTE DISPATCHER — Çok Dilli Mimari Faz 2
@@ -126,8 +142,61 @@ export function localeRoute(key: RouteKey, modules: Record<Locale, LocalePageMod
           searchParams: props.searchParams,
         })
       : mod.metadata ?? {};
-    return withOpenGraphLocale(meta, r.lang, getRoutingContext().enabled);
+    return withSitePolicy(withOpenGraphLocale(meta, r.lang, getRoutingContext().enabled));
   }
 
+  return { Page, generateMetadata };
+}
+
+/* ===============================================================
+   🌐 Faz 6 Dalga 1 — TEK, DİLE DUYARLI ROUTE MODÜLÜ
+   ===============================================================
+   Üç kopya (`(public)/<tr>/…`, `(public)/en/…`, `(public)/de/…`)
+   yerine route başına TEK modül. Dispatcher aynı doğrulamayı yapar
+   (dil desteklenir + AKTİF; slug → teknik anahtar; kanonik değilse
+   308) ve modüle dili AÇIKÇA geçirir:
+     • `locale`  — sayfanın dili (TR'ye özel durum YOK),
+     • `params`  — `lang` HARİÇ route parametreleri; slug = TEKNİK ANAHTAR,
+     • `searchParams` — olduğu gibi.
+   Dil kapısı dispatcher'dadır (`ctx.enabled`): çoklu dil kapalıyken
+   yalnız ana dil açıktır — eski EN/DE modüllerindeki
+   `requirePublicLocaleEnabled` (master switch) ile ana dil için
+   yanlış 404 üretilmez. `setRequestLocale(locale)` her dil için
+   (TR dahil) dispatcher'da çağrılır.
+   =============================================================== */
+
+export type LocaleRouteProps = {
+  locale: Locale;
+  params: Record<string, string>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export type UnifiedLocalePageModule = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Page: ComponentType<LocaleRouteProps> | ((props: LocaleRouteProps) => any);
+  generateMetadata?: (props: LocaleRouteProps) => Promise<Metadata> | Metadata;
+  /** Dilden bağımsız sabit metadata yerine dile göre üretim. */
+  metadata?: (locale: Locale) => Metadata;
+};
+
+export function localeRouteFor(key: RouteKey, mod: UnifiedLocalePageModule) {
+  async function Page(props: RouteProps) {
+    const r = await prepare(key, props);
+    if (r.kind === "redirect") {
+      permanentRedirect(`${r.path}${toQuery(await props.searchParams)}`);
+    }
+    setRequestLocale(r.lang);
+    const Mod = mod.Page as ComponentType<LocaleRouteProps>;
+    return <Mod locale={r.lang} params={r.params} searchParams={props.searchParams} />;
+  }
+  async function generateMetadata(props: RouteProps): Promise<Metadata> {
+    const r = await prepare(key, props);
+    if (r.kind === "redirect") return {};
+    setRequestLocale(r.lang);
+    const meta = mod.generateMetadata
+      ? await mod.generateMetadata({ locale: r.lang, params: r.params, searchParams: props.searchParams })
+      : mod.metadata?.(r.lang) ?? {};
+    return withSitePolicy(withOpenGraphLocale(meta, r.lang, getRoutingContext().enabled));
+  }
   return { Page, generateMetadata };
 }

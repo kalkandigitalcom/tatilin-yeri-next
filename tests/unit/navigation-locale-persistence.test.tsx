@@ -400,9 +400,10 @@ const ROOT = process.cwd();
 
 /** Bilinçli canonical (locale prefix'i ALMAMASI GEREKEN) yerler. */
 const INTENTIONAL_CANONICAL: Record<string, string[]> = {
-  /* TR-only route'ların kendi inline blokları. */
-  "app/(public)/kiralik-villa/[slug]/locale-page.tsx": ["/arama"],
-  "app/p/[slug]/locale-page.tsx": ["/"],
+  /* TR-only route'ların kendi inline blokları. (🌐 Faz 6 Dalga 2: TR villa
+     detay modülü kaldırıldı; tek modül `_routes/villa.tsx` 404 bloğunda
+     `localeHref("/arama", locale)` kullanır → muafiyet GEREKMEZ.) */
+  /* (🌐 Faz 6 Dalga 3: TR CMS modülü ve onun satır içi 404 bloğu kaldırıldı.) */
   /* Menü href ÜRETİCİLERİ canonical kalır — locale, Header/Footer
      render'ında `localeHref` ile uygulanır (tek kaynak korunur). */
   "lib/menu-resolver.ts": [

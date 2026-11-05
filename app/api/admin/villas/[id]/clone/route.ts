@@ -59,7 +59,7 @@ export async function POST(
     );
   }
 
-  const result = await cloneVilla(id);
+  const result = await cloneVilla(id, { actor: auth.caller });
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, error: result.error || "Kopyalanamadı" },

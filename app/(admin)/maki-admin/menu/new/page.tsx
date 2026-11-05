@@ -12,6 +12,8 @@ import { revalidateMenu } from "@/app/services/revalidate.actions";
    yazılır (aynı server action, `/maki-admin/menu` listesindeki
    panelle PAYLAŞILIR — ikinci bir yazma yolu yaratılmadı). */
 import { saveMenuTranslationAction } from "../menu-translations.action";
+import { useAdminLocaleLayout } from "@/app/components/admin/shared/useAdminLocaleLayout";
+import type { Locale } from "@/lib/i18n/config";
 import {
   MENU_LOCALE_LABELS,
   MENU_TRANSLATION_MAX_LEN,
@@ -55,6 +57,10 @@ export default function NewMenu() {
      hiç yazılmaz; public tarafta TR adı gösterilir. Kaynağa bağlı
      türlerde de geçerlidir — bu alan menünün GÖRÜNEN ETİKETİDİR,
      kaynak kaydın kendi çevirisini değiştirmez. */
+  /* 🌐 Faz 5 — iki alan ANA DİL DIŞINDAKİ dillerdir (ana dil TR → EN,
+     DE; ana dil EN → TR, DE …). Menü adının kendisi ana dildedir. */
+  const localeLayout = useAdminLocaleLayout();
+  const [slotA, slotB] = localeLayout.translations;
   const [nameEn, setNameEn] = useState("");
   const [nameDe, setNameDe] = useState("");
 
@@ -253,9 +259,9 @@ export default function NewMenu() {
        (state'te değer kalabilir) istek ATILMAZ; servis tarafında da
        aynı kural parent ön-kontrolüyle ayrıca uygulanır. */
     if (newMenuId && sourceType === "manual") {
-      const pending: Array<{ locale: "en" | "de"; name: string }> = [];
-      if (nameEn.trim()) pending.push({ locale: "en", name: nameEn });
-      if (nameDe.trim()) pending.push({ locale: "de", name: nameDe });
+      const pending: Array<{ locale: Locale; name: string }> = [];
+      if (nameEn.trim()) pending.push({ locale: slotA, name: nameEn });
+      if (nameDe.trim()) pending.push({ locale: slotB, name: nameDe });
 
       for (const t of pending) {
         const tr = await saveMenuTranslationAction({
@@ -467,10 +473,10 @@ export default function NewMenu() {
 
           <div className="space-y-1.5">
             <label className="text-[12px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-500)] block">
-              {MENU_LOCALE_LABELS.en}
+              {MENU_LOCALE_LABELS[slotA]}
             </label>
             <input
-              aria-label={MENU_LOCALE_LABELS.en}
+              aria-label={MENU_LOCALE_LABELS[slotA]}
               placeholder="Örn: Rental Villas"
               className="input"
               maxLength={MENU_TRANSLATION_MAX_LEN}
@@ -481,10 +487,10 @@ export default function NewMenu() {
 
           <div className="space-y-1.5">
             <label className="text-[12px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-500)] block">
-              {MENU_LOCALE_LABELS.de}
+              {MENU_LOCALE_LABELS[slotB]}
             </label>
             <input
-              aria-label={MENU_LOCALE_LABELS.de}
+              aria-label={MENU_LOCALE_LABELS[slotB]}
               placeholder="Örn: Mietvillen"
               className="input"
               maxLength={MENU_TRANSLATION_MAX_LEN}
@@ -492,7 +498,7 @@ export default function NewMenu() {
               onChange={(e) => setNameDe(e.target.value)}
             />
             <p className="text-xs text-[var(--color-stone-400)]">
-              Boş bırakılan dilde Türkçe menü adı gösterilir. Bağlantı
+              Boş bırakılan dilde ana dildeki menü adı gösterilir. Bağlantı
               adresi çevrilmez.
             </p>
           </div>

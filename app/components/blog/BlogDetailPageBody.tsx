@@ -21,7 +21,9 @@ import {
    kategori, yazar ve yayın tarihi ÇEVRİLMEZ. */
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { resolveBlogContent } from "@/lib/i18n/get-blog-translation.server";
+/* 🌐 Faz 6 Dalga 3 — çevrilebilir içerik MERKEZİ servisten. */
+import { isTextContentMissing, loadTextContent } from "@/lib/i18n/content/public-text-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 import { excerptFrom } from "@/app/components/blog/blog-metadata";
 
 /* ===============================================================
@@ -47,8 +49,16 @@ export default async function BlogDetailPageBody({
   const post = await getBlogPostBySlug(slug);
   if (!post) notFound();
 
-  const resolved = await resolveBlogContent(post, locale);
-  const title = resolved.title || post.title;
+  const { content, resolved } = await loadTextContent(
+    publicContentReader,
+    "blog_post",
+    String(post.id),
+    locale
+  );
+  /* İçerik hiçbir aktif dilde yoksa 404 (Faz 3.1) — yanlış/pasif dil
+     içeriği veya teknik anahtar GÖSTERİLMEZ. */
+  if (isTextContentMissing("blog_post", content)) notFound();
+  const title = resolved.title || "";
   const excerpt = resolved.excerpt;
   const body = resolved.body;
 
@@ -61,6 +71,8 @@ export default async function BlogDetailPageBody({
 
   const articleLd = buildArticle({
     slug: post.slug,
+    /* 🌐 Faz 6 Dalga 3 — dilin kanonik yolu (dil slug'ı + önek). */
+    path: localeHref(`/blog/${post.slug}`, locale),
     title,
     description:
       resolved.seoDescription?.trim() ||

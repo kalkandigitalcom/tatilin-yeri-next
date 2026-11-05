@@ -259,15 +259,23 @@ describe("sitemap() — Phase 7D villa locale alternates", () => {
     expect(entries).toHaveLength(23);
   });
 
+  /* 🌐 Faz 6 Dalga 5 — dil kararı merkezi içerik servisinden (sayfa
+     metadata'sıyla AYNI kural); eski çeviri SQL'i kaldırıldı. */
   it("10b) gerçek çevirisi olan blog yazısı: yalnız çevrilmiş diller + doğru x-default", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
     vi.doMock("@/lib/i18n/sitemap-data.server", () => ({
       loadNoindexSlugs: async () => ({ villa: new Set(["villa-sunset"]), page: new Set(), blog: new Set() }),
-      loadTranslatedContentLocales: async () => ({
-        blog: new Map([["ilk-yazi", ["tr", "en"]]]),
-        page: new Map(),
+      loadSitemapIds: async () => ({
+        villa: new Map([["villa-in-love", "v1"], ["villa-sunset", "v2"]]),
+        blog: new Map([["ilk-yazi", "b1"]]),
       }),
     }));
+    vi.doMock("@/lib/i18n/content/public-seo-content.server", async () =>
+      (await import("../fixtures/faz6/sitemap-content")).sitemapReaderMock(() => ({
+        villa: { v1: { tr: { description: "x" } }, v2: { tr: { description: "y" } } },
+        blog_post: { b1: { tr: { title: "TR" }, en: { title: "EN" } } },
+      }))
+    );
     const entries = await runSitemap();
     const urls = entries.map((e) => e.url);
     expect(urls).toContain("https://example.com/en/blog/ilk-yazi");
@@ -285,6 +293,7 @@ describe("sitemap() — Phase 7D villa locale alternates", () => {
     /* noindex villa sitemap'e hiçbir dilde girmez. */
     expect(urls.some((u) => u.includes("villa-sunset"))).toBe(false);
     vi.doUnmock("@/lib/i18n/sitemap-data.server");
+    vi.doUnmock("@/lib/i18n/content/public-seo-content.server");
   });
 
   it("10a) `multilingual_enabled=false` → HİÇBİR entry alternates taşımaz", async () => {

@@ -1,5 +1,7 @@
 "use client";
 
+import TechnicalKeyNote from "@/app/components/admin/shared/TechnicalKeyNote";
+import RootLocaleNote from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -87,6 +89,10 @@ type PageRow = {
   /* 🛡️ MIGRATION 091 — bu ekrandan DÜZENLENMEZ (aşağıdaki "KAPSAM DIŞI"
      notu geçerli); yalnız çeviri kartına REFERANS yapı olarak geçer. */
   sections?: unknown;
+  /* 🌐 Faz 5 dalga 2 — merkezi okuma: `slug` = ana dilin URL slug'ı. */
+  technical_key?: string | null;
+  root_locale?: "tr" | "en" | "de";
+  slug_separated?: boolean;
 };
 
 export default function EditPagePage() {
@@ -134,6 +140,12 @@ export default function EditPagePage() {
 
   /* Original slug — sadece "URL değişecek" uyarısı için. */
   const [originalSlug, setOriginalSlug] = useState("");
+  /* 🌐 Faz 5 dalga 2 — teknik anahtar (değişmez) + ana dil. */
+  const [technicalKey, setTechnicalKey] = useState<string | null>(null);
+  const [rootLocale, setRootLocale] = useState<"tr" | "en" | "de">("tr");
+  const [slugSeparated, setSlugSeparated] = useState(true);
+  const centralEdit = technicalKey !== null;
+  const slugLocked = centralEdit && rootLocale === "tr" && !slugSeparated;
 
   /* 🛡️ PHASE 12C — TopBar.tsx / TypesPage ile BİREBİR AYNI fetch
      mekaniği (useEffect + cancelled guard). */
@@ -174,6 +186,9 @@ export default function EditPagePage() {
         setTitle(p.title || "");
         setSlug(p.slug || "");
         setOriginalSlug(p.slug || "");
+        setTechnicalKey(typeof p.technical_key === "string" ? p.technical_key : null);
+        setRootLocale(p.root_locale ?? "tr");
+        setSlugSeparated(p.slug_separated !== false);
         /* body / content drift: yeni sayfa formu ikisini de mirror
            olarak yazıyor; eski satırlarda biri dolu biri null olabilir. */
         setBody((p.body ?? p.content ?? "") || "");
@@ -220,7 +235,8 @@ export default function EditPagePage() {
 
   /* ----- COVER UPLOAD — new sayfasıyla BİREBİR AYNI akış ----- */
   async function handleCoverUpload(file: File) {
-    const s = slug.trim();
+    /* Kapak yolu teknik anahtardan (dil URL slug'ı değişse de aynı dosya). */
+    const s = (technicalKey ?? "").trim() || slug.trim();
     if (!s) {
       toast.error(pagesDict.form.slugRequiredFirst, { id: "page-cover" });
       return;
@@ -258,7 +274,7 @@ export default function EditPagePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !slug.trim()) {
+    if (!title.trim() || (!slug.trim() && !centralEdit)) {
       toast.error(pagesDict.toast.titleSlugRequired, { id: `page-save-${id}` });
       return;
     }
@@ -268,7 +284,9 @@ export default function EditPagePage() {
     const payload = {
       title: title.trim(),
       slug: slug.trim(),
-      body: trimmedBody.length > 0 ? trimmedBody : null,
+      /* 🌐 Faz 5 dalga 2 — merkezi yolda boşaltılan gövde "" gönderilir
+         (eski `content` metni geri gelmesin); `content` sunucuda yok sayılır. */
+      body: centralEdit ? trimmedBody : trimmedBody.length > 0 ? trimmedBody : null,
       content: trimmedBody.length > 0 ? trimmedBody : null,
       excerpt: excerpt.trim().length > 0 ? excerpt.trim() : null,
       seo_title: seoTitle.trim().length > 0 ? seoTitle.trim() : null,
@@ -382,6 +400,7 @@ export default function EditPagePage() {
           <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
             {pagesDict.form.editTitle}
           </h1>
+          <RootLocaleNote scope="form" />
           <p className="text-sm text-[var(--color-stone-500)] mt-2">
             {pagesDict.form.editSubtitle}
           </p>
@@ -423,11 +442,15 @@ export default function EditPagePage() {
                 {pagesDict.form.fieldSlug}
               </label>
               <input
-                className="input font-mono text-sm"
+                className="input font-mono text-sm disabled:opacity-60"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
-                disabled={loading}
+                disabled={loading || slugLocked}
+                placeholder={technicalKey ?? undefined}
               />
+              {centralEdit ? (
+                <TechnicalKeyNote technicalKey={technicalKey} rootLocale={rootLocale} locked={slugLocked} testId="page-technical-key" />
+              ) : null}
               <p className="text-xs text-[var(--color-stone-400)]">
                 URL: <span className="font-mono">/p/{slug || "slug"}</span>
               </p>

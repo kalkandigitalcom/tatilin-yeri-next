@@ -18,6 +18,23 @@ import { resolve } from "node:path";
 const upsertOneMock = vi.fn();
 const findAllForParentMock = vi.fn();
 
+/* 🌐 Faz 5 — bu dosya ESKİ çeviri servisinin mantığını belgeler; modül
+   merkezi içerik servisine geçtiği için eski yol üretimde KAPALI
+   (lib/i18n/content/content-write-modules.ts). Eski mantık "modül
+   taşınmamış" varsayımıyla test edilmeye devam eder; kapalılık ve yeni
+   yol tests/unit/faz5-admin-content.test.ts içinde doğrulanır. */
+const saveTranslationRowMock = vi.fn(async () => ({ ok: true, row: { locale: "en", name: "Credit Card" } }));
+const loadTranslationRowsMock = vi.fn(async () => ({ ok: true, rows: [] }));
+vi.mock("@/app/(admin)/maki-admin/_content/simple-content.server", () => ({
+  saveTranslationRow: (...a: unknown[]) => saveTranslationRowMock(...(a as [])),
+  loadTranslationRows: (...a: unknown[]) => loadTranslationRowsMock(...(a as [])),
+}));
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
+
 vi.mock("@/lib/db/translation.repository.server", () => ({
   translationRepository: {
     upsertOne: (...args: unknown[]) => upsertOneMock(...args),
@@ -219,7 +236,10 @@ describe("savePaymentMethodTranslationAction — authorizeAdminSession İLK", ()
     expect(upsertOneMock).not.toHaveBeenCalled();
   });
 
-  it("11) yetkili → servise delege eder", async () => {
+  /* 🌐 Faz 5 — eylem ESKİ translationRepository yolu yerine merkezi içerik
+     katmanına (simple-content.server → saveContent) delege eder; yetki
+     sözleşmesi AYNEN. Delege hedefi mock'lanır (aşağıda). */
+  it("11) yetkili → merkezi içerik katmanına delege eder", async () => {
     const result = await savePaymentMethodTranslationAction({
       paymentMethodId: PM_ID,
       locale: "en",
@@ -228,18 +248,22 @@ describe("savePaymentMethodTranslationAction — authorizeAdminSession İLK", ()
 
     expect(authorizeAdminSessionMock).toHaveBeenCalledTimes(1);
     expect(result.ok).toBe(true);
-    expect(upsertOneMock).toHaveBeenCalledTimes(1);
+    expect(saveTranslationRowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "admin-1" }),
+      "payment_method",
+      PM_ID,
+      "en",
+      { name: "Credit Card" },
+      expect.anything()
+    );
+    expect(upsertOneMock).not.toHaveBeenCalled(); // eski yol KULLANILMAZ
   });
 
-  /* 🛡️ DAVRANIŞ DEĞİŞİKLİĞİ (Server Action authz sprint'i): okuma
-     action'ı ARTIK "payment_methods" izni ister. Eski assertion
-     ("ekstra auth GEREKTİRMEZ") kapatılan açığı kodluyordu; gevşetilmedi,
-     TERSİNE ÇEVRİLDİ — servis çağrısı assertion'ı aynen korundu. */
-  it("12) okuma action'ı da yetki ister → yetkili admin servise delege edilir", async () => {
+  it("12) okuma action'ı da yetki ister → yetkili admin merkezi katmana delege edilir", async () => {
     await loadPaymentMethodTranslationsAction(PM_ID);
 
     expect(authorizeAdminSessionMock).toHaveBeenCalledTimes(1);
-    expect(findAllForParentMock).toHaveBeenCalledTimes(1);
+    expect(loadTranslationRowsMock).toHaveBeenCalledWith("payment_method", PM_ID, ["name"]);
   });
 });
 

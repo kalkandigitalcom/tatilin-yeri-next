@@ -43,7 +43,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const locale = toLocaleParam((await params).lang);
   const [base, settings] = await Promise.all([
-    buildRootMetadata(),
+    /* 🌐 Faz 6 Dalga 5 — miras başlık/açıklama sayfanın dilinde. */
+    buildRootMetadata(locale),
     getCachedSettings().catch(() => null),
   ]);
   const enabled = getEnabledPublicLocales(settings);

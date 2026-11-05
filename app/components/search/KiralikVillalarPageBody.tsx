@@ -56,14 +56,13 @@ import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { localeHref } from "@/lib/i18n/locale-href";
 import { buildLocaleAlternates } from "@/lib/i18n/seo-alternates";
 import type { Dictionary } from "@/lib/i18n/dictionaries/types";
-/* 🛡️ VİLLA TİPİ ADI (EN/DE) — `AramaPageBody` / `loadHeroFilters` ile
-   AYNI, ZATEN VAR OLAN iki helper. Yeni translation sistemi YAZILMADI. */
-import { getVillaTypeNamesByLocale } from "@/lib/i18n/get-villa-type-translations.server";
-import { getVillaBadgesByLocale } from "@/lib/i18n/get-villa-badge-translations.server";
+/* 🌐 Faz 6 Dalga 2 — çevrilebilir içerik (kart rozeti, kategori adı)
+   MERKEZİ okuma servisinden; TR'ye özel kısayol / TR ana kolon yedeği yok. */
 import {
-  resolveTaxonomyName,
-  type TaxonomyNameByLocale,
-} from "@/lib/i18n/taxonomy-name.helper";
+  loadContentLabels,
+  resolveCategoryName,
+} from "@/lib/i18n/content/public-villa-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 
 /* 🛡️ KART GÖRSELİ `sizes` — yalnız bu sayfanın grid'ine göre (sidebar
    md+ 260/300px; kart 1 / sm 2 / xl 3 sütun). Değerler ölçülen kart
@@ -275,7 +274,12 @@ export default async function KiralikVillalarPageBody({
      çözülür — `VillaList` / `DiscountCollection` ile AYNI desen,
      N+1 YOK. TR'de sorgu HİÇ atılmaz → TR çıktısı ve maliyeti
      BİREBİR eskisi gibi. Çeviri yoksa canonical rozet gösterilir. */
-  const badgeByVillaId = await getVillaBadgesByLocale(
+  /* 🌐 Faz 6 Dalga 2 — rozet merkezi servisten (istenen → ana dil →
+     aktif diller). Hiçbir aktif dilde yoksa rozet gösterilmez. */
+  const badgeByVillaId = await loadContentLabels(
+    publicContentReader,
+    "villa",
+    "badge",
     villasOnPage.map((v) => v.id),
     locale
   );
@@ -294,44 +298,47 @@ export default async function KiralikVillalarPageBody({
   /* ===============================================================
      🛡️ VİLLA TİPİ ADI — SIDEBAR GÖRÜNÜMÜ İÇİN LOCALE-AWARE
      ===============================================================
-     `AramaPageBody` ile BİREBİR AYNI desen:
-       • locale === "tr" → çeviri sorgusu HİÇ atılmaz; TR davranışı
-         ve sorgu sayısı BİREBİR eskisi gibi.
-       • EN/DE → `getVillaTypeNamesByLocale` (TEK batch `.in()`
-         sorgusu, N+1 YOK) + `resolveTaxonomyName` (çeviri yoksa
-         canonical TR adına düşer). Hata → `{}` → TR fallback.
+     🌐 Faz 6 Dalga 2: bütün dillerde merkezi servis (getContentMany
+     "villa_type"); TR kısayolu ve TR ana kolon yedeği kaldırıldı.
 
      ⚠️ YALNIZ GÖRÜNEN `name` değişir. Canonical id/slug/token ve
      FilterSidebar'ın ürettiği URL query değerleri DEĞİŞMEZ.
      ⚠️ BÖLGELER çevrilmez (Phase 10I: özel isim → canonical).
      =============================================================== */
-  let sidebarCategoryOptions = categoryOptions;
-  if (locale !== DEFAULT_LOCALE && categoryOptions.length > 0) {
-    const typeNameByLocale: Record<string, TaxonomyNameByLocale> =
-      await getVillaTypeNamesByLocale(
-        categoryOptions.map((t) => String(t.id))
-      ).catch(() => ({}));
-    sidebarCategoryOptions = categoryOptions.map((t) => ({
-      ...t,
-      name: resolveTaxonomyName(t.name, typeNameByLocale[String(t.id)], locale),
-    }));
-  }
+  /* 🌐 Faz 6 Dalga 2 — kategori adları merkezi servisten (bütün dillerde
+     aynı yol). Ad hiçbir aktif dilde yoksa seçenek KORUNUR (filtre
+     mantığı/değerleri değişmez), görünen ad sözlükteki genel etikettir. */
+  const categoryNames = await loadContentLabels(
+    publicContentReader,
+    "villa_type",
+    "name",
+    categoryOptions.map((t) => String(t.id)),
+    locale
+  );
+  const sidebarCategoryOptions = categoryOptions.map((t) => ({
+    ...t,
+    name: resolveCategoryName(
+      categoryNames,
+      t.id,
+      dictionary.taxonomyLanding.categoryHeroEyebrow
+    ).name,
+  }));
 
   /* ---------------- JSON-LD ---------------- */
   const breadcrumbLd = buildBreadcrumb(
     scope
       ? [
-          { name: dict.breadcrumbHome, url: "/" },
+          { name: dict.breadcrumbHome, url: localeHref("/", locale) },
           { name: dict.breadcrumbCurrent, url: archivePath(locale) },
           { name: scope.heroTitle },
         ]
       : [
-          { name: dict.breadcrumbHome, url: "/" },
+          { name: dict.breadcrumbHome, url: localeHref("/", locale) },
           { name: dict.breadcrumbCurrent },
         ],
-    /* TR'de `undefined` → JSON-LD çıktısı BYTE-IDENTICAL kalır
-       (bkz. buildBreadcrumb, Phase 7D). */
-    locale === DEFAULT_LOCALE ? undefined : locale
+    /* 🌐 Faz 6 Dalga 2 — bütün dillerde inLanguage (TR istisnası yok);
+       ana sayfa bağlantısı dilin kök yolu. */
+    locale
   );
 
   const collectionPageLd = {
@@ -357,6 +364,11 @@ export default async function KiralikVillalarPageBody({
           /* 🛡️ Faz 9 hardening: `(v: any)` → `VillaDTO`. */
           villas.map((v: PublicVillaCard) => ({
             slug: String(v.slug || ""),
+            /* 🌐 Faz 6 Dalga 2 — dile göre kanonik villa yolu. */
+            path: buildLocaleAlternates(
+              `/kiralik-villa/${String(v.slug || "")}`,
+              locale
+            ).canonical,
             title: String(v.title || ""),
             image: Array.isArray(v.images) ? v.images[0] : undefined,
           }))
@@ -483,7 +495,7 @@ export default async function KiralikVillalarPageBody({
                           price={villa.price}
                           currency={villa.currency || "TRY"}
                           images={villa.images}
-                          badge={badgeByVillaId.get(villa.id) ?? villa.badge}
+                          badge={badgeByVillaId.get(String(villa.id))}
                           bedrooms={villa.bedrooms || 1}
                           bathrooms={villa.bathrooms || 1}
                           guests={villa.guests || 2}

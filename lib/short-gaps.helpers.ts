@@ -179,3 +179,27 @@ function parseYmd(
     day: Number(match[3]),
   };
 }
+
+/* ===============================================================
+   🌐 Faz 6 Dalga 5 — SITEMAP: kısa süreli fırsat sayfaları
+   ===============================================================
+   `get_short_gap_counts` satırlarından (ana sayfa bölümüyle AYNI kaynak)
+   gerçekten içerik gösteren `/kisa-sureli-tarihler/[ay]/[gece]` TR
+   yolları: villa sayısı > 0, gece değeri geçerli ve AY SLUG'I BUGÜN
+   AYNI KOVAYA çözülüyor (slug yalnız ayı taşır; 12+ ay sonraki kova
+   bugün başka yılın sayfasını açar → listelenmez). Tekrarsız, sıralı. */
+export function shortGapSitemapPaths(
+  rows: ReadonlyArray<{ bucket_month: unknown; gap_nights: unknown; villa_count: unknown }>,
+  today: Date = new Date()
+): string[] {
+  const out = new Set<string>();
+  for (const row of rows) {
+    const bm = String(row?.bucket_month ?? "");
+    const nights = parseGapNights(String(row?.gap_nights ?? ""));
+    if (!nights || Number(row?.villa_count) <= 0) continue;
+    const slug = bucketMonthToSlug(bm);
+    if (!slug || resolveBucketMonthFromSlug(slug, today) !== bm) continue;
+    out.add(`/kisa-sureli-tarihler/${slug}/${nights}`);
+  }
+  return [...out];
+}

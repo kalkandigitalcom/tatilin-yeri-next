@@ -22,7 +22,8 @@ import SiteTrackingScripts from "@/app/components/layout/SiteTrackingScripts";
 /* 🛡️ Açılış/kampanya popup'ı (migration 095). Kapalıysa hiç render
    edilmez; aktifse hafif client loader karar verip modalı lazy yükler. */
 import SitePopupLoader from "@/app/components/layout/site-popup/SitePopupLoader";
-import { getCachedSitePopup } from "@/lib/site-popup.cache";
+import { getCachedSitePopupLocalized } from "@/lib/site-popup.cache";
+import { publicLocaleCtxFromSettings } from "@/lib/i18n/content/public-shared-content";
 /* 🌐 Faz 2 — routing bağlamı (ana dil, aktif diller, dil slug'ları):
    server'da modül bağlamı kurulur, client'a provider ile taşınır. */
 import PublicRoutingProvider from "@/app/components/i18n/PublicRoutingProvider";
@@ -95,8 +96,11 @@ export default async function PublicLayout({
   const { trHomeHref } = resolvePublicHome(settings);
 
   /* Popup — ayrı cache tag'i ("site-popup"); hata/tablo yok → null
-     (site etkilenmez). */
-  const sitePopup = await getCachedSitePopup().catch(() => null);
+     (site etkilenmez). 🌐 Faz 6 Dalga 4 — dil içerikleri merkezi tekil
+     kayıt kuralıyla, bütün AKTİF diller için (pasif dil yok). */
+  const sitePopup = await getCachedSitePopupLocalized(
+    publicLocaleCtxFromSettings(settings)
+  ).catch(() => null);
 
   return (
     <>

@@ -25,6 +25,9 @@
 
 import LocalizedSlugField from "@/app/components/admin/shared/LocalizedSlugField";
 import { useEffect, useState } from "react";
+import type { Locale } from "@/lib/i18n/config";
+import { ADMIN_LOCALE_LABELS } from "@/lib/i18n/content/content-admin";
+import { useAdminLocaleLayout } from "@/app/components/admin/shared/useAdminLocaleLayout";
 import { Languages, Loader2 } from "lucide-react";
 
 import { useNotify } from "@/app/components/admin/notifications/NotificationProvider";
@@ -33,7 +36,9 @@ import {
   saveBlogTranslationAction,
 } from "./blog-translations.action";
 
-type WritableLocale = "en" | "de";
+/* 🌐 Faz 5 dalga 2 — düzenlenen diller = ana dil DIŞINDAKİ iki dil
+   (ana dil EN ise TR de burada düzenlenir). */
+type WritableLocale = Locale;
 
 type LocaleFormState = {
   title: string;
@@ -54,10 +59,7 @@ const EMPTY_FORM: LocaleFormState = {
   seoDescription: "",
 };
 
-const LOCALE_LABELS: Record<WritableLocale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
+const LOCALE_LABELS: Record<WritableLocale, string> = ADMIN_LOCALE_LABELS;
 
 type Props = {
   postId: string;
@@ -67,12 +69,18 @@ type Props = {
 
 export default function BlogTranslationsCard({ postId, postTitle }: Props) {
   const toast = useNotify();
-
+  const layout = useAdminLocaleLayout();
+  const editable = layout.translations;
+  const rootLabel = LOCALE_LABELS[layout.root];
   const [forms, setForms] = useState<Record<WritableLocale, LocaleFormState>>({
+    tr: EMPTY_FORM,
     en: EMPTY_FORM,
     de: EMPTY_FORM,
   });
-  const [activeLocale, setActiveLocale] = useState<WritableLocale>("en");
+  const [selectedLocale, setActiveLocale] = useState<WritableLocale>(editable[0] ?? "en");
+  /* Ana dil değişince (düzen geç yüklenir) seçili sekme geçersiz kalırsa
+     ilk düzenlenebilir dile düşülür — türetilmiş değer, effect yok. */
+  const activeLocale: WritableLocale = editable.includes(selectedLocale) ? selectedLocale : editable[0];
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -96,14 +104,16 @@ export default function BlogTranslationsCard({ postId, postTitle }: Props) {
       setForms((prev) => {
         const next = { ...prev };
         for (const row of result.rows) {
-          if (row.locale !== "en" && row.locale !== "de") continue;
-          next[row.locale] = {
-            title: row.title ?? "",
-            excerpt: row.excerpt ?? "",
-            body: row.body ?? "",
-            seoTitle: row.seo_title ?? "",
-            slug: row.slug ?? "",
-            seoDescription: row.seo_description ?? "",
+          const loc = row.locale as WritableLocale;
+          if (loc !== "tr" && loc !== "en" && loc !== "de") continue;
+          const t = (v: unknown) => (typeof v === "string" ? v : "");
+          next[loc] = {
+            title: t(row.title),
+            excerpt: t(row.excerpt),
+            body: t(row.body),
+            seoTitle: t(row.seo_title),
+            slug: t(row.slug),
+            seoDescription: t(row.seo_description),
           };
         }
         return next;
@@ -155,12 +165,12 @@ export default function BlogTranslationsCard({ postId, postTitle }: Props) {
       setForms((prev) => ({
         ...prev,
         [activeLocale]: {
-          title: result.row.title ?? "",
-          excerpt: result.row.excerpt ?? "",
-          body: result.row.body ?? "",
-          seoTitle: result.row.seo_title ?? "",
-          slug: result.row.slug ?? "",
-          seoDescription: result.row.seo_description ?? "",
+          title: typeof result.row.title === "string" ? result.row.title : "",
+          excerpt: typeof result.row.excerpt === "string" ? result.row.excerpt : "",
+          body: typeof result.row.body === "string" ? result.row.body : "",
+          seoTitle: typeof result.row.seo_title === "string" ? result.row.seo_title : "",
+          slug: typeof result.row.slug === "string" ? result.row.slug : "",
+          seoDescription: typeof result.row.seo_description === "string" ? result.row.seo_description : "",
         },
       }));
 
@@ -183,13 +193,13 @@ export default function BlogTranslationsCard({ postId, postTitle }: Props) {
         <div>
           <p className="eyebrow">Çok Dilli İçerik</p>
           <h2 className="text-lg font-semibold text-[var(--color-stone-900)]">
-            Çeviriler (EN / DE)
+            Çeviriler ({editable.map((l) => l.toUpperCase()).join(" / ")})
           </h2>
           <p className="mt-1 text-sm text-[var(--color-stone-500)]">
-            Bu alanlar yalnızca İngilizce ve Almanca sürümler içindir. Türkçe
-            içerik buradan düzenlenemez; boş bırakılan alanlar public tarafta
-            Türkçe içeriğe geri döner. Slug, kapak görseli ve kategori
-            çevrilmez.
+            Bu alanlar {editable.map((l) => LOCALE_LABELS[l]).join(" ve ")} sürümleri
+            içindir. Ana dil ({rootLabel}) yukarıdaki formdan düzenlenir; boş
+            bırakılan alanlar public tarafta ana dil içeriğine geri döner. Her dilin
+            kendi URL slug&apos;ı vardır; kapak görseli ve kategori çevrilmez.
           </p>
         </div>
       </header>
@@ -197,7 +207,7 @@ export default function BlogTranslationsCard({ postId, postTitle }: Props) {
       {postTitle ? (
         <div>
           <p className="text-[11px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-400)]">
-            Türkçe (referans, salt okunur)
+            {rootLabel} (ana dil — referans, salt okunur)
           </p>
           <p className="text-sm text-[var(--color-stone-600)] mt-1">
             {postTitle}
@@ -206,7 +216,7 @@ export default function BlogTranslationsCard({ postId, postTitle }: Props) {
       ) : null}
 
       <div className="flex gap-2">
-        {(Object.keys(LOCALE_LABELS) as WritableLocale[]).map((locale) => (
+        {editable.map((locale) => (
           <button
             key={locale}
             type="button"

@@ -1,13 +1,9 @@
-import { localeRoute } from "@/lib/i18n/routing/locale-route";
-import * as tr from "@/app/(public)/locale-page";
-import * as en from "@/app/(public)/en/locale-page";
-import * as de from "@/app/(public)/de/locale-page";
+import { localeRouteFor } from "@/lib/i18n/routing/locale-route";
+import { homeRouteModule } from "@/app/(public)/_routes/home";
 
-/* 🌐 Faz 2 — dil dispatcher'ı (route anahtarı: "home").
-   Public URL'ler dile göre değişir (lib/i18n/routing/route-registry.ts);
-   proxy bu iç yola rewrite eder. Sayfa içeriği her dilin MEVCUT
-   modülündedir (locale-page.tsx) ve değiştirilmeden render edilir. */
-const route = localeRoute("home", { tr, en, de });
+/* 🌐 Faz 6 Dalga 4 — tek, dile duyarlı route modülü (app/(public)/_routes/home.tsx).
+   Dil kontrolü dispatcher'da (pasif dil → 404); URL'ler route kaydından. */
+const route = localeRouteFor("home", homeRouteModule);
 
 export const generateMetadata = route.generateMetadata;
 export default route.Page;

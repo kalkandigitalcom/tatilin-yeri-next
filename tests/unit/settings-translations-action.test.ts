@@ -46,6 +46,22 @@ vi.mock("@/app/services/settings-translation.service", () => ({
     deleteSettingsTranslationMock(...args),
 }));
 
+/* 🌐 Faz 5 dalga 2 — "settings" merkezi yazmada: action eski servis
+   yerine settings-content.server'ın merkezi kayıt/temizleme yardımcılarına
+   delege eder. Aynı mock'lara yönlendirilir → delegasyon/yetki/cache
+   beklentileri AYNEN doğrulanır; çağıranın (caller) geçtiği ayrıca test edilir. */
+const centralCallers: unknown[] = [];
+vi.mock("@/app/(admin)/maki-admin/settings/_content/settings-content.server", () => ({
+  saveSettingsTranslationCentral: (caller: unknown, input: unknown) => {
+    centralCallers.push(caller);
+    return upsertSettingsTranslationMock(input);
+  },
+  clearSettingsTranslationCentral: (caller: unknown, locale: unknown) => {
+    centralCallers.push(caller);
+    return deleteSettingsTranslationMock(locale);
+  },
+}));
+
 vi.mock("@/app/services/revalidate.actions", () => ({
   revalidateSettings: (...args: unknown[]) => revalidateSettingsMock(...args),
 }));
@@ -124,6 +140,7 @@ describe("saveSettingsTranslation — auth İLK kontrol", () => {
 
     expect(authorizeAdminSessionMock).toHaveBeenCalledTimes(1);
     expect(upsertSettingsTranslationMock).toHaveBeenCalledWith(input);
+    expect(centralCallers.at(-1)).toEqual({ id: "admin-1" });
     expect(result).toEqual({ ok: true, locale: "en", values: OK_VALUES });
   });
 });

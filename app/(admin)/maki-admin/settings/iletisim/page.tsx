@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 
 import { getSettingsClient as getSettings, updateSettingsClient as updateSettings } from "@/app/services/settings.client";
@@ -66,6 +67,7 @@ export default function SettingsContactPage() {
         <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
           İletişim
         </h1>
+        <RootLocaleNote scope="form" />
         <p className="text-sm text-[var(--color-stone-500)] mt-2 max-w-2xl">
           Public site footer, /iletisim sayfası ve Organization
           structured data'da kullanılan iletişim bilgileri.

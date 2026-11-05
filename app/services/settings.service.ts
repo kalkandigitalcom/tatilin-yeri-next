@@ -6,6 +6,7 @@
    sever gerekmez). ⚠️ getSettings native (RLS-free) → voucher `site_logo` artık
    null yerine full row'dan gelir (RLS'in gizlediği logo görünür; secret voucher
    çıktısına ulaşmaz — yalnız site_logo okunur). */
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
 import { settingsServerRepository as settingsRepository } from "@/lib/db/settings.repository.server";
 /* 🛡️ PHASE 10L — EN/DE settings çevirileri (migration 083). Yalnız
    `multilingual_enabled` AÇIKKEN okunur; kapalıyken bu modül hiç
@@ -144,6 +145,12 @@ export async function getPublicSettings(): Promise<Settings | null> {
 export async function updateSettings(
   values: Partial<Settings>
 ): Promise<boolean> {
+  /* 🌐 Faz 5 dalga 2 — genel ayarlar merkezi yazmada (/api/admin/settings
+     PUT → saveSettingsCentral); bu eski doğrudan yazma yolu KAPALI. */
+  if (isContentWriteMigrated("settings")) {
+    console.error("[settings.update] LEGACY_WRITE_DISABLED");
+    return false;
+  }
   const current = await getSettings();
 
   if (!current?.id) {

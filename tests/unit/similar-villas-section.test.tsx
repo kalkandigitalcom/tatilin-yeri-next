@@ -26,6 +26,7 @@
    =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
 import { render, screen } from "@testing-library/react";
 
 import { getDictionary } from "@/lib/i18n/get-dictionary";
@@ -47,6 +48,14 @@ vi.mock("@/lib/db/translation.repository.server", () => ({
     findManyForLocale: (...args: unknown[]) => findManyForLocaleMock(...args),
   },
 }));
+
+/* 🌐 Faz 6 Dalga 2 — rozet artık MERKEZİ servisten (tablo tabanlı sahte;
+   TR satırı = ana tablo aynası). Eski çeviri deposu (yukarıdaki mock)
+   ARTIK ÇAĞRILMAMALI — testler bunu da doğrular. */
+const contentSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock((...a) => contentSpy(...a))
+);
 
 /* --- Next.js / client context stub'ları (VillaCard "use client") --- */
 vi.mock("next/link", () => ({
@@ -117,6 +126,9 @@ beforeEach(() => {
       Promise.resolve({ data: opts.locationId ? [ROW] : [], error: null })
   );
   findManyForLocaleMock.mockResolvedValue({ data: [], error: null });
+  resetContentTables();
+  contentSpy.mockReset();
+  contentTables.villa = { "villa-2": { tr: { badge: "Popüler" } } };
 });
 
 async function renderSection(
@@ -270,23 +282,21 @@ describe("SimilarVillasSection — bölge adı canonical, badge çevrilir", () =
   );
 
   it("EN: badge çevirisi varsa çevrilmiş badge render edilir", async () => {
-    findManyForLocaleMock.mockImplementation((entity: string) => {
-      if (entity === "villa") {
-        return Promise.resolve({
-          data: [{ villa_id: "villa-2", locale: "en", badge: "Popular", description: null }],
-          error: null,
-        });
-      }
-      return Promise.resolve({ data: [], error: null });
-    });
+    contentTables.villa["villa-2"].en = { badge: "Popular" };
     await renderSection("en");
     expect(screen.getByText("Popular")).toBeInTheDocument();
     expect(screen.queryByText("Popüler")).not.toBeInTheDocument();
   });
 
-  it("EN: badge çevirisi YOKSA orijinal TR badge kalır", async () => {
+  it("EN: badge çevirisi YOKSA ana dil (TR) satırındaki rozet gelir (merkezi zincir)", async () => {
     await renderSection("en");
     expect(screen.getByText("Popüler")).toBeInTheDocument();
+  });
+
+  it("rozet hiçbir aktif dilde yoksa gösterilmez — ana tablo kolonuna (row.badge) düşülmez", async () => {
+    contentTables.villa = {};
+    await renderSection("en");
+    expect(screen.queryByText("Popüler")).not.toBeInTheDocument();
   });
 
   it("location_id null olan satırda da embed bölge adı kullanılır (çökmez)", async () => {
@@ -305,24 +315,26 @@ describe("SimilarVillasSection — bölge adı canonical, badge çevrilir", () =
 /* ===============================================================
    5) TR — ÇEVİRİ SORGUSU HİÇ ATILMAZ
    =============================================================== */
-describe("SimilarVillasSection — TR'de ek sorgu yok", () => {
-  it("TR: translationRepository.findManyForLocale HİÇ çağrılmaz", async () => {
+describe("SimilarVillasSection — rozet okuması (🌐 Faz 6 Dalga 2: bütün dillerde merkezi)", () => {
+  it("TR: eski çeviri deposu HİÇ çağrılmaz; merkezi servis TEK batch, 'tr' ile; rozet TR satırından", async () => {
     await renderSection("tr");
     expect(findManyForLocaleMock).not.toHaveBeenCalled();
+    expect(contentSpy.mock.calls).toEqual([["villa", ["villa-2"], "tr"]]);
+    expect(screen.getByText("Popüler")).toBeInTheDocument();
   });
 
-  it("locale verilmezse de (default TR) çeviri sorgusu atılmaz", async () => {
+  it("locale verilmezse (default TR) aynı yol", async () => {
     await renderSection(undefined);
     expect(findManyForLocaleMock).not.toHaveBeenCalled();
+    expect(contentSpy.mock.calls).toEqual([["villa", ["villa-2"], "tr"]]);
   });
 
-  it("EN: TEK batch sorgu — yalnız `villa` (badge); villa_location YOK", async () => {
+  it("EN: TEK batch okuma — yalnız `villa` (badge); villa_location YOK", async () => {
     await renderSection("en");
-    const entities = findManyForLocaleMock.mock.calls.map((c) => c[0]);
-    expect(entities).toEqual(["villa"]);
-    /* 🛡️ PHASE 10I — bölge çevirisi kaldırıldığı için sorgu sayısı 2 → 1. */
-    expect(findManyForLocaleMock.mock.calls.length).toBe(1);
-    expect(findManyForLocaleMock.mock.calls[0][2]).toBe("en");
+    expect(findManyForLocaleMock).not.toHaveBeenCalled();
+    expect(contentSpy.mock.calls.map((c) => c[0])).toEqual(["villa"]);
+    expect(contentSpy.mock.calls.length).toBe(1);
+    expect(contentSpy.mock.calls[0][2]).toBe("en");
   });
 });
 

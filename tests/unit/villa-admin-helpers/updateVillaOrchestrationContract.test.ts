@@ -97,6 +97,14 @@ function extractFromStmt(stmt: ts.Statement, out: CallEvent[], conditional: bool
     for (const s of stmt.thenStatement.statements) {
       extractFromStmt(s, out, /* conditional */ true);
     }
+    /* 🌐 Faz 5 dalga 2 — `else` dalı da (koşullu) taranır: eski yazma yolu
+       (modül merkezi yazmaya geçmemişse) `else` içinde KORUNDU; sıra /
+       await / tam-bir-kez beklentileri o dal için AYNEN geçerli. */
+    if (stmt.elseStatement && ts.isBlock(stmt.elseStatement)) {
+      for (const s of stmt.elseStatement.statements) {
+        extractFromStmt(s, out, /* conditional */ true);
+      }
+    }
   }
   /* Block statement (curly braces around update relation calls) — recurse. */
   if (ts.isBlock(stmt)) {
@@ -258,5 +266,28 @@ describe("updateVillaFull — single villa UPDATE", () => {
   it("service body'sinde DOĞRUDAN DB client çağrısı YOK", () => {
     expect(sourceText).not.toMatch(/\bdbAdmin\s*\.\s*from\(/);
     expect(sourceText).not.toMatch(/\bdb\s*\.\s*from\(/);
+  });
+});
+
+/* 🌐 Faz 5 dalga 2 — MERKEZİ YAZMA DALI KONTRATI
+   Modül merkezi yazmaya geçtiğinde villa satırı + ana dil içeriği
+   `updateVillaCoreCentral` ile TEK transaction'da yazılır; ilişki / mesafe / fiyat
+   senkronu bundan SONRA, eskisiyle aynı sırada çalışır. Eski yazma
+   (`villaAdminRepository.updateVillaById`) yalnız geçiş yapılmamış dalda. */
+describe("updateVillaFull — merkezi yazma dalı (Faz 5 dalga 2)", () => {
+  it("updateVillaCoreCentral AWAITED, koşullu dalda, tam bir kez ve ilişkilerden ÖNCE", () => {
+    const calls = seq.filter((e) => e.name === "updateVillaCoreCentral");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].awaited).toBe(true);
+    expect(calls[0].conditional).toBe(true);
+    expect(idx("updateVillaCoreCentral")).toBeLessThan(idx("replaceVillaTypeRelations"));
+  });
+  it("merkezi ve eski villa yazımı AYNI if/else'in iki dalında (ikisi birden çalışmaz)", () => {
+    const ifs = fnBody.statements.filter(ts.isIfStatement);
+    const branch = ifs.find((st) => st.expression.getText().includes('isContentWriteMigrated("villa")'));
+    expect(branch).toBeTruthy();
+    expect(branch!.thenStatement.getText()).toContain("updateVillaCoreCentral");
+    expect(branch!.thenStatement.getText()).not.toContain("villaAdminRepository.updateVillaById");
+    expect(branch!.elseStatement?.getText() ?? "").toContain("villaAdminRepository.updateVillaById");
   });
 });

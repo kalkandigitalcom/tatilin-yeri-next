@@ -124,6 +124,17 @@ describe("TRANSLATION_ENTITY_CONFIG — menu entity", () => {
 const findAllForParentMock = vi.fn();
 const upsertOneMock = vi.fn();
 const findManyForLocaleMock = vi.fn();
+/* 🌐 Faz 5 — bu dosya ESKİ çeviri servisinin mantığını belgeler; modül
+   merkezi içerik servisine geçtiği için eski yol üretimde KAPALI
+   (lib/i18n/content/content-write-modules.ts). Eski mantık "modül
+   taşınmamış" varsayımıyla test edilmeye devam eder; kapalılık ve yeni
+   yol tests/unit/faz5-admin-content.test.ts içinde doğrulanır. */
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
+
 vi.mock("@/lib/db/translation.repository.server", () => ({
   translationRepository: {
     findAllForParent: (...a: unknown[]) => findAllForParentMock(...a),
@@ -427,6 +438,19 @@ vi.mock("@/lib/cache.helpers", () => ({
   getCachedSettings: (...a: unknown[]) => getPublicSettingsMock(...a),
   getCachedMenu: (...a: unknown[]) => getMenuMock(...a),
 }));
+/* 🌐 Faz 6 Dalga 4 — HeaderWrapper etiketleri merkezi servisten okur.
+   Köprü: TR satırı = menü ağacındaki ana tablo adı (107 aynası), EN/DE
+   satırları = YUKARIDAKİ aynı eski depo sahtesi (`findManyForLocale`). */
+const centralSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const { legacyRepoCentralMock, trRowsFromMenu } = await import("../fixtures/faz6/legacy-repo-central");
+  return legacyRepoCentralMock({
+    findManyForLocale: (...a) => findManyForLocaleMock(...a),
+    trRows: async () => trRowsFromMenu(await getMenuMock.getMockImplementation()?.()),
+    settings: () => getPublicSettingsMock(),
+    spy: (...a) => centralSpy(...a),
+  });
+});
 
 import Header from "@/app/components/layout/Header";
 import HeaderWrapper from "@/app/components/layout/HeaderWrapper";
@@ -475,6 +499,7 @@ describe("HeaderWrapper — menü adı çevirisi", () => {
     getMenuMock.mockReset();
     findManyForLocaleMock.mockReset();
     findManyForLocaleMock.mockResolvedValue({ data: [], error: null });
+    centralSpy.mockReset();
     getMenuMock.mockResolvedValue([MANUAL_ITEM]);
     getPublicSettingsMock.mockResolvedValue({ multilingual_enabled: true });
   });
@@ -561,13 +586,12 @@ describe("HeaderWrapper — menü adı çevirisi", () => {
       villaType: { "type-1": { en: "Luxury Villa", de: "Luxusvilla" } },
     });
     render(await HeaderWrapper());
+    /* 🌐 Faz 6 Dalga 4 — merkezi okuma: menü varlığı HİÇ istenmez;
+       villa tipi AKTİF dil başına TEK batch (tr, en, de). */
+    expect(centralSpy.mock.calls.filter((c) => c[0] === "menu")).toHaveLength(0);
     expect(
-      findManyForLocaleMock.mock.calls.filter((c) => c[0] === "menu")
-    ).toHaveLength(0);
-    /* Villa tipi sorgusu ETKİLENMEDİ. */
-    expect(
-      findManyForLocaleMock.mock.calls.filter((c) => c[0] === "villa_type")
-    ).toHaveLength(2);
+      centralSpy.mock.calls.filter((c) => c[0] === "villa_type").map((c) => c[2]).sort()
+    ).toEqual(["de", "en", "tr"]);
   });
 
   it("32c) page / region öğeleri `menu_translations` sorgusuna GİRMEZ", async () => {
@@ -591,12 +615,11 @@ describe("HeaderWrapper — menü adı çevirisi", () => {
     mockTranslations({ menu: { m1: { en: "Rental Villas" } } });
     render(await HeaderWrapper());
 
-    const menuCalls = findManyForLocaleMock.mock.calls.filter(
-      (c) => c[0] === "menu"
-    );
-    expect(menuCalls).toHaveLength(2);
-    /* YALNIZ manual satırın id'si sorguya girer. */
-    expect(menuCalls[0][1]).toEqual(["m1"]);
+    /* 🌐 Faz 6 Dalga 4 — AKTİF dil başına TEK merkezi batch; YALNIZ
+       manual satırın id'si menü varlığına girer. */
+    const menuCalls = centralSpy.mock.calls.filter((c) => c[0] === "menu");
+    expect(menuCalls).toHaveLength(3);
+    for (const c of menuCalls) expect(c[1]).toEqual(["m1"]);
 
     /* page ve region adları canonical kalır. */
     expect(screen.getAllByText("Hakkımızda").length).toBeGreaterThan(0);
@@ -650,18 +673,19 @@ describe("HeaderWrapper — menü adı çevirisi", () => {
     expect(
       screen.getAllByText("Signature Collection").length
     ).toBeGreaterThan(0);
-    /* Parent + child TEK `.in()` sorgusunda (locale başına 1) → N+1 YOK. */
-    const menuCalls = findManyForLocaleMock.mock.calls.filter(
-      (c) => c[0] === "menu"
-    );
-    expect(menuCalls).toHaveLength(2);
-    expect(menuCalls[0][1].sort()).toEqual(["m1", "m2"]);
+    /* Parent + child TEK merkezi batch'te (AKTİF dil başına 1) → N+1 YOK. */
+    const menuCalls = centralSpy.mock.calls.filter((c) => c[0] === "menu");
+    expect(menuCalls).toHaveLength(3);
+    for (const c of menuCalls) expect([...c[1]].sort()).toEqual(["m1", "m2"]);
   });
 
-  it("36) çeviri okuması patlarsa header ÇÖKMEZ, TR adına düşer", async () => {
+  /* 🌐 Faz 6 Dalga 4 — merkezi servis okuma hatasında BOŞ sonuç döner
+     (Faz 3); etiketi hiçbir aktif dilde çözülemeyen düğüm GİZLENİR
+     (Faz 3.1 liste kuralı) — ana tablo (TR) adına DÜŞÜLMEZ. */
+  it("36) içerik okuması patlarsa header ÇÖKMEZ; etiketsiz düğüm gizlenir (TR adına düşmez)", async () => {
     findManyForLocaleMock.mockRejectedValue(new Error("db down"));
     render(await HeaderWrapper());
-    expect(screen.getAllByText("Kiralık Villalar").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Kiralık Villalar")).not.toBeInTheDocument();
   });
 
   it("37) legacy auto-include sayfa düğümleri çeviri haritasında YOK → TR adı", async () => {

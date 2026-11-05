@@ -8,6 +8,9 @@ import {
 } from "@/lib/auth/action-authz";
 import { blogServerRepository } from "@/lib/db/blog.repository.server";
 import { sanitizeHtml } from "@/lib/html-sanitize";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import { invalidateContentEntity } from "@/lib/i18n/content/content-admin.server";
+import { overlayBlogRoot, updateBlogCentral } from "@/app/(admin)/maki-admin/blog/blog-content.server";
 import { removeServer } from "@/lib/storage/server";
 import { STORAGE_BUCKETS } from "@/lib/storage";
 
@@ -68,7 +71,13 @@ export async function GET(
       { status: 404 }
     );
   }
-  return NextResponse.json({ ok: true, data });
+  /* 🌐 Faz 5 dalga 2 — ana form ANA DİLİ düzenler. */
+  return NextResponse.json({
+    ok: true,
+    data: isContentWriteMigrated("blog_post")
+      ? await overlayBlogRoot(data as Record<string, unknown>)
+      : data,
+  });
 }
 
 type BlogPatchInput = {
@@ -115,6 +124,22 @@ export async function PATCH(
       { ok: false, error: "Geçersiz istek" },
       { status: 400 }
     );
+  }
+
+  /* 🌐 Faz 5 dalga 2 — merkezi yazma: içerik ana dile, yayın durumu /
+     kapak / kategori vb. aynı transaction'da ana tabloya. Teknik anahtar
+     (`blog_posts.slug`) YAZILMAZ; `slug` = ana dilin URL slug'ı. */
+  if (isContentWriteMigrated("blog_post")) {
+    const r = await updateBlogCentral(auth.caller, id, body as Record<string, unknown>);
+    if (!r.ok) {
+      console.error("[admin.blog.update] FAILED", r.error);
+      return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
+    }
+    revalidatePath("/blog");
+    revalidatePath("/tr/blog");
+    revalidatePath("/en/blog");
+    revalidatePath("/de/blog");
+    return NextResponse.json({ ok: true });
   }
 
   const patch: Record<string, unknown> = {};
@@ -246,6 +271,9 @@ export async function DELETE(
      (ve `?v=` versiyonu) EN/DE listede de hemen güncel olsun. */
   revalidatePath("/en/blog");
   revalidatePath("/de/blog");
+  /* 🌐 Faz 6 Dalga 6 — silme merkezi yazmadan geçmez: sitemap.xml ve
+     yazıyı okuyan diğer sayfalar içerik tag'iyle hemen yenilenir. */
+  invalidateContentEntity("blog_post");
 
   return NextResponse.json({ ok: true });
 }

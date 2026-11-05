@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getPgPool } from "@/lib/db/pg.client";
-import type { Locale } from "@/lib/i18n/config";
+import { SITEMAP_BLOG_ID_SQL, SITEMAP_VILLA_ID_SQL } from "@/lib/i18n/sitemap-sql";
 
 /* ===============================================================
    🌐 SITEMAP VERİSİ — Çok Dilli Mimari Faz 3 (server-only)
@@ -10,9 +10,8 @@ import type { Locale } from "@/lib/i18n/config";
    EK iki dar okuma:
      1) noindex işaretli kayıtların slug'ları → sitemap'e GİRMEZ
         (sayfaları noindex döner; sitemap ↔ robots çelişkisi olmaz).
-     2) Blog / CMS sayfası gerçek çeviri kapsamı → çevirisi olmayan dil
-        sitemap'e ve hreflang'e GİRMEZ (content-availability ile aynı
-        kural: başlık/gövde/özet dolu çeviri satırı).
+     2) 🌐 Faz 6 Dalga 5: taban slug → kimlik (dil kararı artık merkezi
+        servisten; eski çeviri SQL'i kaldırıldı — aşağıya bkz.).
    Her okuma bağımsız ve fail-soft: hata → boş küme (eski davranış).
    =============================================================== */
 
@@ -38,37 +37,32 @@ export async function loadNoindexSlugs(): Promise<{
   return { villa, page, blog };
 }
 
-const TRANSLATED_SQL = `
-  SELECT 'blog' AS kind, p.slug AS base, t.locale
-    FROM public.blog_post_translations t JOIN public.blog_posts p ON p.id = t.blog_post_id
-   WHERE COALESCE(btrim(t.title), '') <> '' OR COALESCE(btrim(t.body), '') <> ''
-      OR COALESCE(btrim(t.excerpt), '') <> ''
-  UNION ALL
-  SELECT 'page', p.slug, t.locale
-    FROM public.page_translations t JOIN public.pages p ON p.id = t.page_id
-   WHERE COALESCE(btrim(t.title), '') <> '' OR COALESCE(btrim(t.body), '') <> ''
-      OR COALESCE(btrim(t.excerpt), '') <> ''
-`;
+/* 🌐 Faz 6 Dalga 5 — eski "çeviri var" SQL kuralı (TR daima mevcut,
+   yalnız en/de çeviri tablosu) KALDIRILDI. Blog / CMS / villa / kategori
+   dil kararı artık merkezi içerik servisinden ve sayfa metadata'sıyla
+   AYNI saf kuraldan gelir (merkezi "public SEO içerik" modülü, app/sitemap.ts).
+   Burada yalnız taban slug → kimlik eşlemesi okunur (merkezi okuma
+   kimlikle çalışır; mevcut repository projeksiyonları kimlik taşımaz). */
 
-/** kind → taban slug → çevrilmiş diller (TR her zaman dahil, ayrıca eklenir). */
-export async function loadTranslatedContentLocales(): Promise<{
-  blog: Map<string, Locale[]>;
-  page: Map<string, Locale[]>;
-}> {
-  const out = { blog: new Map<string, Locale[]>(), page: new Map<string, Locale[]>() };
+async function idMap(sql: string): Promise<Map<string, string> | null> {
   try {
-    const res = await getPgPool().query<{ kind: "blog" | "page"; base: string; locale: string }>(
-      TRANSLATED_SQL
-    );
-    for (const r of res.rows ?? []) {
-      if (!r?.base || (r.locale !== "en" && r.locale !== "de")) continue;
-      const m = out[r.kind];
-      const list = m.get(r.base) ?? ["tr"];
-      if (!list.includes(r.locale)) list.push(r.locale);
-      m.set(r.base, list);
-    }
+    const res = await getPgPool().query<{ id: string; slug: string | null }>(sql);
+    const out = new Map<string, string>();
+    for (const r of res.rows ?? []) if (r?.slug && r.id) out.set(r.slug, String(r.id).toLowerCase());
+    return out;
   } catch {
-    /* fail-soft: çeviri bilgisi yok → yalnız TR listelenir */
+    return null;
   }
-  return out;
+}
+
+/** taban slug → kimlik (villa, blog). Hata → null (çağıran bozulma moduna geçer). */
+export async function loadSitemapIds(): Promise<{
+  villa: Map<string, string> | null;
+  blog: Map<string, string> | null;
+}> {
+  const [villa, blog] = await Promise.all([
+    idMap(SITEMAP_VILLA_ID_SQL),
+    idMap(SITEMAP_BLOG_ID_SQL),
+  ]);
+  return { villa, blog };
 }

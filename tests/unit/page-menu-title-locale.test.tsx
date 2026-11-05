@@ -58,6 +58,27 @@ vi.mock("@/lib/cache.helpers", () => ({
   getCachedMenu: (...a: unknown[]) => getMenuMock(...a),
 }));
 
+/* 🌐 Faz 6 Dalga 4 — Header/Footer etiketleri merkezi servisten okur.
+   Köprü: TR satırı = ana tablo adı (menü ağacı / footer kaynak listeleri;
+   107 aynası), EN/DE satırları = aynı eski depo sahtesi. */
+const centralSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const { legacyRepoCentralMock, trRowsFromMenu } = await import("../fixtures/faz6/legacy-repo-central");
+  return legacyRepoCentralMock({
+    findManyForLocale: (...a) => findManyForLocaleMock(...a),
+    trRows: async () => {
+      const rows = trRowsFromMenu(await getMenuMock.getMockImplementation()?.());
+      const pages = ((await findActivePagesMock.getMockImplementation()?.())?.data ?? []) as { id: string; title: string }[];
+      for (const p of pages) rows.page![p.id] = { title: p.title };
+      const types = ((await findAllVillaTypesMock.getMockImplementation()?.())?.data ?? []) as { id: string; name: string }[];
+      for (const t of types) rows.villa_type![t.id] = { name: t.name };
+      return rows;
+    },
+    settings: () => getPublicSettingsMock(),
+    spy: (...a) => centralSpy(...a),
+  });
+});
+
 const findAllVillaLocationsMock = vi.fn();
 const findAllVillaTypesMock = vi.fn();
 vi.mock("@/lib/db/menu.repository", () => ({
@@ -156,8 +177,8 @@ function mockTranslations(opts: {
   );
 }
 
-const pageCalls = () =>
-  findManyForLocaleMock.mock.calls.filter((c) => c[0] === "page");
+/* 🌐 Faz 6 Dalga 4 — merkezi okuma: AKTİF dil başına TEK batch (tr/en/de). */
+const pageCalls = () => centralSpy.mock.calls.filter((c) => c[0] === "page");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -303,8 +324,8 @@ describe("HeaderWrapper — CMS sayfa menü öğeleri", () => {
     render(await HeaderWrapper());
     expect(screen.getAllByText("About Us").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Contact").length).toBeGreaterThan(0);
-    /* locale başına 1 sorgu → 2; sayfa başına sorgu YOK (N+1 YOK). */
-    expect(pageCalls()).toHaveLength(2);
+    /* aktif dil başına 1 batch → 3; sayfa başına sorgu YOK (N+1 YOK). */
+    expect(pageCalls()).toHaveLength(3);
     expect([...pageCalls()[0][1]].sort()).toEqual(["page-1", "page-2"]);
   });
 
@@ -318,7 +339,7 @@ describe("HeaderWrapper — CMS sayfa menü öğeleri", () => {
     render(await HeaderWrapper());
     expect(screen.getAllByText("About Us").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Contact").length).toBeGreaterThan(0);
-    expect(pageCalls()).toHaveLength(2);
+    expect(pageCalls()).toHaveLength(3);
     expect([...pageCalls()[0][1]].sort()).toEqual(["page-1", "page-2"]);
   });
 
@@ -329,10 +350,12 @@ describe("HeaderWrapper — CMS sayfa menü öğeleri", () => {
     expect(pageCalls()).toHaveLength(0);
   });
 
-  it("19) çeviri okuması patlarsa header ÇÖKMEZ → TR başlık", async () => {
+  /* 🌐 Faz 6 Dalga 4 — okuma hatasında merkezi servis BOŞ döner; etiketi
+     çözülemeyen düğüm gizlenir (ana tablo TR adına düşülmez). */
+  it("19) içerik okuması patlarsa header ÇÖKMEZ; etiketsiz sayfa öğesi gizlenir", async () => {
     findManyForLocaleMock.mockRejectedValue(new Error("db down"));
     render(await HeaderWrapper());
-    expect(screen.getAllByText("Hakkımızda").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Hakkımızda")).not.toBeInTheDocument();
   });
 
   /* 🛡️ NAVIGATION LOCALE PERSISTENCE — `/p/{slug}` SLUG'ı canonical
@@ -407,8 +430,10 @@ describe("İzolasyon — category / manual / region", () => {
     expect(screen.getAllByText("Rental Villas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Luxury Villa").length).toBeGreaterThan(0);
     expect(screen.getAllByText("About Us").length).toBeGreaterThan(0);
-    /* 3 entity × 2 locale = 6 sorgu; öğe başına sorgu YOK. */
-    expect(findManyForLocaleMock).toHaveBeenCalledTimes(6);
+    /* 🌐 Faz 6 Dalga 4 — 3 varlık × 3 aktif dil = 9 merkezi batch;
+       öğe başına sorgu YOK. */
+    expect(centralSpy).toHaveBeenCalledTimes(9);
+    expect(new Set(centralSpy.mock.calls.map((c) => c[0]))).toEqual(new Set(["menu", "villa_type", "page"]));
   });
 });
 
@@ -489,7 +514,7 @@ describe("FooterWrapper + Footer — Kurumsal CMS sayfaları", () => {
   it("31) TEK batch sorgu — sayfa başına sorgu YOK (N+1 YOK)", async () => {
     mockTranslations({ page: { "page-1": { en: "About Us" } } });
     render(await FooterWrapper());
-    expect(pageCalls()).toHaveLength(2);
+    expect(pageCalls()).toHaveLength(3);
     expect([...pageCalls()[0][1]].sort()).toEqual(["page-1", "page-2"]);
   });
 
@@ -504,10 +529,12 @@ describe("FooterWrapper + Footer — Kurumsal CMS sayfaları", () => {
     );
   });
 
-  it("33) çeviri okuması patlarsa footer ÇÖKMEZ → TR başlık", async () => {
+  /* 🌐 Faz 6 Dalga 4 — okuma hatası: footer çökmez; etiketi çözülemeyen
+     kurumsal sayfa gizlenir (ana tablo TR başlığına düşülmez). */
+  it("33) içerik okuması patlarsa footer ÇÖKMEZ; etiketsiz sayfa gizlenir", async () => {
     findManyForLocaleMock.mockRejectedValue(new Error("db down"));
     render(await FooterWrapper());
-    expect(screen.getByText("Hakkımızda")).toBeInTheDocument();
+    expect(screen.queryByText("Hakkımızda")).not.toBeInTheDocument();
   });
 
   it("34) SIRALAMA değişmez (menu_order ASC)", async () => {

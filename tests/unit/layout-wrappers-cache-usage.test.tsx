@@ -84,6 +84,23 @@ vi.mock("@/lib/db/pages.repository", () => ({
   },
 }));
 
+/* 🌐 Faz 6 Dalga 4 — Header/Footer etiketleri merkezi servisten okunur;
+   TR satırı = CACHE seam'inden gelen ana tablo adları (107 aynası). Ayar
+   okuması YENİDEN yapılmaz (dil bağlamı aynı okumadan türetilir). */
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const { legacyRepoCentralMock, trRowsFromMenu } = await import("../fixtures/faz6/legacy-repo-central");
+  return legacyRepoCentralMock({
+    findManyForLocale: async () => ({ data: [], error: null }),
+    trRows: async () => {
+      const rows = trRowsFromMenu(await getCachedMenuMock.getMockImplementation()?.()?.catch?.(() => []));
+      const types = ((await findAllVillaTypesMock.getMockImplementation()?.())?.data ?? []) as { id: string; name: string }[];
+      for (const t of types) rows.villa_type![t.id] = { name: t.name };
+      return rows;
+    },
+    settings: () => CACHED_SETTINGS,
+  });
+});
+
 import HeaderWrapper from "@/app/components/layout/HeaderWrapper";
 import FooterWrapper from "@/app/components/layout/FooterWrapper";
 
@@ -160,7 +177,10 @@ describe("HeaderWrapper — cache sarmalayıcılarını kullanır", () => {
 
     expect(getCachedMenuMock).toHaveBeenCalledTimes(1);
     expect(getMenuDirect).not.toHaveBeenCalled();
-    expect(el.props.menu).toEqual(CACHED_MENU);
+    /* 🌐 Faz 6 Dalga 4 — düğümlere merkezi etiket haritası eklenir. */
+    expect(el.props.menu).toEqual(
+      CACHED_MENU.map((n) => ({ ...n, nameByLocale: { tr: "CACHED-MENU", en: "CACHED-MENU", de: "CACHED-MENU" } }))
+    );
   });
 
   it("2) settings CACHE'ten okunur, `getPublicSettings()` DOĞRUDAN çağrılmaz", async () => {

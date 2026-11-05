@@ -17,6 +17,8 @@
 =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { cmsPageFor, registerPageSource, resetTranslations, setTranslationRow } from "../fixtures/faz6/cms-adapter";
+import { resetContentTables } from "../fixtures/faz6/content-table-mock";
 import { render, screen } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
@@ -41,6 +43,26 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+/* 🌐 Faz 6 Dalga 3 — CMS route'u TEK modüle taşındı ve içerik MERKEZİ
+   servisten okunuyor (bkz. tests/fixtures/faz6/cms-adapter.ts). Eski
+   `getTranslationMock` yalnız eski `resolvePageContent` yardımcısı için
+   duruyor; route testleri çeviri satırını `setTranslationRow` ile verir. */
+const contentSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const tm = await import("../fixtures/faz6/content-table-mock");
+  const ad = await import("../fixtures/faz6/cms-adapter");
+  const base = tm.contentReadServerMock((...a) => contentSpy(...a));
+  return {
+    getContentMany: async (e: string, ids: string[], l: string) => {
+      await ad.syncPageContent();
+      return base.getContentMany(e, ids, l);
+    },
+    getContent: async (e: string, id: string, l: string) => {
+      await ad.syncPageContent();
+      return base.getContent(e, id, l);
+    },
+  };
+});
 const getPageBySlugMock = vi.fn();
 vi.mock("@/app/services/page.service", () => ({
   getPageBySlug: (...a: unknown[]) => getPageBySlugMock(...a),
@@ -119,13 +141,17 @@ const EDITORIAL_PAGE = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetContentTables();
+  resetTranslations();
+  contentSpy.mockReset();
+  registerPageSource(() => getPageBySlugMock.mock.results.at(-1)?.value);
   requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
   getPageBySlugMock.mockResolvedValue(EDITORIAL_PAGE);
-  getTranslationMock.mockResolvedValue(null);
+  setTranslationRow(null);
 });
 
 async function renderRoute(modulePath: string, slug = EDITORIAL_PAGE.slug) {
-  const { default: Page } = await import(modulePath);
+  const Page = cmsPageFor(modulePath);
   const element = await Page({ params: Promise.resolve({ slug }) });
   render(element);
 }
@@ -451,8 +477,8 @@ describe("Phase 12E — boş içerik durumu", () => {
 });
 
 describe("Phase 12E — mevcut davranış korunuyor", () => {
-  it("19) CMS İÇERİĞİ hâlâ page_translations'tan geliyor", async () => {
-    getTranslationMock.mockResolvedValue({
+  it("19) CMS İÇERİĞİ çeviri tablosundan (🌐 Faz 6 Dalga 3: merkezi servis üzerinden)", async () => {
+    setTranslationRow({
       id: "t-en",
       page_id: PAGE_ID,
       locale: "en",
@@ -466,7 +492,7 @@ describe("Phase 12E — mevcut davranış korunuyor", () => {
     });
     await renderRoute(ROUTES.en);
 
-    expect(getTranslationMock).toHaveBeenCalledWith("page", PAGE_ID, "en");
+    expect(contentSpy).toHaveBeenCalledWith("page", [PAGE_ID], "en");
     /* İçerik çevirisi + statik UI çevirisi AYNI sayfada, AYRI kaynaklardan. */
     expect(
       screen.getByRole("heading", {

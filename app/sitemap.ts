@@ -22,7 +22,21 @@ import { getCachedSettings } from "@/lib/cache.helpers";
 import { getTaxonomyLandingSitemapPaths } from "@/lib/taxonomy-landing.server";
 import { getEnabledPublicLocales, type Locale } from "@/lib/i18n/config";
 import { primeRoutingContext } from "@/lib/i18n/routing/context.server";
-import { loadNoindexSlugs, loadTranslatedContentLocales } from "@/lib/i18n/sitemap-data.server";
+import { loadNoindexSlugs, loadSitemapIds } from "@/lib/i18n/sitemap-data.server";
+/* 🌐 Faz 6 Dalga 5 — dil kararları sayfa metadata'sıyla AYNI saf kuraldan
+   (merkezi içerik servisi; pasif dil hiçbir adımda yok). */
+import {
+  categoryIndexableLocales,
+  loadContentsByLocale,
+  textIndexableLocales,
+  villaIndexableLocales,
+} from "@/lib/i18n/content/public-seo-content";
+import { createSitemapContentReader } from "@/lib/i18n/content/public-seo-content.server";
+import { contentLocaleContextFromSettings } from "@/lib/i18n/content/content-locale-context";
+import { siteIndexingEnabled } from "@/lib/seo-site-policy";
+import { shortGapsRepository } from "@/lib/db/short-gaps.repository";
+import { shortGapSitemapPaths } from "@/lib/short-gaps.helpers";
+import { shortGapsSeoLocales } from "@/app/components/short-gaps/short-gaps-metadata";
 import { localizeHref } from "@/lib/i18n/routing/url";
 
 /* ===============================================================
@@ -167,20 +181,22 @@ type SlugRow = { slug: string | null; created_at: string | null };
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const settings = await getCachedSettings().catch(() => null);
+  /* 🌐 Faz 6 Dalga 5 — site geneli indeksleme KAPALI → her sayfa noindex
+     (kök layout + dispatcher politikası) → sitemap HİÇ URL sunmaz. */
+  if (!siteIndexingEnabled(settings)) return [];
   const ctx = await primeRoutingContext();
   const enabled = getEnabledPublicLocales(settings);
   const root = ctx.root;
   const now = new Date();
   const seen = new Set<string>();
 
-  const [noindex, translated] = await Promise.all([
-    loadNoindexSlugs(),
-    loadTranslatedContentLocales(),
-  ]);
-  /* Çevirisi olmayan dil listeden çıkar; TR (taban) her zaman mevcuttur. */
-  const contentLocales = (list: Locale[] | undefined) =>
-    enabled.filter((l) => (list ?? ["tr"]).includes(l));
-
+  const [noindex, ids] = await Promise.all([loadNoindexSlugs(), loadSitemapIds()]);
+  /* 🌐 Faz 6 Dalga 5 — merkezi okuyucu (hata görünür). Okuma hatasında
+     bozulma modu: villa / kategori bütün aktif dillerde (kayıt var; eski
+     davranış), blog / CMS yalnız ana dilde (eski "yalnız taban dil"
+     bozulmasının simetrik karşılığı). */
+  const { reader, failed } = createSitemapContentReader(settings);
+  const contentRoot = contentLocaleContextFromSettings(settings).root;
   const entries: MetadataRoute.Sitemap = [];
 
   /* ---------- statik sayfalar (her aktif dilde) ---------- */
@@ -193,8 +209,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   /* ---------- kategori + bölge açılış sayfaları (≥1 aktif villa) ---------- */
   try {
-    const { categories, regions } = await getTaxonomyLandingSitemapPaths();
-    for (const path of [...categories, ...regions]) {
+    const { categories, regions, categoryIds } = await getTaxonomyLandingSitemapPaths();
+    /* Kategori: ad hiçbir aktif dilde yoksa sayfa noindex,follow → yok.
+       Ad dilden bağımsız (zincir) → ana dilde TEK batch yeterli. */
+    const typeContents = await loadContentsByLocale(reader, "villa_type", [...categoryIds.values()], [contentRoot]);
+    const categoryLocales = (path: string): Locale[] => {
+      if (failed.has("villa_type")) return enabled;
+      const id = categoryIds.get(path);
+      const c = id ? typeContents.get(id)?.[contentRoot] : undefined;
+      const named = typeof c?.values?.name === "string" && c.values.name.trim() !== "";
+      /* Villa sayısı ≥1 zaten getTaxonomyLandingSitemapPaths'te süzüldü. */
+      return categoryIndexableLocales(named, 1, enabled);
+    };
+    for (const path of categories) {
+      entries.push(
+        ...localizedEntries(path, categoryLocales(path), root, { lastModified: now, changeFrequency: "daily", priority: 0.8 }, seen)
+      );
+    }
+    for (const path of regions) {
       entries.push(
         ...localizedEntries(path, enabled, root, { lastModified: now, changeFrequency: "daily", priority: 0.8 }, seen)
       );
@@ -206,10 +238,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   /* ---------- villalar (aktif, silinmemiş, noindex değil) ---------- */
   try {
     const data = await villaRepository.listPublicSlugs();
-    for (const v of (data as SlugRow[] | null) || []) {
-      if (!v.slug || noindex.villa.has(v.slug)) continue;
+    const rows = ((data as SlugRow[] | null) || []).filter((v) => v.slug && !noindex.villa.has(v.slug));
+    /* Villa: hiçbir aktif dilde içerik yoksa noindex,follow → yok; yedek
+       dilden içerik varsa indexlenir (onaylı karar) → bütün aktif diller. */
+    const villaIds = rows.map((v) => ids.villa?.get(v.slug!)).filter((x): x is string => !!x);
+    const villaContents = await loadContentsByLocale(reader, "villa", villaIds, [contentRoot]);
+    for (const v of rows) {
+      const id = ids.villa?.get(v.slug!);
+      const locales =
+        !ids.villa || !id || failed.has("villa")
+          ? enabled
+          : villaIndexableLocales(villaContents.get(id)?.[contentRoot], false, enabled);
       entries.push(
-        ...localizedEntries(`/kiralik-villa/${v.slug}`, enabled, root, {
+        ...localizedEntries(`/kiralik-villa/${v.slug}`, locales, root, {
           lastModified: toDate(v.created_at),
           changeFrequency: "weekly",
           priority: 0.8,
@@ -226,10 +267,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (error) {
       console.error("[sitemap] pages fetch error:", error.message);
     } else {
-      for (const p of (data as SlugRow[] | null) || []) {
-        if (!p.slug || noindex.page.has(p.slug)) continue;
+      type PageRow = SlugRow & { id?: string | null };
+      const pages = ((data as PageRow[] | null) || []).filter((p) => p.slug && !noindex.page.has(p.slug));
+      const pageContents = await loadContentsByLocale(
+        reader,
+        "page",
+        pages.map((p) => String(p.id ?? "").toLowerCase()),
+        enabled
+      );
+      for (const p of pages) {
+        const locales =
+          failed.has("page") || !p.id
+            ? enabled.filter((l) => l === contentRoot)
+            : textIndexableLocales("page", false, pageContents.get(String(p.id).toLowerCase()) ?? {}, enabled);
         entries.push(
-          ...localizedEntries(`/p/${p.slug}`, contentLocales(translated.page.get(p.slug)), root, {
+          ...localizedEntries(`/p/${p.slug}`, locales, root, {
             lastModified: toDate(p.created_at),
             changeFrequency: "monthly",
             priority: 0.6,
@@ -239,6 +291,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (err) {
     console.error("[sitemap] pages fetch EXCEPTION:", err instanceof Error ? err.message : err);
+  }
+
+  /* ---------- kısa süreli fırsatlar (🌐 Faz 6 Dalga 5) ----------
+     Ana sayfa bölümüyle AYNI kaynak (get_short_gap_counts); yalnız villası
+     olan ay + gece; dil = sayfa metadata'sının ortak kararı. Fail-soft. */
+  try {
+    const { data, error } = await shortGapsRepository.getShortGapCounts();
+    if (error) {
+      console.error("[sitemap] short gaps fetch error:", error.message);
+    } else {
+      const rows = (Array.isArray(data) ? data : []) as Array<{ bucket_month: unknown; gap_nights: unknown; villa_count: unknown }>;
+      for (const path of shortGapSitemapPaths(rows)) {
+        const [, , ay, gece] = path.split("/");
+        entries.push(
+          ...localizedEntries(path, shortGapsSeoLocales(ay, gece, enabled), root, {
+            lastModified: now,
+            changeFrequency: "daily",
+            priority: 0.6,
+          }, seen)
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[sitemap] short gaps EXCEPTION:", err instanceof Error ? err.message : err);
   }
 
   /* ---------- blog dizini + yazılar ---------- */
@@ -251,10 +327,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       console.error("[sitemap] blog fetch error:", error.message);
     } else {
       type BlogRow = { slug: string | null; published_at: string | null; updated_at: string | null };
-      for (const b of (data as BlogRow[] | null) || []) {
-        if (!b.slug || noindex.blog.has(b.slug)) continue;
+      const posts = ((data as BlogRow[] | null) || []).filter((b) => b.slug && !noindex.blog.has(b.slug));
+      const blogIds = posts.map((b) => ids.blog?.get(b.slug!)).filter((x): x is string => !!x);
+      const blogContents = await loadContentsByLocale(reader, "blog_post", blogIds, enabled);
+      for (const b of posts) {
+        const id = ids.blog?.get(b.slug!);
+        const locales =
+          !ids.blog || !id || failed.has("blog_post")
+            ? enabled.filter((l) => l === contentRoot)
+            : textIndexableLocales("blog_post", false, blogContents.get(id) ?? {}, enabled);
         entries.push(
-          ...localizedEntries(`/blog/${b.slug}`, contentLocales(translated.blog.get(b.slug)), root, {
+          ...localizedEntries(`/blog/${b.slug}`, locales, root, {
             lastModified: toDate(b.updated_at || b.published_at),
             changeFrequency: "weekly",
             priority: 0.7,

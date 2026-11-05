@@ -105,6 +105,9 @@ vi.mock("@/lib/db/translation.repository.server", () => ({
     findOne: () => Promise.resolve({ data: null, error: null }),
   },
 }));
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock()
+);
 vi.mock("@/app/components/villa/SimilarVillasSection", () => ({
   default: () => <div data-testid="similar-villas-section" />,
 }));
@@ -130,7 +133,19 @@ vi.mock("@/app/context/CurrencyContext", () => ({
 
 import PrivateVillaPageBody from "@/app/components/private-villa/PrivateVillaPageBody";
 import BottomNav from "@/app/components/layout/BottomNav";
-import NormalVillaDetail from "@/app/(public)/kiralik-villa/[slug]/locale-page";
+/* 🌐 Faz 6 Dalga 2 — normal villa detay artık TEK, dile duyarlı route
+   modülü (app/(public)/_routes/villa.tsx); eski TR `locale-page.tsx`
+   eşdeğerlik testinden sonra kaldırıldı. Burada TR olarak çağrılır;
+   çevrilebilir içerik MERKEZİ servisten (TR satırı = ana tablo aynası). */
+import { VillaRoutePage } from "@/app/(public)/_routes/villa";
+import { contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
+const NormalVillaDetail = async ({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string>>;
+}) => VillaRoutePage({ locale: "tr", params: await params, searchParams });
 import VillaInfoBar from "@/app/components/villa/VillaInfoBar";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
@@ -146,6 +161,12 @@ async function renderPrivate() {
 
 beforeEach(() => {
   state.villa = { ...VILLA };
+  /* 107 aynası: TR satırları ana tablo değerleriyle aynı. */
+  resetContentTables();
+  contentTables.villa = { [VILLA.id]: { tr: { description: VILLA.description } } };
+  contentTables.villa_feature = { f1: { tr: { name: "Ozel Havuz" } } };
+  contentTables.rule_item = { r1: { tr: { title: "Evcil hayvan yok" } } };
+  contentTables.price_include_item = { p1: { tr: { title: "Havlu" } } };
   pathname.value = "/";
   discountsMock.mockClear();
   reviewsMock.mockClear();

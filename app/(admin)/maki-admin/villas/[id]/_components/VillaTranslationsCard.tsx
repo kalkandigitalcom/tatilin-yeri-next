@@ -17,15 +17,20 @@
 
 import LocalizedSlugField from "@/app/components/admin/shared/LocalizedSlugField";
 import { useEffect, useState } from "react";
+import type { Locale } from "@/lib/i18n/config";
+import { ADMIN_LOCALE_LABELS } from "@/lib/i18n/content/content-admin";
+import { useAdminLocaleLayout } from "@/app/components/admin/shared/useAdminLocaleLayout";
 import { Languages, Loader2 } from "lucide-react";
 
 import { useNotify } from "@/app/components/admin/notifications/NotificationProvider";
 import {
   loadVillaTranslationsAction,
+  saveVillaRootSlugAction,
   saveVillaTranslationAction,
 } from "./villa-translations.action";
 
-type WritableLocale = "en" | "de";
+/* 🌐 Faz 5 dalga 2 — düzenlenen diller = ana dil DIŞINDAKİ iki dil. */
+type WritableLocale = Locale;
 
 type LocaleFormState = {
   description: string;
@@ -44,10 +49,7 @@ const EMPTY_FORM: LocaleFormState = {
   seoDescription: "",
 };
 
-const LOCALE_LABELS: Record<WritableLocale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
+const LOCALE_LABELS: Record<WritableLocale, string> = ADMIN_LOCALE_LABELS;
 
 type Props = {
   villaId: string;
@@ -57,11 +59,24 @@ type Props = {
 export default function VillaTranslationsCard({ villaId }: Props) {
   const toast = useNotify();
 
+  const layout = useAdminLocaleLayout();
+  const editable = layout.translations;
+  const rootLabel = LOCALE_LABELS[layout.root];
   const [forms, setForms] = useState<Record<WritableLocale, LocaleFormState>>({
+    tr: EMPTY_FORM,
     en: EMPTY_FORM,
     de: EMPTY_FORM,
   });
-  const [activeLocale, setActiveLocale] = useState<WritableLocale>("en");
+  const [selectedLocale, setActiveLocale] = useState<WritableLocale>(editable[0] ?? "en");
+  /* Ana dil değişince (düzen geç yüklenir) seçili sekme geçersiz kalırsa
+     ilk düzenlenebilir dile düşülür — türetilmiş değer, effect yok. */
+  const activeLocale: WritableLocale = editable.includes(selectedLocale) ? selectedLocale : editable[0];
+  /* 🌐 Faz 5 dalga 2 — teknik anahtar (salt okunur) + ana dil URL slug'ı. */
+  const [technicalKey, setTechnicalKey] = useState<string | null>(null);
+  const [rootSlug, setRootSlug] = useState("");
+  const [slugSeparated, setSlugSeparated] = useState(true);
+  const [savingRoot, setSavingRoot] = useState(false);
+  const rootSlugLocked = layout.root === "tr" && !slugSeparated;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -84,18 +99,25 @@ export default function VillaTranslationsCard({ villaId }: Props) {
 
       setForms((prev) => {
         const next = { ...prev };
+        const t = (v: unknown) => (typeof v === "string" ? v : "");
         for (const row of result.rows) {
-          if (row.locale !== "en" && row.locale !== "de") continue;
-          next[row.locale] = {
-            description: row.description ?? "",
-            badge: row.badge ?? "",
-            seoTitle: row.seo_title ?? "",
-            slug: row.slug ?? "",
-            seoDescription: row.seo_description ?? "",
+          const loc = row.locale as WritableLocale;
+          if (loc !== "tr" && loc !== "en" && loc !== "de") continue;
+          next[loc] = {
+            description: t(row.description),
+            badge: t(row.badge),
+            seoTitle: t(row.seo_title),
+            slug: t(row.slug),
+            seoDescription: t(row.seo_description),
           };
         }
         return next;
       });
+      if ("technicalKey" in result) {
+        setTechnicalKey(typeof result.technicalKey === "string" ? result.technicalKey : null);
+        setRootSlug(typeof result.rootSlug === "string" ? result.rootSlug : "");
+        setSlugSeparated(result.slugSeparated !== false);
+      }
       setLoading(false);
     })();
 
@@ -154,18 +176,59 @@ export default function VillaTranslationsCard({ villaId }: Props) {
         <div>
           <p className="eyebrow">Çok Dilli İçerik</p>
           <h2 className="text-lg font-semibold text-[var(--color-stone-900)]">
-            Çeviriler (EN / DE)
+            Çeviriler ({editable.map((l) => l.toUpperCase()).join(" / ")})
           </h2>
           <p className="mt-1 text-sm text-[var(--color-stone-500)]">
-            Bu alanlar yalnızca İngilizce ve Almanca sürümler içindir. Türkçe
-            içerik buradan düzenlenemez; boş bırakılan alanlar public
-            tarafta Türkçe içeriğe geri döner.
+            Bu alanlar {editable.map((l) => LOCALE_LABELS[l]).join(" ve ")} sürümleri
+            içindir. Ana dil ({rootLabel}) yukarıdaki formdan düzenlenir; boş
+            bırakılan alanlar public tarafta ana dil içeriğine geri döner.
           </p>
         </div>
       </header>
 
+      {technicalKey !== null ? (
+        <div className="rounded-2xl border border-[var(--color-stone-100)] p-4 space-y-3" data-testid="villa-root-slug">
+          <p className="text-[12px] text-[var(--color-stone-500)]">
+            Teknik anahtar: <code>{technicalKey}</code> (değişmez; villa adı değişse de aynı kalır).
+          </p>
+          <LocalizedSlugField
+            kind="villa"
+            locale={layout.root}
+            value={rootSlug}
+            onChange={(v) => setRootSlug(v)}
+          />
+          {rootSlugLocked ? (
+            <p className="text-[11px] text-amber-700">
+              Türkçe URL slug&apos;ı, teknik anahtar ayrımı (migration 108) uygulanana kadar düzenlenemez.
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="btn-ghost disabled:opacity-60"
+              disabled={savingRoot}
+              onClick={async () => {
+                setSavingRoot(true);
+                try {
+                  const r = await saveVillaRootSlugAction({ villaId, slug: rootSlug.trim() || null });
+                  if (!r.ok) {
+                    toast.error("Kaydedilemedi", { id: "villa-root-slug", description: r.error });
+                    return;
+                  }
+                  setRootSlug(r.slug ?? "");
+                  toast.success(`${rootLabel} URL slug'ı kaydedildi`, { id: "villa-root-slug" });
+                } finally {
+                  setSavingRoot(false);
+                }
+              }}
+            >
+              {rootLabel} URL slug&apos;ını kaydet
+            </button>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex gap-2">
-        {(Object.keys(LOCALE_LABELS) as WritableLocale[]).map((locale) => (
+        {editable.map((locale) => (
           <button
             key={locale}
             type="button"

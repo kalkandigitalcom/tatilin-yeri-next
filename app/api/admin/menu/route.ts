@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  createRootContent,
+  localizeAdminRows,
+} from "@/app/(admin)/maki-admin/_content/simple-content.server";
 
 import { authorizeAdminCaller } from "@/lib/admin-route-auth";
 import {
@@ -62,9 +66,12 @@ export async function GET(req: Request): Promise<NextResponse> {
     menuRepository.findAllVillaLocations(),
   ]);
 
+  /* 🌐 Faz 5 — menü adı ANA DİLİN değeriyle (merkezi içerik). */
+  const menuRows = await localizeAdminRows("menu", (menuRes.data || []) as { id: string; name: string }[], ["name"]);
+
   return NextResponse.json({
     ok: true,
-    menu: menuRes.data || [],
+    menu: menuRows,
     pages: pagesRes.data || [],
     types: typesRes.data || [],
     locations: locsRes.data || [],
@@ -117,16 +124,24 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  const payload = { name, href, source_type, source_id, is_active };
-
-  const { data: inserted, error } = await menuServerRepository.insert(payload);
-  if (error) {
-    console.error("[admin.menu.insert] FAILED", error.message);
+  /* 🌐 Faz 5 — menü ADI merkezi içerik servisiyle ANA DİLDE yazılır;
+     teknik kolonlar (href, kaynak, aktiflik) aynı transaction'da ana
+     tabloya. Eski doğrudan INSERT yolu bu modül için KAPALI. */
+  const created = await createRootContent(
+    auth.caller,
+    "menu",
+    { name },
+    { href, source_type, source_id, is_active },
+    { title: name, route: "/maki-admin/menu" }
+  );
+  if (!created.ok) {
+    console.error("[admin.menu.insert] FAILED", created.error);
     return NextResponse.json(
-      { ok: false, error: error.message || "Eklenemedi" },
+      { ok: false, error: created.error || "Eklenemedi" },
       { status: 500 }
     );
   }
+  const inserted = { id: created.id };
 
   /* 🛡️ TEK YÖNLÜ SYNC (explicit add → visibility intent):
      CMS sayfası EXPLICIT menüye eklendiyse → pages.show_in_menu=true.

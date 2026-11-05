@@ -1,13 +1,9 @@
-import { localeRoute } from "@/lib/i18n/routing/locale-route";
-import * as tr from "@/app/p/[slug]/locale-page";
-import * as en from "@/app/(public)/en/p/[slug]/locale-page";
-import * as de from "@/app/(public)/de/p/[slug]/locale-page";
+import { localeRouteFor } from "@/lib/i18n/routing/locale-route";
+import { cmsPageRouteModule } from "@/app/(public)/_routes/cms-page";
 
-/* 🌐 Faz 2 — dil dispatcher'ı (route anahtarı: "page").
-   Public URL'ler dile göre değişir (lib/i18n/routing/route-registry.ts);
-   proxy bu iç yola rewrite eder. Sayfa içeriği her dilin MEVCUT
-   modülündedir (locale-page.tsx) ve değiştirilmeden render edilir. */
-const route = localeRoute("page", { tr, en, de });
+/* 🌐 Faz 6 Dalga 3 — tek, dile duyarlı route modülü (app/(public)/_routes/cms-page.tsx).
+   Dil slug'ı → teknik anahtar ve kanonik 308 dispatcher'da; URL'ler route kaydından. */
+const route = localeRouteFor("page", cmsPageRouteModule);
 
 export const generateMetadata = route.generateMetadata;
 export default route.Page;

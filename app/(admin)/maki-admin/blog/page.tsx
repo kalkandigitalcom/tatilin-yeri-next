@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote, { MissingLocalesBadge } from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
@@ -20,6 +21,8 @@ type Row = {
   published_at: string | null;
   category: string | null;
   created_at: string;
+  /* 🌐 Faz 5 dalga 2 — başlığı boş diller. */
+  missing_locales?: ("tr" | "en" | "de")[];
 };
 
 export default function BlogListPage() {
@@ -79,6 +82,7 @@ export default function BlogListPage() {
           <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
             Blog Yazıları
           </h1>
+          <RootLocaleNote />
         </div>
         <Link href="/maki-admin/blog/new" className="btn-primary">
           <Plus size={15} />
@@ -104,8 +108,9 @@ export default function BlogListPage() {
                 className="flex items-center gap-4 px-5 py-4 hover:bg-[var(--color-stone-50)] transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-[var(--color-stone-900)] truncate">
-                    {r.title}
+                  <p className="font-medium text-[var(--color-stone-900)] truncate flex items-center gap-2">
+                    <span className="truncate">{r.title}</span>
+                    <MissingLocalesBadge missing={r.missing_locales} />
                   </p>
                   <p className="text-[12px] font-mono text-[var(--color-stone-400)] truncate">
                     /{r.slug}

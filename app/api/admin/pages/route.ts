@@ -9,6 +9,12 @@ import {
   PAGE_LIST_READERS,
 } from "@/lib/auth/admin-permission-map";
 import { pagesServerRepository } from "@/lib/db/pages.repository.server";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import { invalidateContentEntity } from "@/lib/i18n/content/content-admin.server";
+import {
+  createPageCentral,
+  localizePageList,
+} from "@/app/(admin)/maki-admin/pages/_content/page-content.server";
 /* 🛡️ Sayfa silmede orphan cover temizliği — server-side storage abstraction
    (removeServer write-driver'a göre R2'ye gider; provider seçme
    mantığı DEĞİŞMEZ). Cover `site-assets` bucket'ında. */
@@ -70,7 +76,12 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  return NextResponse.json({ ok: true, data: data || [] });
+  /* 🌐 Faz 5 dalga 2 — başlık ANA DİLİN değeri + eksik diller. */
+  const list = (data || []) as Array<{ id: string }>;
+  return NextResponse.json({
+    ok: true,
+    data: isContentWriteMigrated("page") ? await localizePageList(list) : list,
+  });
 }
 
 /* POST — pages.insert delegate. Eski client davranışı:
@@ -107,6 +118,21 @@ export async function POST(req: Request): Promise<NextResponse> {
       { ok: false, error: "Geçersiz istek" },
       { status: 400 }
     );
+  }
+
+  /* 🌐 Faz 5 dalga 2 — merkezi oluşturma: ana tablo (teknik anahtar +
+     yayın/menü alanları) ve ana dil içeriği TEK transaction. Eski
+     doğrudan insert bu modül için KAPALI. */
+  if (isContentWriteMigrated("page")) {
+    const r = await createPageCentral(
+      auth.caller,
+      (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>
+    );
+    if (!r.ok) {
+      console.error("[admin.pages.insert] FAILED", r.error);
+      return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
+    }
+    return NextResponse.json({ ok: true, data: r.data });
   }
 
   const { data, error } = await pagesServerRepository.insert(payload);
@@ -187,6 +213,11 @@ export async function DELETE(req: Request): Promise<NextResponse> {
       { status: 500 }
     );
   }
+
+  /* 🌐 Faz 6 Dalga 6 — silme merkezi yazmadan geçmez: sayfa içeriğini
+     okuyan sayfalar (header/footer), CMS sayfası ve sitemap.xml tag'le
+     hemen yenilenir. */
+  invalidateContentEntity("page");
 
   return NextResponse.json({ ok: true });
 }

@@ -24,14 +24,21 @@ import { pagesRepository } from "@/lib/db/pages.repository";
    tarafta (`Footer.tsx`, `usePathname()` locale'i) yapılır — bu wrapper
    `headers()`/`cookies()` KULLANMAMAYA devam eder, yani layout'un
    statik/ISR uygunluğu DEĞİŞMEZ. */
-import { isMultilingualEnabled } from "@/lib/i18n/config";
-import { getVillaTypeNamesByLocale } from "@/lib/i18n/get-villa-type-translations.server";
+import type { Locale } from "@/lib/i18n/config";
 /* 🛡️ CMS SAYFA BAŞLIKLARI — "Kurumsal" linklerinin adı `pages.title`'dan
    gelir; EN/DE karşılıkları migration 082'deki `page_translations.title`.
    Villa tipi çevirisiyle AYNI batch deseni (locale başına TEK `.in()`
    sorgusu, N+1 YOK) ve AYNI wrapper sözleşmesi: locale'den BAĞIMSIZ
    okunur, seçim `Footer.tsx` (client) içinde yapılır. */
-import { getPageTitlesByLocale } from "@/lib/i18n/get-page-titles-by-locale.server";
+/* 🌐 Faz 6 Dalga 4 — kategori adı, kurumsal sayfa başlığı ve telif metni
+   merkezi okuma servisinden (her AKTİF dil için, TR dahil; seçim yine
+   istemcide). Hiçbir aktif dilde etiketi olmayan öğe GİZLENİR. */
+import {
+  loadLabelMapsByLocale,
+  publicLocaleCtxFromSettings,
+} from "@/lib/i18n/content/public-shared-content";
+import { getPublicSettingsTextsByLocale } from "@/lib/i18n/content/public-shared-content.server";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 import type { TaxonomyNameByLocale } from "@/lib/i18n/taxonomy-name.helper";
 
 /* ---------------- DYNAMIC TAXONOMY ITEMS ---------------- */
@@ -113,27 +120,27 @@ export default async function FooterWrapper() {
 
   const villaTypesBase: TaxonomyItem[] =
     typesRes.status === "fulfilled" && Array.isArray(typesRes.value?.data)
-      ? (typesRes.value.data as TaxonomyItem[])
-          .filter((t) => t?.name)
-          .slice(0, 7)
+      ? (typesRes.value.data as TaxonomyItem[]).filter((t) => t?.name)
       : [];
 
-  /* 🛡️ PHASE 10H — EN/DE villa tipi adları.
-     `multilingual_enabled` kapalıyken /en ve /de route'ları zaten
-     `requirePublicLocaleEnabled()` ile 404 döner → çeviri okumak
-     GEREKSİZ bir sorgu olur, bu yüzden hiç çağrılmaz (ek maliyet YOK,
-     TR davranışı BİREBİR aynı). Okuma fail olursa footer çökmez:
-     harita boş kalır → canonical TR adı gösterilir. */
+  /* 🌐 Faz 6 Dalga 4 — villa tipi adları merkezi servisten, AKTİF dil
+     başına TEK batch (çoklu dil kapalıyken yalnız ana dil). Etiketi
+     hiçbir aktif dilde olmayan tip gizlenir; 7'lik kırpma gizlemeden
+     SONRA yapılır (görünen tip sayısı ve sırası eskisiyle aynı). */
+  const { enabled } = publicLocaleCtxFromSettings(settings);
   const typeNamesByLocale: Record<string, TaxonomyNameByLocale> =
-    isMultilingualEnabled(settings) && villaTypesBase.length > 0
-      ? await getVillaTypeNamesByLocale(
-          villaTypesBase.map((t) => t.id)
-        ).catch(() => ({}))
-      : {};
+    await loadLabelMapsByLocale(
+      publicContentReader,
+      "villa_type",
+      "name",
+      villaTypesBase.map((t) => t.id),
+      enabled
+    );
 
-  const villaTypes: TaxonomyItem[] = villaTypesBase.map((t) =>
-    typeNamesByLocale[t.id] ? { ...t, nameByLocale: typeNamesByLocale[t.id] } : t
-  );
+  const villaTypes: TaxonomyItem[] = villaTypesBase
+    .filter((t) => typeNamesByLocale[t.id])
+    .slice(0, 7)
+    .map((t) => ({ ...t, nameByLocale: typeNamesByLocale[t.id] }));
 
   /* Kurumsal CMS pages — filter + sort.
      Repo `is_active=true` filtreli; show_in_menu KASTEN filtrelenmez
@@ -167,21 +174,29 @@ export default async function FooterWrapper() {
           })
       : [];
 
-  /* 🛡️ EN/DE CMS sayfa başlıkları — villa tipi bloğuyla (yukarısı) AYNI
-     kural: `multilingual_enabled` kapalıyken hiç çağrılmaz (TR davranışı
-     BİREBİR, ek sorgu YOK). Okuma fail olursa footer çökmez: harita boş
-     kalır → canonical TR başlık gösterilir. Sıralama ve filtreleme
-     YUKARIDA tamamlandı; burada YALNIZ `nameByLocale` eklenir. */
-  const pageTitlesByLocale: Record<string, TaxonomyNameByLocale> =
-    isMultilingualEnabled(settings) && corporatePagesBase.length > 0
-      ? await getPageTitlesByLocale(
-          corporatePagesBase.map((p) => p.id)
-        ).catch(() => ({}))
-      : {};
+  /* 🌐 Faz 6 Dalga 4 — kurumsal sayfa başlıkları merkezi servisten (aynı
+     kural); hiçbir aktif dilde başlığı olmayan sayfa gizlenir. Sıralama
+     ve filtreleme YUKARIDA tamamlandı. Telif metni: aktif dil başına
+     tekil kayıt kuralı (istenen → ana dil satırı AYNEN → diğer aktifler). */
+  const [pageTitlesByLocale, settingsTexts] = await Promise.all([
+    loadLabelMapsByLocale(
+      publicContentReader,
+      "page",
+      "title",
+      corporatePagesBase.map((p) => p.id),
+      enabled
+    ),
+    getPublicSettingsTextsByLocale(settings),
+  ]);
 
-  const corporatePages: CorporatePage[] = corporatePagesBase.map((p) =>
-    pageTitlesByLocale[p.id] ? { ...p, nameByLocale: pageTitlesByLocale[p.id] } : p
-  );
+  const corporatePages: CorporatePage[] = corporatePagesBase
+    .filter((p) => pageTitlesByLocale[p.id])
+    .map((p) => ({ ...p, nameByLocale: pageTitlesByLocale[p.id] }));
+
+  const copyrightByLocale: Partial<Record<Locale, string | null>> = {};
+  for (const [l, t] of Object.entries(settingsTexts)) {
+    copyrightByLocale[l as Locale] = t?.footer_copyright ?? null;
+  }
 
   const year = new Date().getFullYear();
   const siteName = settings?.site_name || "Villa Kiralama";
@@ -210,6 +225,7 @@ export default async function FooterWrapper() {
       siteName={siteName}
       phoneDigits={phoneDigits}
       developerCreditLogoUrl={developerCreditLogoUrl}
+      copyrightByLocale={copyrightByLocale}
     />
   );
 }

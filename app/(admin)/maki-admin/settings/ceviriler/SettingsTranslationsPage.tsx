@@ -3,12 +3,16 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { useNotify } from "@/app/components/admin/notifications/NotificationProvider";
+import type { Locale } from "@/lib/i18n/config";
 import {
   SETTINGS_TRANSLATABLE_FIELDS,
   type SettingsTranslatableField,
-  type SettingsTranslationLocale,
-  type SettingsTranslationsByLocale,
+  type SettingsTranslationValues,
 } from "@/lib/i18n/settings-translations.types";
+
+/** Faz 5: ana dil dışındaki herhangi bir dil (TR dahil) çeviri dili olabilir. */
+type SettingsTranslationLocale = Locale;
+type SettingsTranslationsByLocale = Partial<Record<Locale, SettingsTranslationValues>>;
 
 import { saveSettingsTranslation } from "./settings-translations.action";
 import {
@@ -74,6 +78,8 @@ export type SettingsTranslationCanonical = {
   business_hours: string;
 };
 
+const ROOT_NAMES: Record<Locale, string> = { tr: "Türkçe", en: "English", de: "Deutsch" };
+
 type DraftValues = Record<SettingsTranslatableField, string>;
 type Drafts = Record<SettingsTranslationLocale, DraftValues>;
 
@@ -101,19 +107,27 @@ function draftsFrom(translations: SettingsTranslationsByLocale): Drafts {
     }
     return next;
   };
-  return { en: build("en"), de: build("de") };
+  return { tr: build("tr"), en: build("en"), de: build("de") };
 }
 
 export default function SettingsTranslationsPage({
   canonical,
   initialTranslations,
+  rootLocale = "tr",
+  translationLocales,
 }: {
+  /** Ana dilin (public_default_locale) değerleri — salt okunur. */
   canonical: SettingsTranslationCanonical;
-  /** Server-side okunan mevcut EN/DE çevirileri (migration 083). */
+  /** Server-side okunan, ana dil DIŞINDAKİ dillerin çevirileri. */
   initialTranslations: SettingsTranslationsByLocale;
+  rootLocale?: Locale;
+  translationLocales?: readonly Locale[];
 }) {
   const toast = useNotify();
-  const [locale, setLocale] = useState<TranslationLocale>("tr");
+  const others: readonly Locale[] =
+    translationLocales ?? (["tr", "en", "de"] as Locale[]).filter((l) => l !== rootLocale);
+  const rootName = ROOT_NAMES[rootLocale];
+  const [locale, setLocale] = useState<TranslationLocale>(rootLocale);
   const [drafts, setDrafts] = useState<Drafts>(() =>
     draftsFrom(initialTranslations)
   );
@@ -125,7 +139,7 @@ export default function SettingsTranslationsPage({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const isTr = locale === "tr";
+  const isTr = locale === rootLocale;
   const writableLocale: SettingsTranslationLocale | null = isTr
     ? null
     : (locale as SettingsTranslationLocale);
@@ -166,12 +180,12 @@ export default function SettingsTranslationsPage({
       (fields: readonly SettingsTranslatableField[]): TranslationSectionStatus => {
         const filledIn = (loc: SettingsTranslationLocale) =>
           fields.some((f) => (stored[loc]?.[f] ?? "").trim() !== "");
-        if (isTr) return filledIn("en") || filledIn("de") ? "active" : "review";
+        if (isTr) return others.some(filledIn) ? "active" : "review";
         return filledIn(locale as SettingsTranslationLocale)
           ? "active"
           : "review";
       },
-    [stored, isTr, locale]
+    [stored, isTr, locale, others]
   );
 
   async function handleSubmit(e: React.FormEvent) {
@@ -245,16 +259,15 @@ export default function SettingsTranslationsPage({
       {/* ── DURUM BİLGİSİ ── */}
       <TranslationInfo
         title="Çeviriler nasıl çalışır"
-        body="Türkçe değerler mevcut ayarlarınızdan salt okunur olarak gösterilir ve ilgili ayar sayfasından düzenlenir. English ve Deutsch içerikleri birbirinden bağımsız kaydedilir; bir alanı boş bırakırsanız o dilde Türkçe metin gösterilir."
+        body={`${rootName} (ana dil) değerleri mevcut ayarlarınızdan salt okunur olarak gösterilir ve ilgili ayar sayfasından düzenlenir. ${others.map((l) => ROOT_NAMES[l]).join(" ve ")} içerikleri birbirinden bağımsız kaydedilir; bir alanı boş bırakırsanız o dilde ana dil metni gösterilir.`}
       />
 
       {/* ── DİL SEKMELERİ ── */}
       <div className="space-y-2">
-        <TranslationLanguageTabs active={locale} onChange={setLocale} />
+        <TranslationLanguageTabs active={locale} onChange={setLocale} rootLocale={rootLocale} />
         <p className="text-[12px] text-[var(--color-stone-500)] leading-relaxed">
-          Türkçe canonical (kaynak) içeriktir ve bu ekrandan düzenlenmez;
-          ilgili ayar sayfasından güncellenir. Çeviriler yalnız English ve
-          Deutsch için tutulur.
+          {rootName} ana dildir ve bu ekrandan düzenlenmez; ilgili ayar
+          sayfasından güncellenir. Burada {others.map((l) => ROOT_NAMES[l]).join(" ve ")} düzenlenir.
         </p>
       </div>
 
@@ -270,6 +283,7 @@ export default function SettingsTranslationsPage({
           <TranslationField
             label="Footer telif metni"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.footer_copyright}
             placeholderHint="Örn: © {year} {site_name} · Tüm hakları saklıdır."
             {...editableProps("footer_copyright")}
@@ -285,6 +299,7 @@ export default function SettingsTranslationsPage({
           <TranslationField
             label="Varsayılan meta başlık"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.default_meta_title}
             hint="Tarayıcı sekmesi ve arama sonucu başlığı."
             {...editableProps("default_meta_title")}
@@ -292,6 +307,7 @@ export default function SettingsTranslationsPage({
           <TranslationField
             label="Varsayılan meta açıklama"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.default_meta_description}
             hint="Arama sonuçlarındaki açıklama metni; 150–160 karakter önerilir."
             multiline
@@ -311,17 +327,19 @@ export default function SettingsTranslationsPage({
             "hero_primary_cta_text",
             "hero_secondary_cta_text",
           ])}
-          note="Boş bırakılan alanlarda o dilde Türkçe canonical metin gösterilir. Buton bağlantıları (href) ve hero görseli DİL BAĞIMSIZDIR; çevrilmez."
+          note="Boş bırakılan alanlarda o dilde ana dil metni gösterilir. Buton bağlantıları (href) ve hero görseli DİL BAĞIMSIZDIR; çevrilmez."
         >
           <TranslationField
             label="Hero rozet metni"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.hero_badge_text}
             {...editableProps("hero_badge_text")}
           />
           <TranslationField
             label="Hero başlığı"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.hero_title}
             hint="Satır sonu karakterleri başlıkta olduğu gibi korunur."
             multiline
@@ -331,6 +349,7 @@ export default function SettingsTranslationsPage({
           <TranslationField
             label="Hero alt başlık"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.hero_subtitle}
             multiline
             rows={3}
@@ -339,6 +358,7 @@ export default function SettingsTranslationsPage({
           <TranslationField
             label="Birincil buton metni"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.hero_primary_cta_text}
             hint="Yalnız buton metni çevrilir; buton bağlantısı (href) canonical kalır."
             {...editableProps("hero_primary_cta_text")}
@@ -346,6 +366,7 @@ export default function SettingsTranslationsPage({
           <TranslationField
             label="İkincil buton metni"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.hero_secondary_cta_text}
             hint="Yalnız buton metni çevrilir; buton bağlantısı (href) canonical kalır."
             {...editableProps("hero_secondary_cta_text")}
@@ -359,11 +380,12 @@ export default function SettingsTranslationsPage({
           title="İletişim · Çalışma Saatleri"
           description="İletişim sayfasında gösterilen çalışma saatleri metni."
           status={statusOf(["business_hours"])}
-          note="Boş bırakılırsa o dilde Türkçe canonical metin gösterilir. Telefon, e-posta, adres ve sosyal medya bağlantıları VERİdir; her dilde aynı kalır ve çevrilmez."
+          note="Boş bırakılırsa o dilde ana dil metni gösterilir. Telefon, e-posta, adres ve sosyal medya bağlantıları VERİdir; her dilde aynı kalır ve çevrilmez."
         >
           <TranslationField
             label="Çalışma saatleri"
             locale={locale}
+            rootLocale={rootLocale}
             canonicalValue={canonical.business_hours}
             multiline
             rows={3}
@@ -371,7 +393,7 @@ export default function SettingsTranslationsPage({
           />
         </TranslationSection>
 
-        {/* ── KAYDET — yalnız EN/DE sekmesinde ── */}
+        {/* ── KAYDET — yalnız ana dil DIŞINDAKİ sekmelerde ── */}
         {writableLocale && (
           <div className="flex items-center justify-end gap-4">
             <p className="text-[12px] text-[var(--color-stone-500)]">

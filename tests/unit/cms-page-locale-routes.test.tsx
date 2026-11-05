@@ -15,6 +15,8 @@
 =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { cmsPageFor, registerPageSource, resetTranslations, setTranslationRow } from "../fixtures/faz6/cms-adapter";
+import { resetContentTables } from "../fixtures/faz6/content-table-mock";
 import { render, screen } from "@testing-library/react";
 
 const requirePublicLocaleEnabledMock = vi.fn();
@@ -33,6 +35,30 @@ vi.mock("next/navigation", () => ({
   notFound: () => notFoundMock(),
 }));
 
+/* 🌐 Faz 6 Dalga 3 — CMS route'u TEK modüle taşındı ve içerik MERKEZİ
+   servisten okunuyor (bkz. tests/fixtures/faz6/cms-adapter.ts). Eski
+   `getTranslationMock` yalnız eski `resolvePageContent` yardımcısı için
+   duruyor; route testleri çeviri satırını `setTranslationRow` ile verir. */
+const contentSpy = vi.fn();
+const routingEnabled = vi.hoisted(() => ({ value: ["tr", "en", "de"] as string[] }));
+vi.mock("@/lib/i18n/routing/context.server", () => ({
+  primeRoutingContext: async () => ({ root: "tr", enabled: routingEnabled.value, slugs: {}, redirects: {} }),
+}));
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const tm = await import("../fixtures/faz6/content-table-mock");
+  const ad = await import("../fixtures/faz6/cms-adapter");
+  const base = tm.contentReadServerMock((...a) => contentSpy(...a));
+  return {
+    getContentMany: async (e: string, ids: string[], l: string) => {
+      await ad.syncPageContent();
+      return base.getContentMany(e, ids, l);
+    },
+    getContent: async (e: string, id: string, l: string) => {
+      await ad.syncPageContent();
+      return base.getContent(e, id, l);
+    },
+  };
+});
 const getPageBySlugMock = vi.fn();
 vi.mock("@/app/services/page.service", () => ({
   getPageBySlug: (...a: unknown[]) => getPageBySlugMock(...a),
@@ -126,9 +152,14 @@ const DE_ROW = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetContentTables();
+  resetTranslations();
+  contentSpy.mockReset();
+  registerPageSource(() => getPageBySlugMock.mock.results.at(-1)?.value);
+  routingEnabled.value = ["tr", "en", "de"];
   requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
   getPageBySlugMock.mockResolvedValue(TR_PAGE);
-  getTranslationMock.mockResolvedValue(null);
+  setTranslationRow(null);
   notFoundMock.mockImplementation(() => {
     throw new Error("NEXT_NOT_FOUND");
   });
@@ -145,13 +176,12 @@ const LOCALE_ROUTES: Array<[string, "en" | "de", typeof EN_ROW]> = [
 ];
 
 describe.each(LOCALE_ROUTES)("%s", (modulePath, locale, row) => {
-  it(`1) gate geçerse ORTAK CmsPageBody'yi locale="${locale}" ile render eder`, async () => {
-    getTranslationMock.mockResolvedValue(row);
-    const { default: Page } = await import(modulePath);
+  it(`1) ORTAK CmsPageBody'yi locale="${locale}" ile render eder (dil kapısı artık dispatcher'da — bkz. 4)`, async () => {
+    setTranslationRow(row);
+    const Page = cmsPageFor(modulePath);
     const element = await Page({ params: Promise.resolve({ slug: SLUG }) });
 
-    expect(setRequestLocaleMock).toHaveBeenCalledWith(locale);
-    expect(requirePublicLocaleEnabledMock).toHaveBeenCalledTimes(1);
+    expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
     expect(element.type).toBe(CmsPageBody);
     expect(element.props.locale).toBe(locale);
     expect(element.props.slug).toBe(SLUG);
@@ -160,16 +190,17 @@ describe.each(LOCALE_ROUTES)("%s", (modulePath, locale, row) => {
     expect(element.props.body).toBe(row.body);
   });
 
-  it(`2) çeviri okuması DOĞRU entity/locale ile yapılır`, async () => {
-    getTranslationMock.mockResolvedValue(row);
-    const { default: Page } = await import(modulePath);
+  it(`2) içerik okuması MERKEZİ servisten DOĞRU varlık/kimlik/dil ile, TEK kez`, async () => {
+    setTranslationRow(row);
+    const Page = cmsPageFor(modulePath);
     await Page({ params: Promise.resolve({ slug: SLUG }) });
-    expect(getTranslationMock).toHaveBeenCalledWith("page", PAGE_ID, locale);
+    expect(contentSpy.mock.calls).toEqual([["page", [PAGE_ID], locale]]);
+    expect(getTranslationMock).not.toHaveBeenCalled();
   });
 
   it(`3) çeviri YOKSA TR'ye fallback — URL/locale korunur`, async () => {
-    getTranslationMock.mockResolvedValue(null);
-    const { default: Page } = await import(modulePath);
+    setTranslationRow(null);
+    const Page = cmsPageFor(modulePath);
     const element = await Page({ params: Promise.resolve({ slug: SLUG }) });
     expect(element.props.locale).toBe(locale);
     expect(element.props.slug).toBe(SLUG);
@@ -177,19 +208,20 @@ describe.each(LOCALE_ROUTES)("%s", (modulePath, locale, row) => {
     expect(element.props.body).toBe(TR_PAGE.body);
   });
 
-  it(`4) multilingual KAPALI → gate'in notFound()'u PROPAGATE eder`, async () => {
-    requirePublicLocaleEnabledMock.mockRejectedValue(
-      new Error("NEXT_NOT_FOUND")
-    );
-    const { default: Page } = await import(modulePath);
+  it(`4) dil pasifse (çoklu dil kapalı dahil) dispatcher notFound()'u PROPAGATE eder; sayfa okunmaz`, async () => {
+    routingEnabled.value = ["tr", "en", "de"].filter((l) => l !== locale);
+    const { localeRouteFor } = await import("@/lib/i18n/routing/locale-route");
+    const { cmsPageRouteModule } = await import("@/app/(public)/_routes/cms-page");
+    const r = localeRouteFor("page", cmsPageRouteModule);
     await expect(
-      Page({ params: Promise.resolve({ slug: SLUG }) })
+      r.Page({ params: Promise.resolve({ lang: locale, slug: SLUG }), searchParams: Promise.resolve({}) } as never)
     ).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(getPageBySlugMock).not.toHaveBeenCalled();
   });
 
   it(`5) sayfa yoksa notFound() çağrılır`, async () => {
     getPageBySlugMock.mockResolvedValue(null);
-    const { default: Page } = await import(modulePath);
+    const Page = cmsPageFor(modulePath);
     await expect(
       Page({ params: Promise.resolve({ slug: SLUG }) })
     ).rejects.toThrow("NEXT_NOT_FOUND");
@@ -197,7 +229,8 @@ describe.each(LOCALE_ROUTES)("%s", (modulePath, locale, row) => {
   });
 
   it(`6) generateMetadata mevcut (statik metadata YOK)`, async () => {
-    const mod = await import(modulePath);
+    void modulePath;
+    const mod: Record<string, unknown> = await import("@/app/(public)/[lang]/(site)/p/[slug]/page");
     expect(mod.metadata).toBeUndefined();
     expect(typeof mod.generateMetadata).toBe("function");
   });
@@ -205,7 +238,7 @@ describe.each(LOCALE_ROUTES)("%s", (modulePath, locale, row) => {
 
 describe("app/p/[slug]/locale-page.tsx — TR", () => {
   it("7) ORTAK CmsPageBody'yi locale='tr' ile render eder", async () => {
-    const { default: Page } = await import("@/app/p/[slug]/locale-page");
+    const Page = cmsPageFor("@/app/p/[slug]/locale-page");
     const element = await Page({ params });
     expect(element.type).toBe(CmsPageBody);
     expect(element.props.locale).toBe("tr");
@@ -213,25 +246,19 @@ describe("app/p/[slug]/locale-page.tsx — TR", () => {
     expect(element.props.body).toBe(TR_PAGE.body);
   });
 
-  it("8) TR'de locale gate'i ve çeviri okuması ÇAĞRILMAZ", async () => {
-    const { default: Page } = await import("@/app/p/[slug]/locale-page");
+  it("8) TR'de eski kapı / eski çeviri okuyucu ÇAĞRILMAZ; içerik merkezi servisten TR satırıyla (bütün dillerde aynı yol)", async () => {
+    const Page = cmsPageFor("@/app/p/[slug]/locale-page");
     await Page({ params });
-    expect(setRequestLocaleMock).not.toHaveBeenCalled();
     expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
     expect(getTranslationMock).not.toHaveBeenCalled();
+    expect(contentSpy.mock.calls).toEqual([["page", [PAGE_ID], "tr"]]);
   });
 
-  it("9) TR 404: kendine özgü inline blok KORUNDU (notFound() DEĞİL)", async () => {
+  it("9) 🌐 Faz 6 Dalga 3 — TR 404 de artık notFound() (EN/DE ile aynı; eski 200 dönen satır içi blok kaldırıldı)", async () => {
     getPageBySlugMock.mockResolvedValue(null);
-    const { default: Page } = await import("@/app/p/[slug]/locale-page");
-    const element = await Page({ params });
-    expect(notFoundMock).not.toHaveBeenCalled();
-    expect(element.type).not.toBe(CmsPageBody);
-    render(element);
-    expect(screen.getByText("Sayfa bulunamadı.")).toBeTruthy();
-    expect(
-      screen.getByText("Aradığın sayfa kaldırılmış veya taşınmış olabilir.")
-    ).toBeTruthy();
+    const Page = cmsPageFor("@/app/p/[slug]/locale-page");
+    await expect(Page({ params })).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(notFoundMock).toHaveBeenCalled();
   });
 });
 
@@ -240,7 +267,7 @@ describe("app/p/[slug]/locale-page.tsx — TR", () => {
    =============================================================== */
 describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
   async function renderRoute(modulePath: string) {
-    const { default: Page } = await import(modulePath);
+    const Page = cmsPageFor(modulePath);
     const element = await Page({ params: Promise.resolve({ slug: SLUG }) });
     render(element);
   }
@@ -256,7 +283,7 @@ describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
   });
 
   it("11) EN: İngilizce başlık/excerpt/gövde render edilir", async () => {
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    setTranslationRow(EN_ROW);
     await renderRoute("@/app/(public)/en/p/[slug]/locale-page");
 
     expect(screen.getByRole("heading", { name: EN_ROW.title })).toBeTruthy();
@@ -268,7 +295,7 @@ describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
   });
 
   it("12) DE: Almanca başlık/excerpt/gövde render edilir", async () => {
-    getTranslationMock.mockResolvedValue(DE_ROW);
+    setTranslationRow(DE_ROW);
     await renderRoute("@/app/(public)/de/p/[slug]/locale-page");
 
     expect(screen.getByRole("heading", { name: DE_ROW.title })).toBeTruthy();
@@ -278,7 +305,7 @@ describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
   });
 
   it("13) EN çevirisi YOKSA sayfa TR içerikle render edilir (fallback)", async () => {
-    getTranslationMock.mockResolvedValue(null);
+    setTranslationRow(null);
     await renderRoute("@/app/(public)/en/p/[slug]/locale-page");
     expect(
       screen.getByRole("heading", { name: TR_PAGE.title })
@@ -287,17 +314,15 @@ describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
   });
 
   it("14) ALAN BAZINDA fallback: EN başlık var, gövde TR", async () => {
-    getTranslationMock.mockResolvedValue({ ...EN_ROW, body: null });
+    setTranslationRow({ ...EN_ROW, body: null });
     await renderRoute("@/app/(public)/en/p/[slug]/locale-page");
     expect(screen.getByRole("heading", { name: EN_ROW.title })).toBeTruthy();
     expect(screen.getByText(TR_PAGE.body)).toBeTruthy();
   });
 
   it("15) SLUG ÇEVRİLMEZ — cover alt/başlık değişse de slug TR kalır", async () => {
-    getTranslationMock.mockResolvedValue(EN_ROW);
-    const { default: Page } = await import(
-      "@/app/(public)/en/p/[slug]/locale-page"
-    );
+    setTranslationRow(EN_ROW);
+    const Page = cmsPageFor("@/app/(public)/en/p/[slug]/locale-page");
     const element = await Page({ params: Promise.resolve({ slug: SLUG }) });
     expect(element.props.slug).toBe(SLUG);
     expect(element.props.page.slug).toBe(SLUG);
@@ -308,7 +333,7 @@ describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
       ...TR_PAGE,
       sections: [{ type: "richtext", content: "TR bölüm metni" }],
     });
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    setTranslationRow(EN_ROW);
     await renderRoute("@/app/(public)/en/p/[slug]/locale-page");
 
     /* Başlık EN, section içeriği TR (page_translations'ta kolon YOK). */
@@ -325,11 +350,9 @@ describe("CmsPageBody — gerçek render (çeviri metinleri)", () => {
       title: "Hakkımızda",
       cover_image: "pages/x.webp",
     });
-    getTranslationMock.mockResolvedValue({ ...EN_ROW, title: "About Us" });
+    setTranslationRow({ ...EN_ROW, title: "About Us" });
 
-    const { default: Page } = await import(
-      "@/app/(public)/en/p/[slug]/locale-page"
-    );
+    const Page = cmsPageFor("@/app/(public)/en/p/[slug]/locale-page");
     const element = await Page({
       params: Promise.resolve({ slug: "hakkimizda" }),
     });

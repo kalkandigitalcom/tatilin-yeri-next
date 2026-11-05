@@ -527,6 +527,10 @@ export const tr: Dictionary = {
     seo: {
       websiteDescription:
         "Akdeniz'in seçkin villalarında özel havuz, deniz manzarası ve butik konfor.",
+      /* Eski `home-metadata.ts` sabitleriyle BİREBİR aynı. */
+      metaTitleFallback: "Villa Kiralama — Lüks Villa Deneyimi",
+      metaDescriptionFallback:
+        "Akdeniz'in seçkin villalarında özel havuz, deniz manzarası ve butik konfor. Hayalindeki tatili keşfet.",
     },
     months: {
       1: "Ocak",

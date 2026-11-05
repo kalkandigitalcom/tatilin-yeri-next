@@ -14,25 +14,22 @@ import Header from "./Header";
    revalidateSettings()/revalidateMenu() invalidation yolu AYNEN. */
 import { getCachedMenu, getCachedSettings } from "@/lib/cache.helpers";
 import { resolveAssetUrlVersioned } from "@/lib/storage.helpers";
-/* 🛡️ PHASE 10H — `source_type: "category"` menü öğeleri villa tipi
-   adını gösterir; EN/DE karşılıkları migration 082'deki
-   `villa_type_translations`'tan okunur. Locale'den BAĞIMSIZ okunur,
-   seçim client tarafta (`Header.tsx`, `usePathname()` locale'i) yapılır
-   — bu wrapper `headers()`/`cookies()` KULLANMAMAYA devam eder.
-   `getMenu()` / `lib/menu-resolver.ts` DEĞİŞTİRİLMEDİ: çeviri burada,
-   çözülmüş ağaca `source_id` üzerinden eklenir. */
-import { isMultilingualEnabled } from "@/lib/i18n/config";
+/* 🛡️ PHASE 10H — dil etiketleri locale'den BAĞIMSIZ okunur, seçim client
+   tarafta (`Header.tsx`, `usePathname()` locale'i) yapılır — bu wrapper
+   `headers()`/`cookies()` KULLANMAMAYA devam eder. `getMenu()` /
+   `lib/menu-resolver.ts` DEĞİŞTİRİLMEDİ: etiketler burada, çözülmüş
+   ağaca `source_id` / `id` üzerinden eklenir. */
 import { resolvePublicHome } from "@/lib/i18n/public-home";
-import { getVillaTypeNamesByLocale } from "@/lib/i18n/get-villa-type-translations.server";
-/* 🛡️ MIGRATION 086 — dinamik menü etiketlerinin EN/DE karşılıkları
-   (`menu_translations`). Villa tipi çevirisiyle AYNI batch deseni:
-   locale başına TEK `.in()` sorgusu, N+1 YOK. */
-import { getMenuNamesByLocale } from "@/lib/i18n/get-menu-translations.server";
-/* 🛡️ CMS SAYFA MENÜ ÖĞELERİ — `source_type: "page"` düğümlerin adı
-   `pages.title`'dan gelir; EN/DE karşılıkları migration 082'deki
-   `page_translations.title`'dan okunur. Villa tipi / manuel menü ile
-   AYNI batch deseni: locale başına TEK `.in()` sorgusu, N+1 YOK. */
-import { getPageTitlesByLocale } from "@/lib/i18n/get-page-titles-by-locale.server";
+/* 🌐 Faz 6 Dalga 4 — kategori / manuel menü / CMS sayfa etiketleri
+   merkezi okuma servisinden: her AKTİF dil için (TR dahil) zincirle
+   çözülmüş etiket haritası (dil başına TEK batch, N+1 yok). Seçim yine
+   istemcide (`Header.tsx`, `resolveTaxonomyName`). Hiçbir aktif dilde
+   etiketi olmayan düğüm GİZLENİR (ana tablo adına düşmez). */
+import {
+  loadLabelMapsByLocale,
+  publicLocaleCtxFromSettings,
+} from "@/lib/i18n/content/public-shared-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 import type { TaxonomyNameByLocale } from "@/lib/i18n/taxonomy-name.helper";
 
 /** `getMenu()` ağacının bu dosyada ihtiyaç duyulan minimum şekli. */
@@ -141,6 +138,29 @@ function attachTypeNames<T extends MenuNodeLike>(
   });
 }
 
+/** 🌐 Faz 6 Dalga 4 — merkezi etiketlerle çevrilen düğüm türleri. */
+function isCentralLabelled(n: MenuNodeLike): boolean {
+  return (
+    (n?.source_type === "category" && typeof n.source_id === "string") ||
+    (n?.source_type === "manual" && typeof n.id === "string" && !!n.id) ||
+    (n?.source_type === "page" && typeof n.source_id === "string")
+  );
+}
+
+/** Etiketi hiçbir aktif dilde olmayan merkezi düğümü (alt ağacıyla) çıkarır;
+ *  sıra korunur. Diğer düğüm türleri (bölge vb.) AYNEN kalır. */
+function dropUnlabelled<T extends MenuNodeLike>(nodes: T[]): T[] {
+  const out: T[] = [];
+  for (const n of nodes) {
+    if (isCentralLabelled(n) && !n.nameByLocale) continue;
+    if (Array.isArray(n?.children) && n.children.length > 0) {
+      const children = dropUnlabelled(n.children);
+      out.push(children.length === n.children.length ? n : ({ ...n, children } as T));
+    } else out.push(n);
+  }
+  return out;
+}
+
 export default async function HeaderWrapper() {
   /* ===============================================================
      🔥 SITE LOGO
@@ -151,22 +171,21 @@ export default async function HeaderWrapper() {
         relative path (yeni) runtime'da getPublicUrl ile URL'e çevrilir.
      =============================================================== */
   let siteLogo: string | null = null;
-  /* 🛡️ PHASE 10H — `multilingual_enabled` kapalıyken /en ve /de zaten
-     404 (requirePublicLocaleEnabled) → çeviri okumak GEREKSİZ sorgu
-     olur; bu bayrak o durumda okumayı tamamen atlatır. */
-  let multilingualEnabled = false;
   /* 🔄 TR ana sayfa yolu — varsayılan dil EN/DE iken "/" bir
      YÖNLENDİRİCİDİR ve TR ana sayfa "/tr"'de yaşar; logo linki oraya
      bakmalı ki TR kullanıcı varsayılan dile geri düşmesin. Okuma
      ZATEN yapılan `getPublicSettings()` üzerinden — EK FETCH YOK.
      Hata/kapalı/`tr` durumunda "/" kalır (BYTE-IDENTICAL). */
   let trHomeHref = "/";
+  /* 🌐 Faz 6 Dalga 4 — dil bağlamı AYNI ayar okumasından (ek okuma yok);
+     okunamazsa varsayılan bağlam (ana dil TR). */
+  let enabled = publicLocaleCtxFromSettings(null).enabled;
   try {
     const settings = await getCachedSettings();
+    enabled = publicLocaleCtxFromSettings(settings).enabled;
     siteLogo =
       resolveAssetUrlVersioned(settings?.site_logo, settings?.updated_at) ||
       null;
-    multilingualEnabled = isMultilingualEnabled(settings);
     trHomeHref = resolvePublicHome(settings).trHomeHref;
   } catch {
     siteLogo = null;
@@ -186,7 +205,7 @@ export default async function HeaderWrapper() {
     /* 🛡️ PHASE 10H — villa tipi adlarının EN/DE karşılıkları. Okuma fail
        olursa header ÇÖKMEZ: harita boş kalır → canonical TR adı gösterilir
        (mevcut davranış). */
-    if (multilingualEnabled && menuItems.length > 0) {
+    if (menuItems.length > 0) {
       const categoryIds: string[] = [];
       collectCategoryIds(menuItems as MenuNodeLike[], categoryIds);
       /* 🛡️ MIGRATION 086 — YALNIZ manual menü satırlarının id'leri. */
@@ -195,35 +214,17 @@ export default async function HeaderWrapper() {
       /* 🛡️ CMS sayfa öğelerinin `pages.id`'leri (explicit + auto). */
       const pageIds: string[] = [];
       collectPageIds(menuItems as MenuNodeLike[], pageIds);
-
-      /* ÜÇ batch okuma PARALEL; her biri locale başına TEK `.in()`
-         sorgusu (N+1 YOK). Boş id listesinde sorgu HİÇ atılmaz.
-         Okuma fail olursa header ÇÖKMEZ: harita boş kalır → canonical
-         TR adı gösterilir (mevcut davranış). */
+      /* 🌐 Faz 6 Dalga 4 — ÜÇ kaynak PARALEL, her biri aktif dil başına
+         TEK batch. Çoklu dil kapalıyken yalnız ana dil okunur. Boş id
+         listesinde sorgu HİÇ atılmaz. */
       const [namesById, menuNamesById, pageNamesById] = await Promise.all([
-        categoryIds.length > 0
-          ? getVillaTypeNamesByLocale(categoryIds).catch(() => ({}))
-          : Promise.resolve({}),
-        manualIds.length > 0
-          ? getMenuNamesByLocale(manualIds).catch(() => ({}))
-          : Promise.resolve({}),
-        pageIds.length > 0
-          ? getPageTitlesByLocale(pageIds).catch(() => ({}))
-          : Promise.resolve({}),
+        loadLabelMapsByLocale(publicContentReader, "villa_type", "name", categoryIds, enabled),
+        loadLabelMapsByLocale(publicContentReader, "menu", "name", manualIds, enabled),
+        loadLabelMapsByLocale(publicContentReader, "page", "title", pageIds, enabled),
       ]);
-
-      if (
-        Object.keys(namesById).length > 0 ||
-        Object.keys(menuNamesById).length > 0 ||
-        Object.keys(pageNamesById).length > 0
-      ) {
-        menuItems = attachTypeNames(
-          menuItems,
-          namesById,
-          menuNamesById,
-          pageNamesById
-        );
-      }
+      menuItems = dropUnlabelled(
+        attachTypeNames(menuItems as MenuNodeLike[], namesById, menuNamesById, pageNamesById)
+      ) as typeof menuItems;
     }
   } catch (err) {
     console.error("❌ HeaderWrapper menu error:", err);

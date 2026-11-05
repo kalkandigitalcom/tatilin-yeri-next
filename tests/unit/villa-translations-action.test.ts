@@ -38,6 +38,20 @@ vi.mock("@/app/services/villa-translation.service", () => ({
     upsertVillaTranslationMock(...args),
 }));
 
+
+/* 🌐 Faz 5 dalga 2 — "villa" merkezi yazmada: action eski servis yerine
+   villa-admin/_helpers/content.server'ın merkezi yardımcılarına delege
+   eder. Aynı mock'lara yönlendirilir → yetki/delegasyon beklentileri
+   AYNEN doğrulanır; çağıranın (caller) geçtiği ayrıca test edilir. */
+const centralCallers: unknown[] = [];
+vi.mock("@/app/services/villa-admin/_helpers/content.server", () => ({
+  loadVillaTranslationsCentral: (...a: unknown[]) => getVillaTranslationsMock(...a),
+  saveVillaTranslationCentral: (caller: unknown, input: unknown) => {
+    centralCallers.push(caller);
+    return upsertVillaTranslationMock(input);
+  },
+  saveVillaRootSlugCentral: vi.fn(),
+}));
 import {
   loadVillaTranslationsAction,
   saveVillaTranslationAction,

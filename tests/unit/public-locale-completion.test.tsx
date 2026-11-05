@@ -69,17 +69,9 @@ const ROUTES: Array<{
   props?: Record<string, unknown>;
 }> = [
   {
-    path: "teklif-al",
-    body: "@/app/components/offer/OfferPageBody",
-  },
-  {
     path: "rezervasyon-kontrol",
     body: "@/app/components/reservation-lookup/ReservationLookupPageBody",
     props: { searchParams: Promise.resolve({}) },
-  },
-  {
-    path: "favoriler",
-    body: "@/app/components/favorites/FavoritesPageBody",
   },
   {
     path: "favoriler/paylas/[token]",
@@ -120,6 +112,46 @@ for (const route of ROUTES) {
         await expect(Page(route.props ?? {})).rejects.toThrow(
           "NEXT_NOT_FOUND"
         );
+      });
+    });
+  }
+}
+
+/* 🌐 Faz 6 Dalga 1 — `teklif-al` ve `favoriler` artık TEK, dile duyarlı
+   route modülü (app/(public)/_routes). Aynı iki beklenti (1: ortak gövde
+   doğru dille + setRequestLocale; 2: kapı kapalıysa 404 YUTULMAZ) şimdi
+   dispatcher üzerinden doğrulanıyor — kapı dispatcher'da (aktif diller).
+   TR de aynı kurala tabi (eskiden TR modülü kapıdan geçmiyordu). */
+const unifiedCtx = vi.hoisted(() => ({ enabled: ["tr", "en", "de"] as string[] }));
+vi.mock("@/lib/i18n/routing/context.server", () => ({
+  primeRoutingContext: async () => ({ root: "tr", enabled: unifiedCtx.enabled, slugs: {}, redirects: {} }),
+}));
+
+const UNIFIED: Array<{ path: string; key: "offer" | "favorites"; mod: string; name: string; body: string }> = [
+  { path: "teklif-al", key: "offer", mod: "@/app/(public)/_routes/offer", name: "offerRouteModule", body: "@/app/components/offer/OfferPageBody" },
+  { path: "favoriler", key: "favorites", mod: "@/app/(public)/_routes/favorites", name: "favoritesRouteModule", body: "@/app/components/favorites/FavoritesPageBody" },
+];
+
+for (const route of UNIFIED) {
+  for (const locale of LOCALES) {
+    describe(`/${locale}/${route.path} (tek modül)`, () => {
+      const routeProps = { params: Promise.resolve({ lang: locale }), searchParams: Promise.resolve({}) };
+      it(`1) dil aktifken ortak gövdeyi locale="${locale}" ile render eder`, async () => {
+        unifiedCtx.enabled = ["tr", "en", "de"];
+        const { localeRouteFor } = await import("@/lib/i18n/routing/locale-route");
+        const mod = (await import(route.mod))[route.name];
+        const { default: Body } = await import(route.body);
+        const outer = (await localeRouteFor(route.key, mod).Page(routeProps)) as { type: (p: unknown) => unknown; props: unknown };
+        const element = (await outer.type(outer.props)) as { type: unknown; props: { locale: string } };
+        expect(setRequestLocaleMock).toHaveBeenCalledWith(locale);
+        expect(element.type).toBe(Body);
+        expect(element.props.locale).toBe(locale);
+      });
+      it("2) dil kapalıyken notFound() YUTULMAZ", async () => {
+        unifiedCtx.enabled = ["tr", "en", "de"].filter((l) => l !== locale);
+        const { localeRouteFor } = await import("@/lib/i18n/routing/locale-route");
+        const mod = (await import(route.mod))[route.name];
+        await expect(localeRouteFor(route.key, mod).Page(routeProps)).rejects.toThrow("NEXT_NOT_FOUND");
       });
     });
   }

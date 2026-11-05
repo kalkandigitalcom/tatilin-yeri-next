@@ -31,31 +31,35 @@ export const LOCALIZED_SLUGS_SQL = `
 
 /** Slug geçmişi (migration 103) → YALNIZ yayındaki içeriklerin GÜNCEL
  *  taban slug'ı. Pasif / silinmiş içerik → satır gelmez → yönlendirme
- *  üretilmez. Eski slug bugün canlı bir taban slug'ı ise atlanır
- *  (canlı içerik her zaman önceliklidir). */
+ *  üretilmez. Eski slug bugün BAŞKA bir kaydın canlı taban slug'ı ise
+ *  atlanır (canlı içerik her zaman önceliklidir).
+ *  Faz 7 R-B: eski slug kaydın KENDİ teknik anahtarına eşit olabilir
+ *  (dil slug'ı teknik anahtardan ayrıldı — ör. 108 sonrası TR slug
+ *  değişikliği). Bu satır artık atlanmaz; proxy onu "bu dil teknik
+ *  anahtarı eskiden kullandı" bilgisi olarak okur (aynı dile 308). */
 export const REDIRECTS_SQL = `
   WITH r AS (
     SELECT r.entity_kind AS kind, r.locale, r.old_slug, r.entity_id FROM public.url_redirects r
   )
   SELECT r.kind, r.locale, r.old_slug, p.slug AS base FROM r
     JOIN public.villa p ON p.id = r.entity_id AND p.is_active = true AND p.deleted_at IS NULL
-   WHERE r.kind = 'villa' AND p.slug IS NOT NULL AND p.slug <> r.old_slug
-     AND NOT EXISTS (SELECT 1 FROM public.villa x WHERE x.slug = r.old_slug)
+   WHERE r.kind = 'villa' AND p.slug IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.villa x WHERE x.slug = r.old_slug AND x.id <> p.id)
   UNION ALL
   SELECT r.kind, r.locale, r.old_slug, p.slug FROM r
     JOIN public.villa_types p ON p.id = r.entity_id
-   WHERE r.kind = 'villaType' AND p.slug IS NOT NULL AND p.slug <> r.old_slug
-     AND NOT EXISTS (SELECT 1 FROM public.villa_types x WHERE x.slug = r.old_slug)
+   WHERE r.kind = 'villaType' AND p.slug IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.villa_types x WHERE x.slug = r.old_slug AND x.id <> p.id)
   UNION ALL
   SELECT r.kind, r.locale, r.old_slug, p.slug FROM r
     JOIN public.blog_posts p ON p.id = r.entity_id AND p.is_active = true
-   WHERE r.kind = 'blog' AND p.slug IS NOT NULL AND p.slug <> r.old_slug
-     AND NOT EXISTS (SELECT 1 FROM public.blog_posts x WHERE x.slug = r.old_slug)
+   WHERE r.kind = 'blog' AND p.slug IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.blog_posts x WHERE x.slug = r.old_slug AND x.id <> p.id)
   UNION ALL
   SELECT r.kind, r.locale, r.old_slug, p.slug FROM r
     JOIN public.pages p ON p.id = r.entity_id AND p.is_active = true
-   WHERE r.kind = 'page' AND p.slug IS NOT NULL AND p.slug <> r.old_slug
-     AND NOT EXISTS (SELECT 1 FROM public.pages x WHERE x.slug = r.old_slug)
+   WHERE r.kind = 'page' AND p.slug IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.pages x WHERE x.slug = r.old_slug AND x.id <> p.id)
 `;
 
 /** Faz 3 son kontrol — YAYINDAKİ içeriklerin taban slug'ları (proxy
@@ -84,7 +88,10 @@ type RedirectRow = { kind: SlugKind; locale: string; old_slug: string; base: str
 export function rowsToSlugMap(rows: readonly SlugRow[]): LocalizedSlugMap {
   const map: LocalizedSlugMap = {};
   for (const r of rows) {
-    if (!r?.base || !r?.slug || !isSupportedLocale(r.locale) || r.locale === "tr") continue;
+    /* Faz 5: TR de bir dil slug'ıdır (teknik anahtar ≠ TR URL slug'ı).
+       107 sonrası tr.slug = teknik anahtar → URL'ler aynı kalır; 108
+       sonrası farklılaşan TR slug'ı buradan çözülür. */
+    if (!r?.base || !r?.slug || !isSupportedLocale(r.locale)) continue;
     const byBase = (map[r.kind] ??= {});
     (byBase[r.base] ??= {})[r.locale] = r.slug;
   }

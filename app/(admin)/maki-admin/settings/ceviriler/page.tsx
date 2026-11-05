@@ -11,6 +11,8 @@ import type { SettingsTranslationsByLocale } from "@/lib/i18n/settings-translati
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
 import AdminPageSessionRefresh from "@/app/components/admin/AdminPageSessionRefresh";
 import { adminPermissionGate } from "@/app/components/admin/AdminSectionGuard";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import { loadSettingsTranslationsCentral } from "../_content/settings-content.server";
 
 /* ===============================================================
    🛡️ ADMIN > SETTINGS > ÇEVİRİLER — server wrapper
@@ -57,6 +59,36 @@ export default async function SettingsCevirilerPage() {
      server render'ını durdurmadığı için kontrol burada da yapılır. */
   const denied = await adminPermissionGate(auth.caller.id, "settings");
   if (denied) return denied;
+
+  /* 🌐 Faz 5 dalga 2 — ana dil (public_default_locale) salt okunur,
+     diğer iki dil düzenlenir; TR artık özel değildir. */
+  if (isContentWriteMigrated("settings")) {
+    const settings = await getPublicSettings().catch(() => null);
+    const central = await loadSettingsTranslationsCentral(
+      settings as unknown as Record<string, unknown> | null
+    );
+    if (central.ok) {
+      const root = central.data.root;
+      return (
+        <SettingsTranslationsPage
+          canonical={{
+            footer_copyright: text(root.footer_copyright),
+            default_meta_title: text(root.default_meta_title),
+            default_meta_description: text(root.default_meta_description),
+            hero_badge_text: text(root.hero_badge_text),
+            hero_title: text(root.hero_title),
+            hero_subtitle: text(root.hero_subtitle),
+            hero_primary_cta_text: text(root.hero_primary_cta_text),
+            hero_secondary_cta_text: text(root.hero_secondary_cta_text),
+            business_hours: text(root.business_hours),
+          }}
+          initialTranslations={central.data.translations}
+          rootLocale={central.data.rootLocale}
+          translationLocales={central.data.translationLocales}
+        />
+      );
+    }
+  }
 
   const [settings, translationsResult] = await Promise.all([
     getPublicSettings().catch(() => null),

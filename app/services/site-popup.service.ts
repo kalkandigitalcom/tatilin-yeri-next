@@ -21,11 +21,16 @@ import {
   toPublicSitePopup,
   type PopupDismissDuration,
   type PopupDisplayScope,
+  type PopupLocaleCtx,
   type PopupTranslationLocale,
   type PublicSitePopup,
   type SitePopupRow,
   type SitePopupTranslationRow,
 } from "@/lib/site-popup";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /* ===============================================================
    🛡️ SITE POPUP SERVICE (server-only)
@@ -212,6 +217,12 @@ function parseTranslations(
 }
 
 export async function saveSitePopup(input: unknown): Promise<SitePopupSaveResult> {
+  /* 🌐 Faz 5 dalga 2 — popup merkezi içerik servisine geçti (admin:
+     app/(admin)/maki-admin/settings/popup/popup-content.server.ts). ESKİ
+     yazma yolu KAPALI; iki yol aynı anda çalışmaz. */
+  if (isContentWriteMigrated("site_popup")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const v = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
 
   const title = cleanPopupText(v.title, POPUP_LIMITS.title);
@@ -336,7 +347,11 @@ export async function saveSitePopup(input: unknown): Promise<SitePopupSaveResult
 }
 
 /** Public projeksiyon (cache'li sarmalayıcı: lib/site-popup.cache.ts). */
-export async function getPublicSitePopup(): Promise<PublicSitePopup | null> {
+/** 🌐 Faz 6 Dalga 4 — `localeCtx` verilirse dil içerikleri merkezi tekil
+ *  kayıt kuralıyla (bütün aktif diller, pasif dil yok) üretilir. */
+export async function getPublicSitePopup(
+  localeCtx: PopupLocaleCtx | null = null
+): Promise<PublicSitePopup | null> {
   const { data, error } = await sitePopupRepository.find();
   if (error) {
     /* Tablo henüz yoksa (migration 095 uygulanmadı) veya DB hatası →
@@ -356,6 +371,7 @@ export async function getPublicSitePopup(): Promise<PublicSitePopup | null> {
     row,
     (path, version) => resolveAssetUrlVersioned(path, version),
     Date.now(),
-    tr.error ? [] : ((tr.data as SitePopupTranslationRow[] | null) ?? [])
+    tr.error ? [] : ((tr.data as SitePopupTranslationRow[] | null) ?? []),
+    localeCtx
   );
 }

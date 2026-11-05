@@ -30,6 +30,13 @@ const authorizeAdminSessionMock = vi.fn();
    Action'lara eklenen izin kontrolü bu mevcut repository fonksiyonunu okur;
    testte "yetkili admin" artık AKTİF + İZİNLİ demek. Assertion'lar aynen kaldı. */
 const findByIdForSessionMock = vi.fn();
+/* Faz 5 dalga 2 — bu dosya ESKİ yazma zincirini test eder; modül merkezi
+   yazmaya geçtiğinde eski yol kapalıdır (faz5-dalga2 testi). */
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
 vi.mock("@/lib/db/admin-user.repository.server", () => ({
   adminUserServerRepository: {
     findByIdForSession: (...a: unknown[]) => findByIdForSessionMock(...a),

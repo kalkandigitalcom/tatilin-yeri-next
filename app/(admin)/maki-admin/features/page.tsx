@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote, { MissingLocalesBadge } from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 import {
   getVillaFeaturesAction as getVillaFeatures,
@@ -117,6 +118,7 @@ export default function FeaturesPage() {
         <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
           Mülk olanakları
         </h1>
+        <RootLocaleNote />
         <p className="text-sm text-[var(--color-stone-500)] mt-2">
           Mülk detayında &ldquo;Özellikler&rdquo; listesi olarak gösterilir.
         </p>
@@ -167,6 +169,7 @@ export default function FeaturesPage() {
                   }}
                   className="input flex-1"
                 />
+                <MissingLocalesBadge missing={f.missing_locales} />
 
                 <button
                   onClick={() => handleUpdate(f.id, f.name)}

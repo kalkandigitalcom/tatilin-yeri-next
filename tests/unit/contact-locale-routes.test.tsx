@@ -43,6 +43,18 @@ const getCachedSettingsMock = vi.fn();
 vi.mock("@/lib/cache.helpers", () => ({
   getCachedSettings: () => getCachedSettingsMock(),
 }));
+/* 🌐 Faz 6 Dalga 4 — `business_hours` merkezi servisten (tekil kayıt
+   kuralı). Depo satırları aynı ayar fikstüründen: TR = ana tablo aynası,
+   EN/DE = settings_translations. */
+vi.mock("next/cache", () => ({ unstable_cache: (fn: (...a: unknown[]) => unknown) => fn }));
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const { settingsAllLocalesFrom } = await import("../fixtures/faz6/legacy-repo-central");
+  return {
+    getAllLocales: async () => settingsAllLocalesFrom(await getCachedSettingsMock().catch(() => null)),
+    getContentMany: async () => new Map(),
+    getContent: async () => null,
+  };
+});
 
 /* PageHero — prop-yakalayan hafif stub (tasarım bu testin konusu değil). */
 vi.mock("@/app/components/ui/PageHero", () => ({

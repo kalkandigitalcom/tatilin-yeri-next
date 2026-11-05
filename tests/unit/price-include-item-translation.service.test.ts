@@ -12,6 +12,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const findAllForParentMock = vi.fn();
 const upsertOneMock = vi.fn();
 
+/* 🌐 Faz 5 — bu dosya ESKİ çeviri servisinin mantığını belgeler; modül
+   merkezi içerik servisine geçtiği için eski yol üretimde KAPALI
+   (lib/i18n/content/content-write-modules.ts). Eski mantık "modül
+   taşınmamış" varsayımıyla test edilmeye devam eder; kapalılık ve yeni
+   yol tests/unit/faz5-admin-content.test.ts içinde doğrulanır. */
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
+
 vi.mock("@/lib/db/translation.repository.server", () => ({
   translationRepository: {
     findAllForParent: (...args: unknown[]) => findAllForParentMock(...args),

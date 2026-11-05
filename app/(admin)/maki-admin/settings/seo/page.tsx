@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 import { getSettingsClient as getSettings, updateSettingsClient as updateSettings } from "@/app/services/settings.client";
 import { useNotify } from "@/app/components/admin/notifications/NotificationProvider";
@@ -78,6 +79,7 @@ export default function SettingsSeoPage() {
         <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
           SEO
         </h1>
+        <RootLocaleNote scope="form" />
         <p className="text-sm text-[var(--color-stone-500)] mt-2 max-w-2xl">
           Sayfa-spesifik SEO yoksa kullanılan fallback değerler.
           Root layout metadata, OpenGraph default image ve robots

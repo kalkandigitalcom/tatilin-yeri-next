@@ -25,6 +25,9 @@ import {
 } from "./_helpers/relations";
 
 import type { VillaFormPayload } from "./types";
+import type { AuthorizedAdminCaller } from "@/lib/admin-route-auth";
+import { isContentWriteMigrated, LEGACY_WRITE_DISABLED_MESSAGE } from "@/lib/i18n/content/content-write-modules";
+import { createVillaCoreCentral } from "./_helpers/content.server";
 
 /* ===============================================================
    🛡️ FAZ 3 — createVillaFull (ORCHESTRATOR)
@@ -66,7 +69,10 @@ export async function createVillaFull({
   prices,
   selectedRules,
   selectedPriceIncludes,
-}: VillaFormPayload): Promise<string> {
+}: VillaFormPayload,
+  /** Faz 5 dalga 2 — merkezi yazma için çağıran admin (audit). */
+  opts?: { actor?: AuthorizedAdminCaller }
+): Promise<string> {
 
   if (!form.title) {
     throw new Error("Villa adı zorunlu");
@@ -79,25 +85,40 @@ export async function createVillaFull({
   /* FAZ 37: DB I/O villaAdminRepository.insertVilla delege.
      `.select().single()` chain repo içinde aynen; newId return
      için kritik. */
-  const { data, error } = await villaAdminRepository.insertVilla(
-    buildVillaCorePayload({
-      form,
-      mapData,
-      selectedLocation,
-      slug,
-    })
-  );
-
-  if (error) {
-    console.error(
-      "❌ Villa create error:",
-      error.message
+  /* 🌐 Faz 5 dalga 2 — merkezi yazma: ana tablo (teknik anahtar + teknik
+     alanlar) ve ana dil içeriği (açıklama, rozet, SEO) TEK transaction.
+     Eski doğrudan insert bu modül için KAPALI. İlişkiler / mesafeler /
+     fiyatlar aşağıda AYNEN (değişmedi). */
+  let newId: string;
+  if (isContentWriteMigrated("villa")) {
+    if (!opts?.actor) throw new Error(LEGACY_WRITE_DISABLED_MESSAGE);
+    const createdId = await createVillaCoreCentral(
+      opts.actor,
+      buildVillaCorePayload({ form, mapData, selectedLocation, slug }) as unknown as Record<string, unknown>,
+      slug
+    );
+    newId = createdId;
+  } else {
+    const { data, error } = await villaAdminRepository.insertVilla(
+      buildVillaCorePayload({
+        form,
+        mapData,
+        selectedLocation,
+        slug,
+      })
     );
 
-    throw error;
-  }
+    if (error) {
+      console.error(
+        "❌ Villa create error:",
+        error.message
+      );
 
-  const newId = data.id;
+      throw error;
+    }
+
+    newId = data.id;
+  }
 
   // 🔥 TYPES
   if (selectedTypes?.length) {

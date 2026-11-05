@@ -105,6 +105,7 @@ export default function EditVilla() {
   const [selectedLocation, setSelectedLocation] = useState("");
   const [loading, setLoading] = useState(false);
   const [slug, setSlug] = useState("");
+  const [centralSlug, setCentralSlug] = useState(false);
 
   const [distances, setDistances] = useState<
     { title: string; distance: string }[]
@@ -186,6 +187,9 @@ export default function EditVilla() {
           hydrateVillaLocationIdFromRow(data as Record<string, unknown>)
         );
         setSlug(hydrateVillaSlugFromRow(data as Record<string, unknown>));
+        /* 🌐 Faz 5 dalga 2 — merkezi okuma: teknik anahtar ayrı; ad değişince
+           ana dil URL slug'ı DEĞİŞMEZ (önizleme sabit kalır). */
+        setCentralSlug(typeof (data as { technical_key?: unknown }).technical_key === "string");
         setMapData(hydrateVillaMapDataFromRow(data as Record<string, unknown>));
         setYoutubeVideos(
           hydrateVillaYouTubeVideosFromRow(data as Record<string, unknown>)
@@ -393,7 +397,7 @@ export default function EditVilla() {
               form={form}
               setForm={setFormLoose}
               slug={slug}
-              setSlug={setSlug}
+              setSlug={centralSlug ? () => {} : setSlug}
               slugify={slugifyTr}
               locations={locations}
               selectedLocation={selectedLocation}

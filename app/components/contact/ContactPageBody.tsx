@@ -30,11 +30,10 @@ import { getDictionary } from "@/lib/i18n/get-dictionary";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — iç link aktif locale'i taşır
    (bkz. lib/i18n/locale-href.ts). */
 import { localeHref } from "@/lib/i18n/locale-href";
-/* 🛡️ `business_hours` DEĞERİ admin'in girdiği dinamik metindir; çevirisi
-   `settings_translations` (migration 087) üzerinden MEVCUT resolver ile
-   çözülür — yeni resolver YAZILMADI. Telefon/e-posta/adres/sosyal URL'ler
-   VERİdir ve ÇEVRİLMEZ. */
-import { resolveSettingsText } from "@/lib/i18n/settings-translation.helper";
+/* 🛡️ `business_hours` DEĞERİ admin'in girdiği dinamik metindir; 🌐 Faz 6
+   Dalga 4'ten beri merkezi içerik servisinden okunur. Telefon/e-posta/
+   adres/sosyal URL'ler VERİdir ve ÇEVRİLMEZ. */
+import { getPublicSettingsTexts } from "@/lib/i18n/content/public-shared-content.server";
 
 /* ===============================================================
    🛡️ /iletisim — ORTAK GÖVDE (settings-driven, no hardcoded data)
@@ -82,13 +81,11 @@ export default async function ContactPageBody({
      boşsa/whitespace ise canonical TR. `settings.translations` ZATEN
      `getPublicSettings` içinde (multilingual açıkken) yüklenmiştir —
      EK SORGU YOK, N+1 YOK. */
+  /* 🌐 Faz 6 Dalga 4 — merkezi servis (tekil kayıt kuralı: istenen dil →
+     ana dil satırı AYNEN → diğer aktif diller; pasif dil yok). Ana dil
+     TR iken eski `resolveSettingsText` ile birebir. */
   const businessHours =
-    resolveSettingsText(
-      settings?.business_hours,
-      settings?.translations ?? null,
-      locale,
-      "business_hours"
-    )?.trim() || null;
+    (await getPublicSettingsTexts(locale)).business_hours?.trim() || null;
   const whatsappLink = settings?.whatsapp_link?.trim() || null;
   const instagram = settings?.instagram?.trim() || null;
   const facebook = settings?.facebook?.trim() || null;

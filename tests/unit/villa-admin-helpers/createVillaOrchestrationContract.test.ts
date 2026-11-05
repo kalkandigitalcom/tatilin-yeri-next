@@ -93,6 +93,14 @@ function extractFromStmt(stmt: ts.Statement, out: CallEvent[], conditional: bool
     for (const s of stmt.thenStatement.statements) {
       extractFromStmt(s, out, /* conditional */ true);
     }
+    /* 🌐 Faz 5 dalga 2 — `else` dalı da (koşullu) taranır: eski yazma yolu
+       (modül merkezi yazmaya geçmemişse) `else` içinde KORUNDU; sıra /
+       await / tam-bir-kez beklentileri o dal için AYNEN geçerli. */
+    if (stmt.elseStatement && ts.isBlock(stmt.elseStatement)) {
+      for (const s of stmt.elseStatement.statements) {
+        extractFromStmt(s, out, /* conditional */ true);
+      }
+    }
   }
 }
 
@@ -253,5 +261,28 @@ describe("createVillaFull — no extra DB writes", () => {
   it("service body'sinde DOĞRUDAN DB client çağrısı YOK (repository delegation)", () => {
     expect(sourceText).not.toMatch(/\bdbAdmin\s*\.\s*from\(/);
     expect(sourceText).not.toMatch(/\bdb\s*\.\s*from\(/);
+  });
+});
+
+/* 🌐 Faz 5 dalga 2 — MERKEZİ YAZMA DALI KONTRATI
+   Modül merkezi yazmaya geçtiğinde villa satırı + ana dil içeriği
+   `createVillaCoreCentral` ile TEK transaction'da yazılır; ilişki / mesafe / fiyat
+   senkronu bundan SONRA, eskisiyle aynı sırada çalışır. Eski yazma
+   (`villaAdminRepository.insertVilla`) yalnız geçiş yapılmamış dalda. */
+describe("createVillaFull — merkezi yazma dalı (Faz 5 dalga 2)", () => {
+  it("createVillaCoreCentral AWAITED, koşullu dalda, tam bir kez ve ilişkilerden ÖNCE", () => {
+    const calls = seq.filter((e) => e.name === "createVillaCoreCentral");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].awaited).toBe(true);
+    expect(calls[0].conditional).toBe(true);
+    expect(idx("createVillaCoreCentral")).toBeLessThan(idx("insertVillaTypeRelations"));
+  });
+  it("merkezi ve eski villa yazımı AYNI if/else'in iki dalında (ikisi birden çalışmaz)", () => {
+    const ifs = fnBody.statements.filter(ts.isIfStatement);
+    const branch = ifs.find((st) => st.expression.getText().includes('isContentWriteMigrated("villa")'));
+    expect(branch).toBeTruthy();
+    expect(branch!.thenStatement.getText()).toContain("createVillaCoreCentral");
+    expect(branch!.thenStatement.getText()).not.toContain("villaAdminRepository.insertVilla");
+    expect(branch!.elseStatement?.getText() ?? "").toContain("villaAdminRepository.insertVilla");
   });
 });

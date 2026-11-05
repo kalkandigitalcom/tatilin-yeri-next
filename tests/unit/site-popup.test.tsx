@@ -33,6 +33,21 @@ const requirePermission = vi.fn();
 const revalidateTag = vi.fn();
 let pathname = "/";
 
+/* 🌐 Faz 5 dalga 2 — servis testleri ESKİ saveSitePopup mantığını belgeler
+   ("modül taşınmamış" varsayımı); admin eylemi artık merkezi katmana
+   (popup-content.server) delege eder → eylem testlerinde o katman mock'lanır.
+   Merkezi yol: tests/unit/faz5-dalga2.test.tsx + izole PG. */
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
+const centralSave = vi.fn();
+const centralLoad = vi.fn();
+vi.mock("@/app/(admin)/maki-admin/settings/popup/popup-content.server", () => ({
+  saveSitePopupCentral: (...a: unknown[]) => centralSave(...a),
+  getSitePopupForAdminCentral: (...a: unknown[]) => centralLoad(...a),
+}));
 vi.mock("@/lib/db/site-popup.repository.server", () => ({
   sitePopupRepository: {
     find: (...a: unknown[]) => repoFind(...a),
@@ -59,7 +74,7 @@ vi.mock("next/dynamic", async () => {
   return { default: () => mod.default };
 });
 
-import { saveSitePopup, getPublicSitePopup } from "@/app/services/site-popup.service";
+import { saveSitePopup, getPublicSitePopup, getSitePopupForAdmin } from "@/app/services/site-popup.service";
 import { saveSitePopupAction, loadSitePopupAction } from "@/app/(admin)/maki-admin/settings/popup/popup.action";
 import SitePopupLoader from "@/app/components/layout/site-popup/SitePopupLoader";
 
@@ -327,15 +342,17 @@ describe("server action yetkisi", () => {
     expect(repoUpdate).not.toHaveBeenCalled();
   });
 
-  it("yetkili + geçerli kayıt → yalnız 'site-popup' tag'i invalidate edilir", async () => {
+  it("yetkili + geçerli kayıt → merkezi katmana delege + yalnız 'site-popup' tag'i invalidate edilir", async () => {
     authorizeAdminSession.mockResolvedValue({ ok: true, caller: { id: "a1" } });
     callerHasPermission.mockResolvedValue(true);
+    centralSave.mockResolvedValueOnce({ ok: true, values: {} });
     const res = await saveSitePopupAction({
       isEnabled: false, imagePath: null, title: "", description: "", highlight: "",
       stats: [], buttonText: "", buttonUrl: "", showButton: true, scope: "home",
       dismiss: "session", startDate: "", endDate: "",
     });
     expect(res.ok).toBe(true);
+    expect(centralSave).toHaveBeenCalledWith({ id: "a1" }, expect.objectContaining({ scope: "home" }));
     expect(revalidateTag).toHaveBeenCalledTimes(1);
     expect(revalidateTag).toHaveBeenCalledWith("site-popup", { expire: 0 });
   });
@@ -644,8 +661,9 @@ describe("çoklu dil — servis", () => {
     expect((await getPublicSitePopup())?.translations.en?.title).toBe("Hello");
   });
 
+  /* Faz 5 dalga 2: eski admin okuması (servis) — eylem artık merkezi katmanı kullanır. */
   it("admin okuma: çeviri tablosu okunamazsa null (çeviriler sessizce boş görünüp ezilmesin)", async () => {
-    requirePermission.mockResolvedValue(undefined);
+    const loadSitePopupAction = getSitePopupForAdmin;
     repoFindTranslations.mockResolvedValueOnce({ data: null, error: { message: "relation does not exist" } });
     expect(await loadSitePopupAction()).toBeNull();
     repoFindTranslations.mockResolvedValueOnce({
@@ -656,7 +674,7 @@ describe("çoklu dil — servis", () => {
     expect(v?.translations.de).toEqual({
       title: "Hallo", description: "", highlight: "", stats: ["a", "b"], buttonText: "", buttonUrl: "",
     });
-    expect(v?.translations.en.title).toBe("");
+    expect(v?.translations.en?.title).toBe("");
   });
 });
 

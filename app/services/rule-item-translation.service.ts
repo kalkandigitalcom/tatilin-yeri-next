@@ -1,5 +1,9 @@
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { RuleItemTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /**
  * 🛡️ PHASE 10D — Batch 1 — Kural (rule_items) Çeviri Servisi
@@ -61,6 +65,11 @@ export async function getRuleTranslations(
 export async function upsertRuleTranslation(
   input: RuleTranslationInput
 ): Promise<RuleTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("rule_item")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const ruleId = (input.ruleId ?? "").toString().trim();
   if (!ruleId) return { ok: false, error: "Geçersiz kural" };
 

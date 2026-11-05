@@ -67,6 +67,17 @@ const deleteAllMock = vi.fn();
 const findActiveMock = vi.fn();
 const deleteByIdMock = vi.fn();
 
+/* 🌐 Faz 5 — bu dosyadaki servis testleri ESKİ faq-translation.service
+   mantığını belgeler; Faz 5'te SSS merkezi içerik servisine geçtiği için
+   eski yol üretimde KAPALI (content-write-modules). Eski mantık burada
+   "modül taşınmamış" varsayımıyla test edilmeye devam eder; kapalılık
+   tests/unit/faz5-admin-content.test.ts içinde doğrulanır. */
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
+
 vi.mock("@/lib/db/faq.repository", () => ({
   faqRepository: {
     findActive: (...a: unknown[]) => findActiveMock(...a),

@@ -42,6 +42,12 @@ vi.mock("@/app/components/home/HomePageBody", () => ({
 vi.mock("@/app/components/home/home-metadata", () => ({
   buildHomeMetadata: async () => ({}),
 }));
+/* 🌐 Faz 6 Dalga 4 — ana sayfa tek modül + dispatcher; yönlendirme
+   haritaları bu testin konusu değil. */
+vi.mock("@/lib/i18n/routing/slug-map.server", () => ({
+  getCachedLocalizedSlugMap: async () => ({}),
+  getCachedRedirectMap: async () => ({}),
+}));
 
 beforeEach(() => {
   redirectMock.mockClear();
@@ -55,9 +61,21 @@ const ML_ON_DE = { multilingual_enabled: true, public_default_locale: "de" };
 const ML_ON_EN = { multilingual_enabled: true, public_default_locale: "en" };
 const ML_ON_INVALID = { multilingual_enabled: true, public_default_locale: "fr" };
 
+/* 🌐 Faz 6 Dalga 4 — eski üç `locale-page.tsx` yerine tek modül
+   (`_routes/home.tsx`) + dispatcher. "/" proxy'de ana dilin iç yoluna
+   rewrite edilir; burada ana dil gövdesi doğrudan çağrılır. */
+async function dispatch(lang: string) {
+  const { localeRouteFor } = await import("@/lib/i18n/routing/locale-route");
+  const { homeRouteModule } = await import("@/app/(public)/_routes/home");
+  return localeRouteFor("home", homeRouteModule).Page({
+    params: Promise.resolve({ lang }),
+    searchParams: Promise.resolve({}),
+  } as never);
+}
 async function renderRoot() {
-  const mod = await import("@/app/(public)/locale-page");
-  return mod.default();
+  const { getRootLocale } = await import("@/lib/i18n/config");
+  const settings = await getCachedSettingsMock()?.catch?.(() => null);
+  return dispatch(getRootLocale(settings ?? null));
 }
 
 /* ---------------------------------------------------------------
@@ -197,30 +215,26 @@ describe('"/tr" davranışı (Faz 2: proxy kuralı)', () => {
 /* ---------------------------------------------------------------
    7-8) /de ve /en DOĞRUDAN açıldığında BAŞKA YERE YÖNLENMEZ
    ---------------------------------------------------------------
-   Bu sayfaların page.tsx'lerine DOKUNULMADI; test o sözleşmeyi
-   kilitler (varsayılan dil ne olursa olsun kendi locale'lerinde
-   kalırlar; tek gate `requirePublicLocaleEnabled`).
+   Sözleşme: varsayılan dil ne olursa olsun kendi locale'lerinde
+   kalırlar. 🌐 Faz 6 Dalga 4 — tek gate dispatcher (`ctx.enabled`).
 --------------------------------------------------------------- */
 describe("/de ve /en doğrudan erişim", () => {
   it("7) multilingual AÇIK + varsayılan 'en' iken /de yönlenmez", async () => {
     getCachedSettingsMock.mockResolvedValue(ML_ON_EN);
-    const mod = await import("@/app/(public)/de/locale-page");
-    await expect(mod.default()).resolves.not.toThrow();
+    await expect(dispatch("de")).resolves.not.toThrow();
     expect(redirectMock).not.toHaveBeenCalled();
     expect(notFoundMock).not.toHaveBeenCalled();
   });
 
   it("8) multilingual AÇIK + varsayılan 'de' iken /en yönlenmez", async () => {
     getCachedSettingsMock.mockResolvedValue(ML_ON_DE);
-    const mod = await import("@/app/(public)/en/locale-page");
-    await expect(mod.default()).resolves.not.toThrow();
+    await expect(dispatch("en")).resolves.not.toThrow();
     expect(redirectMock).not.toHaveBeenCalled();
     expect(notFoundMock).not.toHaveBeenCalled();
   });
 
   it("multilingual KAPALI iken /de hâlâ 404 (mevcut gate DEĞİŞMEDİ)", async () => {
     getCachedSettingsMock.mockResolvedValue(ML_OFF_DE);
-    const mod = await import("@/app/(public)/de/locale-page");
-    await expect(mod.default()).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(dispatch("de")).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

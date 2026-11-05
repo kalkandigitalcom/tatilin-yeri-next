@@ -5,7 +5,8 @@ import HorizontalCarousel from "../villa/HorizontalCarousel";
    CANONICAL kalır. Kart rozeti (badge) locale'e göre çözülür. */
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { getVillaBadgesByLocale } from "@/lib/i18n/get-villa-badge-translations.server";
+import { loadCollectionCardTexts } from "@/lib/i18n/content/public-shared-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 
 /* ===============================================================
    🛡️ DISCOUNT COLLECTION — anasayfa "İndirimli Koleksiyon" section
@@ -52,11 +53,11 @@ export default async function DiscountCollection({
      aynı metin (dictionary'ye taşındı); EN/DE'de çevirisi kullanılır. */
   const title = dict.title;
 
-  /* Rozet çevirileri TEK batch sorguda (N+1 YOK); TR'de sorgu atılmaz. */
-  const badgeByVillaId = await getVillaBadgesByLocale(
-    collection.map((c) => c.id),
-    locale
-  );
+  /* 🌐 Faz 6 Dalga 4 — özel başlık (discount_collection.custom_title) ve
+     rozet (villa.badge) merkezi servisten: istenen dil → ana dil → diğer
+     aktif diller; pasif dil yok. Başlık yoksa villa adı; rozet yoksa
+     gösterilmez. Kart kümesi, sıra, fiyat ve indirim verisi AYNEN. */
+  const texts = await loadCollectionCardTexts(publicContentReader, "discount_collection", collection, locale);
 
   /* 🔄 KÖK NEDEN DÜZELTMESİ (bu tur) — kart JSX'i TEK yerde tanımlanır,
      hem mobile carousel hem desktop grid AYNI render fonksiyonunu
@@ -67,12 +68,12 @@ export default async function DiscountCollection({
       variant="discount"
       id={c.id}
       slug={c.slug}
-      title={c.display_title}
+      title={texts.title(c)}
       location={c.location}
       price={c.price ?? 0}
       currency={c.currency || "TRY"}
       images={c.images}
-      badge={badgeByVillaId.get(c.id) ?? c.badge ?? undefined}
+      badge={texts.badge(c.id)}
       bedrooms={c.bedrooms || 1}
       bathrooms={c.bathrooms || 1}
       guests={c.guests || 2}

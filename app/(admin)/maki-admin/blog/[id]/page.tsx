@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -67,6 +68,7 @@ export default function EditBlogPost() {
         <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
           Blog yazısını düzenle
         </h1>
+        <RootLocaleNote scope="form" />
       </div>
 
       {error ? (

@@ -1,6 +1,9 @@
 import "server-only";
 
 import { villaAdminRepository } from "@/lib/db/villa.repository.server";
+import type { AuthorizedAdminCaller } from "@/lib/admin-route-auth";
+import { isContentWriteMigrated, LEGACY_WRITE_DISABLED_MESSAGE } from "@/lib/i18n/content/content-write-modules";
+import { cloneVillaCoreCentral } from "./_helpers/content.server";
 
 import { generateUniqueSlug } from "./_helpers/slug";
 import {
@@ -71,7 +74,9 @@ import { setVillaDistancesServer } from "../villa-distance.service.server";
 type CloneResult = { ok: true; id: string } | { ok: false; error: string };
 
 export async function cloneVilla(
-  sourceVillaId: string
+  sourceVillaId: string,
+  /** Faz 5 dalga 2 — merkezi yazma için çağıran admin (audit). */
+  opts?: { actor?: AuthorizedAdminCaller }
 ): Promise<CloneResult> {
   if (!sourceVillaId) {
     return { ok: false, error: "Kaynak villa ID gerekli" };
@@ -155,20 +160,35 @@ export async function cloneVilla(
   corePayload.slug = newSlug;
   corePayload.is_active = false;
 
-  /* 4) INSERT yeni villa. */
-  const { data: inserted, error: insertErr } =
-    await villaAdminRepository.insertVilla(corePayload);
-  if (insertErr || !inserted?.id) {
-    console.error("[clone.villa] INSERT_FAILED", {
-      sourceVillaId,
-      error: insertErr?.message,
-    });
-    return {
-      ok: false,
-      error: insertErr?.message || "Yeni villa oluşturulamadı",
-    };
+  /* 🌐 Faz 5 dalga 2 — merkezi yazma: yeni villa ana tablo satırı ve
+     kaynağın TÜM dillerdeki içeriği (dil slug'ları HARİÇ — yeni teknik
+     anahtar) TEK transaction. Eski doğrudan insert bu modül için KAPALI. */
+  let newId: string;
+  if (isContentWriteMigrated("villa")) {
+    if (!opts?.actor) return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+    try {
+      newId = await cloneVillaCoreCentral(opts.actor, sourceVillaId, corePayload, newSlug);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Yeni villa oluşturulamadı";
+      console.error("[clone.villa] INSERT_FAILED", { sourceVillaId, error: msg });
+      return { ok: false, error: msg };
+    }
+  } else {
+    /* 4) INSERT yeni villa. */
+    const { data: inserted, error: insertErr } =
+      await villaAdminRepository.insertVilla(corePayload);
+    if (insertErr || !inserted?.id) {
+      console.error("[clone.villa] INSERT_FAILED", {
+        sourceVillaId,
+        error: insertErr?.message,
+      });
+      return {
+        ok: false,
+        error: insertErr?.message || "Yeni villa oluşturulamadı",
+      };
+    }
+    newId = inserted.id as string;
   }
-  const newId = inserted.id as string;
 
   /* 5) Relations + prices + distances — kaynak satırlardan yeni
         villaId ile reinsert. Create flow asimetrisi (`.length > 0`

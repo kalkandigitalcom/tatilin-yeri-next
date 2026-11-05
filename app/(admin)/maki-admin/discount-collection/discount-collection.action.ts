@@ -11,6 +11,13 @@ import {
   type DiscountCollectionItem,
   type SelectedDiscountRange,
 } from "@/app/services/discount-collection.service";
+import {
+  loadTranslationRows,
+  localizeAdminRows,
+  saveRootContent,
+  saveTranslationRow,
+} from "@/app/(admin)/maki-admin/_content/simple-content.server";
+import type { Locale } from "@/lib/i18n/config";
 /* 🛡️ MIGRATION 092 — indirim dönemi seçim listesi. MEVCUT server-only
    repository metodu (`findDiscountsByVillaId`) yeniden kullanılır; yeni
    repository/servis/RPC OLUŞTURULMADI. */
@@ -32,7 +39,8 @@ export async function listDiscountCollectionAction(): Promise<
   DiscountCollectionItem[]
 > {
   await requirePermission("discount_collection");
-  return listDiscountCollectionService();
+  /* 🌐 Faz 5 — custom_title ANA DİLİN değeriyle (yoksa null → villa adı). */
+  return localizeAdminRows("discount_collection", await listDiscountCollectionService(), ["custom_title"], { missingValue: null });
 }
 
 export async function addToDiscountCollectionAction(
@@ -66,8 +74,18 @@ export async function updateDiscountCollectionItemAction(
     selected_discount_ranges?: SelectedDiscountRange[] | null;
   }
 ): Promise<boolean> {
-  await requirePermission("discount_collection");
-  return updateDiscountCollectionItemService(id, patch);
+  const caller = await requirePermission("discount_collection");
+  /* 🌐 Faz 5 — custom_title (çevrilebilir, karar 6) merkezi içerik
+     servisiyle ANA DİLDE; diğer alanlar (kapak, seçim) eski servisle.
+     Eski custom_title doğrudan yazma yolu KAPALI. */
+  const { custom_title, ...rest } = patch ?? {};
+  if (custom_title !== undefined) {
+    const v = custom_title === null ? null : String(custom_title).trim() || null;
+    const ok = await saveRootContent(caller, "discount_collection", id, { custom_title: v }, { route: "/maki-admin/discount-collection" });
+    if (!ok) return false;
+  }
+  if (Object.keys(rest).length === 0) return true;
+  return updateDiscountCollectionItemService(id, rest);
 }
 
 export async function reorderDiscountCollectionAction(
@@ -127,4 +145,24 @@ export async function listVillaDiscountPeriodsAction(
     }))
     .filter((r) => r.start_date.length === 10 && r.end_date.length === 10)
     .sort((a, b) => a.start_date.localeCompare(b.start_date));
+}
+
+/* ===============================================================
+   🌐 Faz 5 — custom_title çevirileri (ana dil DIŞINDAKİ diller, karar 6)
+   =============================================================== */
+export async function loadDiscountCollectionTitleTranslationsAction(id: string) {
+  await requirePermission("discount_collection");
+  return loadTranslationRows("discount_collection", id, ["custom_title"]);
+}
+
+export async function saveDiscountCollectionTitleTranslationAction(input: {
+  id: string;
+  locale: Locale;
+  custom_title: string;
+}) {
+  const caller = await requirePermission("discount_collection");
+  const v = (input?.custom_title ?? "").toString().trim();
+  return saveTranslationRow(caller, "discount_collection", input.id, input.locale, { custom_title: v || null }, {
+    route: "/maki-admin/discount-collection",
+  });
 }

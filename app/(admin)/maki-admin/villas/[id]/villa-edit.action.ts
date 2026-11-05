@@ -5,6 +5,8 @@
    server-only native repo import'u güvenli. villaRepository yalnız
    findRawByIdSingle için; call-site aynı (villaAdminRepository → villaRepository alias). */
 import { requirePermission } from "@/lib/auth/action-authz";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import { overlayVillaRoot } from "@/app/services/villa-admin/_helpers/content.server";
 import { villaAdminRepository as villaRepository } from "@/lib/db/villa.repository.server";
 import { villaLocationRepository } from "@/lib/db/villa-location.repository";
 import { villaTypeRepository } from "@/lib/db/villa-type.repository";
@@ -60,7 +62,12 @@ export async function loadVillaEditData(id: string) {
   ]);
 
   return {
-    villa: villa.data,
+    /* 🌐 Faz 5 dalga 2 — içerik alanları (açıklama, rozet, SEO) ANA DİLİN
+       değeriyle; `slug` = ana dil URL slug'ı (+ technical_key). */
+    villa:
+      villa.data && isContentWriteMigrated("villa")
+        ? await overlayVillaRoot(villa.data as Record<string, unknown>)
+        : villa.data,
     locations: locations.data,
     types: types.data,
     selectedTypes: selectedTypes.data,

@@ -18,6 +18,10 @@ import "../globals.css";
 
 import { CurrencyProvider } from "@/app/context/CurrencyContext";
 import { getCachedSettings } from "@/lib/cache.helpers";
+import { publicLocaleCtxFromSettings } from "@/lib/i18n/content/public-shared-content";
+import { getDictionary } from "@/lib/i18n/get-dictionary";
+import type { Locale } from "@/lib/i18n/config";
+import { getPublicSettingsTexts, type SettingsTexts } from "@/lib/i18n/content/public-shared-content.server";
 import { siteMetadataBase } from "@/lib/seo";
 import { resolveAssetUrlVersioned } from "@/lib/storage.helpers";
 
@@ -78,13 +82,34 @@ export const rootViewport: Viewport = {
    yeni URL metadata'ya yansır. favicon_url boşsa hiç link emit
    edilmez (browser default boş icon).
    =============================================================== */
-export async function buildRootMetadata(): Promise<Metadata> {
+export async function buildRootMetadata(locale?: Locale): Promise<Metadata> {
   const settings = await getCachedSettings().catch(() => null);
-  const title =
-    settings?.default_meta_title?.trim() || "Villa Kiralama — Lüks Villa Deneyimi";
+  /* 🌐 Faz 6 Dalga 4 — sabit Türkçe varsayılan kaldırıldı. Ayarda değer
+     yoksa yedek ANA DİLİN sözlüğünden (`home.seo.metaTitleFallback` /
+     `metaDescriptionFallback`; ana sayfa ile aynı anahtarlar). Ana dil
+     daima aktiftir → pasif dil metni kullanılmaz. Ayar okunamazsa
+     varsayılan bağlam (ana dil TR). İstek dili burada OKUNMAZ (Phase 7E: istek
+     başlıkları ve çerezleri okunmaz) — ana dil ayardan gelir. Ayarlı değerin
+     kaynağı (settings.default_meta_*) DEĞİŞMEDİ. */
+  /* 🌐 Faz 6 Dalga 5 (karar B) — kayıtlı değer SAYFANIN DİLİNE göre,
+     merkezi servisten (tekil kayıt kuralı, ana sayfa ile aynı):
+       1) sayfanın kendi (aktif) dilindeki kayıtlı değer;
+       2) yoksa ana dilin kayıtlı değeri (ana dilde bilinçli boş → yedeğe);
+       3) o da yoksa ana dilin sözlük karşılığı.
+     Pasif dil hiçbir adımda kullanılmaz. Dil verilmezse (admin kökü, 404)
+     ana dil. Ana dil TR iken TR çıktısı eskisiyle birebir (TR satırı =
+     settings ana kolonunun aynası; satır yoksa ana kolon kullanılır). */
+  const root = publicLocaleCtxFromSettings(settings).root;
+  const fallback = getDictionary(root).home.seo;
+  let texts: SettingsTexts | null = null;
+  try {
+    texts = await getPublicSettingsTexts(locale ?? root, { otherActiveFallback: false });
+  } catch {
+    texts = null;
+  }
+  const title = texts?.default_meta_title?.trim() || fallback.metaTitleFallback;
   const description =
-    settings?.default_meta_description?.trim() ||
-    "Akdeniz'in seçkin villalarında özel havuz, deniz manzarası ve butik konfor. Hayalindeki tatili keşfet.";
+    texts?.default_meta_description?.trim() || fallback.metaDescriptionFallback;
   /* 🛡️ Aşama A — resolveAssetUrl normalize: FULL URL (legacy) ve
      relative path (yeni) için tutarlı render URL'i üretir. */
   const ogImage =

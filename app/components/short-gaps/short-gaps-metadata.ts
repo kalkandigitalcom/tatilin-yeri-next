@@ -74,3 +74,14 @@ export async function buildShortGapsMetadata(
     openGraph: { title, description, url: canonical },
   };
 }
+
+/** 🌐 Faz 6 Dalga 5 — sitemap ile ORTAK karar: sayfa yalnız geçerli ay +
+ *  gece için metadata üretir ve ay adı o dilin sözlüğünden gelir. Ay adı
+ *  (gerçek çeviri) olan AKTİF diller indexlenebilir; pasif dil girdide yok.
+ *  Robots kararı sayfada yok (kök layout + site politikası). */
+export function shortGapsSeoLocales(ay: string, gece: string, enabled: readonly Locale[]): Locale[] {
+  if (!parseGapNights(gece) || slugToMonthNumber(ay) === null) return [];
+  return enabled.filter(
+    (l) => shortGapsMonthLabel(ay, l).trim() !== "" && getDictionary(l).shortGaps.metaTitle.trim() !== ""
+  );
+}

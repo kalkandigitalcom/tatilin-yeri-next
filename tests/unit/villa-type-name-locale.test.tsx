@@ -198,6 +198,25 @@ vi.mock("@/lib/cache.helpers", () => ({
   getCachedMenu: (...args: unknown[]) => getMenuMock(...args),
 }));
 
+/* 🌐 Faz 6 Dalga 4 — Header/Footer etiketleri merkezi servisten okur.
+   Köprü: TR satırı = ana tablo adı (menü ağacı / footer kaynak listeleri;
+   107 aynası), EN/DE satırları = aynı eski depo sahtesi. */
+const centralSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () => {
+  const { legacyRepoCentralMock, trRowsFromMenu } = await import("../fixtures/faz6/legacy-repo-central");
+  return legacyRepoCentralMock({
+    findManyForLocale: (...a) => findManyForLocaleMock(...a),
+    trRows: async () => {
+      const rows = trRowsFromMenu(await getMenuMock.getMockImplementation()?.()?.catch?.(() => []));
+      const types = ((await findAllVillaTypesMock.getMockImplementation()?.())?.data ?? []) as { id: string; name: string }[];
+      for (const t of types) rows.villa_type![t.id] = { name: t.name };
+      return rows;
+    },
+    settings: () => getPublicSettingsMock(),
+    spy: (...a) => centralSpy(...a),
+  });
+});
+
 import Footer from "@/app/components/layout/Footer";
 import FooterWrapper from "@/app/components/layout/FooterWrapper";
 import Header from "@/app/components/layout/Header";
@@ -324,11 +343,13 @@ describe("FooterWrapper — multilingual gate + prop-passing", () => {
     expect(screen.getByText("Luxury Villa")).toBeInTheDocument();
   });
 
-  it("22) çeviri okuması patlarsa footer ÇÖKMEZ, TR adına düşer", async () => {
+  /* 🌐 Faz 6 Dalga 4 — okuma hatası: footer çökmez; etiketi çözülemeyen
+     tip gizlenir (ana tablo TR adına düşülmez). */
+  it("22) içerik okuması patlarsa footer ÇÖKMEZ; etiketsiz tip gizlenir", async () => {
     getPublicSettingsMock.mockResolvedValue({ multilingual_enabled: true });
     findManyForLocaleMock.mockRejectedValue(new Error("db down"));
     render(await FooterWrapper());
-    expect(screen.getByText("Lüks Villa")).toBeInTheDocument();
+    expect(screen.queryByText("Lüks Villa")).not.toBeInTheDocument();
   });
 
   it("23) villa tipi YOKSA çeviri sorgusu atılmaz", async () => {
@@ -455,6 +476,7 @@ describe("HeaderWrapper — multilingual gate + ağaç birleştirme", () => {
     usePathnameMock.mockReturnValue("/en/villa/test");
     getPublicSettingsMock.mockReset();
     getMenuMock.mockReset();
+    centralSpy.mockReset();
     findManyForLocaleMock.mockReset();
     findManyForLocaleMock.mockImplementation(
       (_e: string, _ids: string[], locale: string) =>
@@ -504,14 +526,12 @@ describe("HeaderWrapper — multilingual gate + ağaç birleştirme", () => {
        (entity "villa_type"); ek olarak menü etiketi çevirisi de
        locale başına 1 sorgu (entity "menu"). Öğe/kayıt başına sorgu
        YOK — N+1 kilidi entity BAZINDA doğrulanır. */
-    const typeCalls = findManyForLocaleMock.mock.calls.filter(
-      (call) => call[0] === "villa_type"
-    );
-    expect(typeCalls).toHaveLength(2);
-    const menuCalls = findManyForLocaleMock.mock.calls.filter(
-      (call) => call[0] === "menu"
-    );
-    expect(menuCalls).toHaveLength(2);
+    /* 🌐 Faz 6 Dalga 4 — merkezi okuma: varlık başına AKTİF dil başına
+       TEK batch (tr/en/de → 3). */
+    const typeCalls = centralSpy.mock.calls.filter((call) => call[0] === "villa_type");
+    expect(typeCalls).toHaveLength(3);
+    const menuCalls = centralSpy.mock.calls.filter((call) => call[0] === "menu");
+    expect(menuCalls).toHaveLength(3);
   });
 
   it("33) menüde kategori öğesi yoksa VİLLA TİPİ çeviri sorgusu atılmaz", async () => {
@@ -532,11 +552,12 @@ describe("HeaderWrapper — multilingual gate + ağaç birleştirme", () => {
     ).toHaveLength(0);
   });
 
-  it("34) çeviri okuması patlarsa header ÇÖKMEZ, TR adına düşer", async () => {
+  /* 🌐 Faz 6 Dalga 4 — etiketi çözülemeyen kategori düğümü gizlenir. */
+  it("34) içerik okuması patlarsa header ÇÖKMEZ; etiketsiz kategori gizlenir", async () => {
     getPublicSettingsMock.mockResolvedValue({ multilingual_enabled: true });
     findManyForLocaleMock.mockRejectedValue(new Error("db down"));
     render(await HeaderWrapper());
-    expect(screen.getAllByText("Lüks Villa").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Lüks Villa")).not.toBeInTheDocument();
   });
 
   it("35) getMenu patlarsa ÖNCEKİ fallback davranışı korunur (boş menü)", async () => {

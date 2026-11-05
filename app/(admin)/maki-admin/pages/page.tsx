@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote, { MissingLocalesBadge } from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -312,6 +313,7 @@ export default function AdminPages() {
           <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
             {pagesDict.list.title}
           </h1>
+          <RootLocaleNote />
           <p className="text-sm text-[var(--color-stone-500)] mt-2">
             {pagesDict.list.subtitle}
           </p>
@@ -364,6 +366,7 @@ export default function AdminPages() {
                       <h3 className="font-medium text-[var(--color-stone-900)] truncate">
                         {page.title}
                       </h3>
+                      <MissingLocalesBadge missing={page.missing_locales} />
                       {!isPublished && (
                         <span className="text-[10px] tracking-[0.12em] uppercase font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
                           Taslak

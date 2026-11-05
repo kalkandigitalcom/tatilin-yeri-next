@@ -1,4 +1,8 @@
 import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import { pagesServerRepository } from "@/lib/db/pages.repository.server";
 import type { PageTranslationRow } from "@/lib/i18n/translations.types";
@@ -128,6 +132,10 @@ export async function getPageTranslations(
 export async function upsertPageTranslation(
   input: PageTranslationInput
 ): Promise<PageTranslationResult> {
+  /* 🌐 Faz 5 dalga 2 — merkezi yazmaya geçildiyse eski yol KAPALI. */
+  if (isContentWriteMigrated("page")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const pageId = (input.pageId ?? "").toString().trim();
   if (!pageId) return { ok: false, error: "Geçersiz sayfa" };
 

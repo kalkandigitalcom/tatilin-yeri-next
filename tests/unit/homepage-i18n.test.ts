@@ -441,6 +441,20 @@ const getCachedSettingsMock = vi.fn();
 vi.mock("@/lib/cache.helpers", () => ({
   getCachedSettings: () => getCachedSettingsMock(),
 }));
+/* 🌐 Faz 6 Dalga 4 — metadata metinleri merkezi servisten (tekil kayıt
+   kuralı). Depo satırları bu fixture'dan türetilir: TR = ana tablo
+   aynası (migration 107), EN/DE = settings_translations. */
+vi.mock("next/cache", () => ({ unstable_cache: (fn: (...a: unknown[]) => unknown) => fn }));
+vi.mock("@/lib/i18n/content/content-read.server", () => ({
+  getAllLocales: async () => {
+    const s = (await getCachedSettingsMock().catch(() => null)) as
+      | (Record<string, unknown> & { translations?: Record<string, Record<string, string | null>> })
+      | null;
+    if (!s) return {};
+    const tr = Object.fromEntries(SETTINGS_TRANSLATABLE_FIELDS.map((f) => [f, (s[f] as string | null) ?? null]));
+    return { tr, ...(s.translations ?? {}) };
+  },
+}));
 
 describe("H) buildHomeMetadata", () => {
   beforeEach(() => {
@@ -449,6 +463,7 @@ describe("H) buildHomeMetadata", () => {
        çeviriler zaten yalnız çoklu dil AÇIKKEN yüklenir → fixture
        gerçek üretim durumunu yansıtacak şekilde açık. */
     getCachedSettingsMock.mockResolvedValue({
+      id: "5e771e65-0000-4000-8000-000000000001",
       multilingual_enabled: true,
       default_meta_title: "TR Başlık",
       default_meta_description: "TR Açıklama",

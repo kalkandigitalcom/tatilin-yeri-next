@@ -714,6 +714,11 @@ export type Dictionary = {
     seo: {
       /** WebSite JSON-LD `description` alanı. */
       websiteDescription: string;
+      /** 🌐 Faz 6 Dalga 4 — sitenin varsayılan `<title>` yedeği (ana sayfa ve
+       *  kök layout): `default_meta_title` yoksa ANA DİLİN sözlüğünden. */
+      metaTitleFallback: string;
+      /** Aynı kural, `default_meta_description` için. */
+      metaDescriptionFallback: string;
     };
     /** Ay adları (1=Ocak … 12=Aralık). ShortGaps kart başlıkları.
      *  `lib/short-gaps.helpers.ts > MONTH_NAMES_TR` ile TR'de BİREBİR. */

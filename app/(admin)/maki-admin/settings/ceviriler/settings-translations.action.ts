@@ -9,11 +9,22 @@ import {
   getSettingsTranslations,
   upsertSettingsTranslation,
   type SettingsTranslationInput,
-  type SettingsTranslationSaveResult,
   type SettingsTranslationsLoadResult,
 } from "@/app/services/settings-translation.service";
 import { revalidateSettings } from "@/app/services/revalidate.actions";
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
+import type { Locale } from "@/lib/i18n/config";
+import type { SettingsTranslationValues } from "@/lib/i18n/settings-translations.types";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import {
+  clearSettingsTranslationCentral,
+  saveSettingsTranslationCentral,
+} from "../_content/settings-content.server";
+
+/* 🌐 Faz 5 dalga 2 — "settings" merkezi yazmaya geçtiğinde kayıt/silme
+   `saveTranslationRow` (yalnız ana dil DIŞINDAKİ diller) üzerinden
+   yapılır; eski settings-translation.service yazma yolu KAPALIDIR.
+   Ana dil (public_default_locale) bu ekrandan düzenlenmez. */
 
 /* ===============================================================
    🛡️ PHASE 10L §4 — ADMIN SETTINGS TRANSLATION SERVER ACTIONS
@@ -42,16 +53,28 @@ export async function loadSettingsTranslationsAction(): Promise<SettingsTranslat
   return getSettingsTranslations();
 }
 
+/** Faz 5: locale artık ana dil DIŞINDAKİ herhangi bir dil olabilir
+ *  (ana dil EN ise TR de bir çeviri dilidir). */
+export type SettingsTranslationActionResult =
+  | { ok: true; locale: Locale; values: SettingsTranslationValues }
+  | { ok: false; error: string };
+
 export async function saveSettingsTranslation(
-  input: SettingsTranslationInput
-): Promise<SettingsTranslationSaveResult> {
+  input: Omit<SettingsTranslationInput, "locale"> & { locale: string }
+): Promise<SettingsTranslationActionResult> {
   const auth = await authorizeAdminSession();
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
   if (!(await callerHasPermission(auth.caller.id, "settings"))) {
     return { ok: false, error: "Yetkisiz" };
   }
 
-  const result = await upsertSettingsTranslation(input);
+  if (isContentWriteMigrated("settings")) {
+    const r = await saveSettingsTranslationCentral(auth.caller, input as { locale: string } & Record<string, unknown>);
+    if (r.ok) await revalidateSettings();
+    return r;
+  }
+
+  const result = await upsertSettingsTranslation(input as SettingsTranslationInput);
 
   /* Yalnız GERÇEKTEN yazıldıysa invalidate — başarısız denemede public
      cache boşuna temizlenmez. */
@@ -69,6 +92,12 @@ export async function deleteSettingsTranslationAction(
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
   if (!(await callerHasPermission(auth.caller.id, "settings"))) {
     return { ok: false, error: "Yetkisiz" };
+  }
+
+  if (isContentWriteMigrated("settings")) {
+    const r = await clearSettingsTranslationCentral(auth.caller, locale);
+    if (r.ok) await revalidateSettings();
+    return r;
   }
 
   const result = await deleteSettingsTranslation(locale);

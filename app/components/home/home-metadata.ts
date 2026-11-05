@@ -6,7 +6,9 @@ import { getCachedSettings } from "@/lib/cache.helpers";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
 import { resolvePublicHome } from "@/lib/i18n/public-home";
-import { resolveSettingsText } from "@/lib/i18n/settings-translation.helper";
+import { getPublicSettingsTexts } from "@/lib/i18n/content/public-shared-content.server";
+import { publicLocaleCtxFromSettings } from "@/lib/i18n/content/public-shared-content";
+import { getDictionary } from "@/lib/i18n/get-dictionary";
 
 /* ===============================================================
    🛡️ PHASE 11 — ANA SAYFA METADATA (TR / EN / DE ORTAK)
@@ -37,32 +39,27 @@ import { resolveSettingsText } from "@/lib/i18n/settings-translation.helper";
    KALDIRILDI; ana sayfalar artık gerçek içerik.)
    =============================================================== */
 
-/** TR fallback'leri — `app/layout.tsx`'teki değerlerle BİREBİR AYNI. */
-const TR_FALLBACK_TITLE = "Villa Kiralama — Lüks Villa Deneyimi";
-const TR_FALLBACK_DESCRIPTION =
-  "Akdeniz'in seçkin villalarında özel havuz, deniz manzarası ve butik konfor. Hayalindeki tatili keşfet.";
+/* 🌐 Faz 6 Dalga 4 (son düzeltme) — sabit Türkçe yedek metin kaldırıldı.
+   `default_meta_*` hiçbir aktif dilde yoksa yedek, ANA DİLİN sözlüğünden
+   (`home.seo.metaTitleFallback` / `metaDescriptionFallback`) gelir:
+   ana dil TR → Türkçe (eski sabitlerle birebir), EN → İngilizce, DE →
+   Almanca. Ana dil daima aktiftir; pasif dil hiçbir adımda kullanılmaz.
+   Ayar okunamazsa varsayılan bağlam (ana dil TR) → Türkçe (eskisi gibi). */
 
 export async function buildHomeMetadata(
   locale: Locale = DEFAULT_LOCALE
 ): Promise<Metadata> {
   const settings = await getCachedSettings().catch(() => null);
-  const translations = settings?.translations ?? null;
+  /* 🌐 Faz 6 Dalga 4 — meta başlık/açıklama merkezi servisten (tekil
+     kayıt kuralı). Ana dil TR iken eski `resolveSettingsText` ile birebir. */
+  const texts = await getPublicSettingsTexts(locale);
 
-  const title =
-    resolveSettingsText(
-      settings?.default_meta_title,
-      translations,
-      locale,
-      "default_meta_title"
-    )?.trim() || TR_FALLBACK_TITLE;
+  const fallback = getDictionary(publicLocaleCtxFromSettings(settings).root).home.seo;
+
+  const title = texts.default_meta_title?.trim() || fallback.metaTitleFallback;
 
   const description =
-    resolveSettingsText(
-      settings?.default_meta_description,
-      translations,
-      locale,
-      "default_meta_description"
-    )?.trim() || TR_FALLBACK_DESCRIPTION;
+    texts.default_meta_description?.trim() || fallback.metaDescriptionFallback;
 
   const { canonical, languages } = buildLocaleAlternates("/", locale);
 

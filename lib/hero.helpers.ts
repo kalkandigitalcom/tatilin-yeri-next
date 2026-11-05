@@ -7,7 +7,10 @@ import { resolveAssetUrl } from "@/lib/storage.helpers";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { resolveSettingsText } from "@/lib/i18n/settings-translation.helper";
-import type { SettingsTranslationsByLocale } from "@/lib/i18n/settings-translations.types";
+import type {
+  SettingsTranslatableField,
+  SettingsTranslationsByLocale,
+} from "@/lib/i18n/settings-translations.types";
 
 /* ===============================================================
    🛡️ HOMEPAGE HERO — RESOLVER + DEFAULTS
@@ -143,10 +146,15 @@ export function resolveHeroContent(
     locale?: Locale;
     /** migration 085 EN/DE hero çevirileri (`getPublicSettings()` payload'ı). */
     translations?: SettingsTranslationsByLocale | null;
+    /** 🌐 Faz 6 Dalga 4 — merkezi servisle ÇÖZÜLMÜŞ ayar metinleri
+     *  (public-shared-content: tekil kayıt kuralı). Verilirse
+     *  `translations`/`resolveSettingsText` YERİNE kullanılır. */
+    texts?: Readonly<Record<string, string | null | undefined>> | null;
   }
 ): HeroContent {
   const locale: Locale = options?.locale ?? DEFAULT_LOCALE;
   const translations = options?.translations ?? null;
+  const texts = options?.texts ?? null;
   /* Metin defaultları — TR'de `HERO_DEFAULTS`/`HERO_CTA_DEFAULTS` ile
      BİREBİR aynı değerler (bkz. lib/i18n/dictionaries/tr.ts > home.hero). */
   const d = getDictionary(locale).home.hero;
@@ -180,6 +188,9 @@ export function resolveHeroContent(
       ? withCacheBust(baseImage, options.cacheKey)
       : baseImage;
 
+  const txt = (canonical: string | null | undefined, field: SettingsTranslatableField) =>
+    texts ? texts[field] : resolveSettingsText(canonical, translations, locale, field);
+
   return {
     enabled: true,
     /* 🛡️ Admin bilinçli boşaltmışsa ("") → public'te render edilmesin
@@ -192,23 +203,13 @@ export function resolveHeroContent(
        canonical değeri AYNEN (referans olarak) döndürür → aşağıdaki
        `pickStrOrEmpty` zinciri ESKİSİYLE BİT-BİRE AYNI çalışır. */
     badge: pickStrOrEmpty(
-      resolveSettingsText(
-        settings.hero_badge_text,
-        translations,
-        locale,
-        "hero_badge_text"
-      )
+      txt(settings.hero_badge_text, "hero_badge_text")
     ),
     title: pickStrOrEmpty(
-      resolveSettingsText(settings.hero_title, translations, locale, "hero_title")
+      txt(settings.hero_title, "hero_title")
     ),
     subtitle: pickStrOrEmpty(
-      resolveSettingsText(
-        settings.hero_subtitle,
-        translations,
-        locale,
-        "hero_subtitle"
-      )
+      txt(settings.hero_subtitle, "hero_subtitle")
     ),
     backgroundImage,
     overlayOpacity: clamp01(
@@ -217,21 +218,11 @@ export function resolveHeroContent(
     ),
     /* ⚠️ CTA HREF'LERİ DİL BAĞIMSIZ — yalnız METİN çevrilir. */
     primaryCta: pickCta(
-      resolveSettingsText(
-        settings.hero_primary_cta_text,
-        translations,
-        locale,
-        "hero_primary_cta_text"
-      ),
+      txt(settings.hero_primary_cta_text, "hero_primary_cta_text"),
       settings.hero_primary_cta_href
     ),
     secondaryCta: pickCta(
-      resolveSettingsText(
-        settings.hero_secondary_cta_text,
-        translations,
-        locale,
-        "hero_secondary_cta_text"
-      ),
+      txt(settings.hero_secondary_cta_text, "hero_secondary_cta_text"),
       settings.hero_secondary_cta_href
     ),
   };

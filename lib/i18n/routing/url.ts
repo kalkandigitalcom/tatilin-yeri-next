@@ -1,6 +1,7 @@
 import { isSupportedLocale, SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/config";
 import {
   getRoutingContext,
+  ownHistoryHasTechnicalKey,
   slugOwnerLocale,
   slugSource,
   toBaseSlug,
@@ -351,13 +352,21 @@ export function resolveIncomingPath(
       if (!prefixed && def.slugKind && own.params.slug) {
         const src = slugSource(ctx, def.slugKind, own.params.slug, locale);
         if (src === "other" || src === "base") {
+          /* Faz 7 R-B — teknik anahtar bu dilin KENDİ geçmişinde: dil slug'ı
+             kalıcı olarak değişti (ör. 108 sonrası TR slug'ı) → aynı dilin
+             yeni slug'ına KALICI 308; başka dile gönderilmez. */
+          if (src === "base" && ownHistoryHasTechnicalKey(ctx, def.slugKind, own.params.slug, locale)) {
+            return { type: "redirect", path: canonical, status: REDIRECT_STATUS.canonical };
+          }
           const owner = slugOwnerLocale(ctx, def.slugKind, own.params.slug, locale);
           const sameShape = owner ? matchRoute(rest, owner)?.key === own.key : false;
-          const path =
-            owner && sameShape && ctx.enabled.includes(owner)
-              ? buildRoutePath(own.key, base, owner, ctx)
-              : canonical;
-          return { type: "redirect", path, status: REDIRECT_STATUS.localeRoot };
+          const toOwner = !!owner && sameShape && ctx.enabled.includes(owner);
+          const path = toOwner ? buildRoutePath(own.key, base, owner!, ctx) : canonical;
+          /* Başka dile gidiş ana dile bağlıdır → geçici 307. Teknik anahtardan
+             AYNI dilin kanonik slug'ına düzeltme ise kalıcıdır → 308. */
+          const status =
+            !toOwner && src === "base" ? REDIRECT_STATUS.canonical : REDIRECT_STATUS.localeRoot;
+          return { type: "redirect", path, status };
         }
       }
       return { type: "redirect", path: canonical, status: REDIRECT_STATUS.canonical };
@@ -379,11 +388,15 @@ export function resolveIncomingPath(
     if (!prefixed && def.slugKind && any.params.slug) {
       const kind = def.slugKind;
       const slug = any.params.slug;
+      /* Faz 6 Dalga 1 — simetrik: sahip, slug'ı KANONİK olarak kullanan
+         AKTİF dildir (kendi slug'ı ya da kendi slug'ı yoksa teknik
+         anahtar). TR'ye özel kural ve pasif dil yok. */
       const owner = SUPPORTED_LOCALES.find(
         (l) =>
           l !== locale &&
+          ctx.enabled.includes(l) &&
           matchRoute(rest, l)?.key === any.key &&
-          (l === "tr" ? !!ctx.slugs[kind]?.[slug] : slugSource(ctx, kind, slug, l) === "own")
+          slugSource(ctx, kind, slug, l) === "own"
       );
       if (owner) patternLocale = owner;
     }

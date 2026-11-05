@@ -109,6 +109,19 @@ vi.mock("@/lib/db/admin-activity-log.repository.server", () => ({
 vi.mock("@/lib/db/settings.repository.server", () => ({
   settingsServerRepository: h.settingsServerRepository,
 }));
+/* 🌐 Faz 5 dalga 2 — genel ayarlar PUT'u artık merkezi yazmayı
+   (saveSettingsCentral → saveContentMany + teknik yama) kullanır. Bu
+   route testleri yetki/ana-dil/çoklu-dil kurallarını doğrular; yazma
+   adımı aynı spy'a yönlendirilir (çağrı sayısı/sırası beklentileri
+   aynen geçerli). Merkezi yolun kendisi faz5-dalga2 testlerinde. */
+vi.mock("@/app/(admin)/maki-admin/settings/_content/settings-content.server", () => ({
+  saveSettingsCentral: async (_c: unknown, id: string, values: Record<string, unknown>) => {
+    const r = (await h.settingsServerRepository.updateById(id, values)) as { error?: { message?: string } | null } | undefined;
+    return r?.error ? { ok: false, error: r.error.message ?? "hata" } : { ok: true };
+  },
+  overlaySettingsRootContent: async (row: unknown) => row,
+}));
+
 vi.mock("@/lib/auth/server", () => ({
   adminAuthProvider: h.adminAuthProvider,
 }));

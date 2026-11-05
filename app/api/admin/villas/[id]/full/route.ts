@@ -81,7 +81,7 @@ export async function PUT(
   }
 
   try {
-    await updateVillaFull({ id, ...body } as VillaUpdatePayload);
+    await updateVillaFull({ id, ...body } as VillaUpdatePayload, { actor: auth.caller });
     /* 🛡️ Başarılı güncelleme (başlık/kapasite/bölge/fiyat/rozet…) →
        public villa listesi cache'i tazelenir. */
     invalidateVillasCache("admin.villas.full.update");

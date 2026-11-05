@@ -75,6 +75,13 @@ function reachableFiles(): string[] {
   const entries: string[] = [];
   walkPages("app/(public)/en", entries);
   walkPages("app/(public)/de", entries);
+  /* 🌐 Faz 6 — taşınan sayfaların EN/DE girişi artık tek, dile duyarlı
+     route modülleri (`_routes/*`); eski `en|de/locale-page.tsx` kopyaları
+     kaldırıldıkça kapanış buradan beslenir. (`[lang]` dispatcher'larının
+     hepsi yürünmez: eski `localeRoute` TR modülleri yalnız TR'de çalışır.) */
+  for (const name of existsSync(join(ROOT, "app/(public)/_routes")) ? readdirSync(join(ROOT, "app/(public)/_routes")) : []) {
+    if (/\.(ts|tsx)$/.test(name)) entries.push(join("app/(public)/_routes", name));
+  }
   for (const extra of [
     "app/(public)/layout.tsx",
     "app/layout.tsx",
@@ -173,17 +180,6 @@ const INTENTIONAL_TR: Record<string, string[]> = {
     "gizlilik|kvkk",
     "sss|faq|sik sorul",
     "hakk|about|biz kim",
-  ],
-  /* Marka + varsayılan meta metni. `site_name` / `default_meta_*`
-     settings ALANLARI çevrilebilir (`resolveSettingsText`); bu iki
-     sabit yalnız admin HİÇBİR değer girmediğinde devreye giren
-     canonical TR marka fallback'idir ve `app/layout.tsx` ile
-     BİREBİR aynıdır (auditte "canonical brand" kategorisi). */
-  "app/components/home/home-metadata.ts": [
-    "TR_FALLBACK_TITLE",
-    "TR_FALLBACK_DESCRIPTION",
-    "Villa Kiralama — Lüks Villa Deneyimi",
-    "Akdeniz'in seçkin villalarında",
   ],
   /* ERİŞİLEMEZ SENTINEL: `buildHeroDateLabel` bu dalı yalnız
      `startDate == null` iken döner, çağıran ise
@@ -361,15 +357,59 @@ describe("kapatılan bulgular geri gelmiyor", () => {
 
 const BADGE_SURFACES = [
   "app/components/search/AramaPageBody.tsx",
-  "app/components/search/KiralikVillalarPageBody.tsx",
   "app/(public)/favoriler/FavoritesGrid.tsx",
   "app/components/favorites/SharedFavoritesPageBody.tsx",
   "app/components/short-gaps/ShortGapsPageBody.tsx",
   "app/components/shared-list/SharedListPageBody.tsx",
-  "app/components/villa/VillaList.tsx",
-  "app/components/home/DiscountCollection.tsx",
+  /* 🌐 Faz 6 Dalga 4 — VillaList + DiscountCollection merkezi okumaya geçti
+     (aşağıda COLLECTION_BADGE_SURFACES). */
+];
+
+/* 🌐 Faz 6 Dalga 2 — MERKEZİ okumaya geçen kart yüzeyleri. Rozet yine
+   locale'e göre ve TEK batch'te çözülür; ancak yedek artık ana tablo
+   kolonu (TR) DEĞİL, merkezi zincirdir (istenen → ana dil → aktif diller).
+   Bu yüzden `?? villa.badge` deseni burada YASAKTIR. */
+const CENTRAL_BADGE_SURFACES = [
+  "app/components/search/KiralikVillalarPageBody.tsx",
   "app/components/villa/SimilarVillasSection.tsx",
 ];
+
+describe("villa.badge — merkezi okumaya geçen yüzeyler (Faz 6 Dalga 2)", () => {
+  it.each(CENTRAL_BADGE_SURFACES)("%s rozeti merkezi servisten TEK batch'te okuyor", (f) => {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    const calls = src.match(/loadContentLabels\(\s*publicContentReader,\s*"villa",\s*"badge"/g) || [];
+    expect(calls, `${f} rozeti merkezi servisten okumuyor`).toHaveLength(1);
+    expect(src).not.toContain("getVillaBadgesByLocale");
+    expect(/\.map\([^)]*\)\s*=>[\s\S]{0,200}?loadContentLabels/.test(src), `${f} N+1`).toBe(false);
+  });
+  it.each(CENTRAL_BADGE_SURFACES)("%s ana tablo rozetine (TR kolonu) DÜŞMÜYOR", (f) => {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    expect(/badgeBy(VillaId|Id)\.get\([^)]*\)\s*\?\?/.test(src)).toBe(false);
+    expect(src).not.toMatch(/\?\?\s*villa\.badge/);
+  });
+});
+
+/* 🌐 Faz 6 Dalga 4 — ana sayfa / indirim koleksiyonu: rozet + özel başlık
+   `loadCollectionCardTexts` ile (koleksiyon başına İKİ batch). */
+const COLLECTION_BADGE_SURFACES = [
+  "app/components/villa/VillaList.tsx",
+  "app/components/home/DiscountCollection.tsx",
+];
+
+describe("villa.badge — koleksiyon yüzeyleri merkezi okumada (Faz 6 Dalga 4)", () => {
+  it.each(COLLECTION_BADGE_SURFACES)("%s rozet/başlığı merkezi servisten TEK çağrıda okuyor", (f) => {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    expect((src.match(/loadCollectionCardTexts\(/g) || []).length).toBe(1);
+    expect(src).toContain("publicContentReader");
+    expect(src).not.toContain("getVillaBadgesByLocale");
+    expect(/\.map\([^)]*\)\s*=>[\s\S]{0,200}?loadCollectionCardTexts/.test(src), `${f} N+1`).toBe(false);
+  });
+  it.each(COLLECTION_BADGE_SURFACES)("%s ana tablo rozetine (TR kolonu) DÜŞMÜYOR", (f) => {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    expect(src).not.toMatch(/\?\?\s*(villa|c)\.badge/);
+    expect(src).not.toMatch(/badge=\{\s*(villa|c)\.badge/);
+  });
+});
 
 describe("villa.badge — tüm public kart yüzeylerinde locale-aware", () => {
   it.each(BADGE_SURFACES)("%s badge'i locale'e göre çözüyor", (f) => {

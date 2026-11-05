@@ -10,45 +10,58 @@ import {
   getBlogTranslations,
   upsertBlogTranslation,
   type BlogTranslationInput,
-  type BlogTranslationsListResult,
-  type BlogTranslationResult,
 } from "@/app/services/blog-translation.service";
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import type { AdminLocaleLayout } from "@/lib/i18n/content/content-admin";
+import {
+  loadBlogTranslationsCentral,
+  saveBlogTranslationCentral,
+} from "./blog-content.server";
 
 /* ===============================================================
    🛡️ MIGRATION 089 — Admin Blog Çeviri UI Server Actions
    ===============================================================
-   `page-translations.action.ts` (Phase 12C) ile BİREBİR AYNI desen.
+   Okuma: requirePermission("blog"). Yazma: authorizeAdminSession() İLK
+   kontrol + callerHasPermission("blog").
 
-   Okuma: sayfa zaten middleware ile korunuyor — ekstra auth GEREKMİYOR.
-   Yazma: `authorizeAdminSession()` İLK kontrol.
-
-   ⚠️ Bu dosya yalnız ince wrapper — iş mantığı YOK. Mevcut Blog CRUD
-   API route'larına (`/api/admin/blog`) DOKUNULMADI.
+   🌐 Faz 5 dalga 2 — "blog_post" merkezi yazmadayken kart ANA DİL
+   DIŞINDAKİ iki dili (TR dahil olabilir) düzenler: loadTranslationRows /
+   saveTranslationRow. Eski blog-translation.service yazma yolu KAPALI.
    =============================================================== */
 
-export async function loadBlogTranslationsAction(
-  postId: string
-): Promise<BlogTranslationsListResult> {
-  /* 🛡️ Blog artık kendi permission key'ini kullanır ("blog");
-     ÖNCEDEN `pages` REUSE ediliyordu. Authorization DESENİ değişmedi —
-     yalnız key. */
+export type BlogTranslationsLoad =
+  | {
+      ok: true;
+      rows: Array<Record<string, unknown> & { locale: string }>;
+      layout?: AdminLocaleLayout;
+      technicalKey?: string | null;
+      slugSeparated?: boolean;
+    }
+  | { ok: false; error: string };
+
+export type BlogTranslationSave =
+  | { ok: true; row: Record<string, unknown> }
+  | { ok: false; error: string };
+
+export async function loadBlogTranslationsAction(postId: string): Promise<BlogTranslationsLoad> {
   await requirePermission("blog");
-  return getBlogTranslations(postId);
+  if (isContentWriteMigrated("blog_post")) return loadBlogTranslationsCentral(postId);
+  return getBlogTranslations(postId) as Promise<BlogTranslationsLoad>;
 }
 
 export async function saveBlogTranslationAction(
-  input: BlogTranslationInput
-): Promise<BlogTranslationResult> {
+  input: Omit<BlogTranslationInput, "locale"> & { locale: string }
+): Promise<BlogTranslationSave> {
   const auth = await authorizeAdminSession();
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
-  /* 🛡️ Bkz. yukarısı — key `pages` → `blog`. Guard yapısı ve
-     `{ ok:false }` dönüş şekli AYNEN korundu. */
   if (!(await callerHasPermission(auth.caller.id, "blog"))) {
     return { ok: false, error: "Yetkisiz" };
   }
 
-  const result = await upsertBlogTranslation(input);
+  const result = isContentWriteMigrated("blog_post")
+    ? await saveBlogTranslationCentral(auth.caller, input)
+    : ((await upsertBlogTranslation(input as BlogTranslationInput)) as BlogTranslationSave);
   /* 🌐 Faz 2 — dil slug'ı değiştiyse URL haritası + sayfalar yenilenir. */
   if (result.ok && input.slug !== undefined) revalidateLocaleSlugs();
   return result;

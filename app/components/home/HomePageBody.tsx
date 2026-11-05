@@ -23,10 +23,10 @@ import {
 } from "@/app/components/seo/StructuredData";
 import {
   getCachedSettings,
-  getCachedFaqs,
   getCachedGlobalReviewStats,
 } from "@/lib/cache.helpers";
 import { resolveHeroContent } from "@/lib/hero.helpers";
+import { getPublicFaqs, getPublicSettingsTexts } from "@/lib/i18n/content/public-shared-content.server";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
@@ -66,8 +66,11 @@ export default async function HomePageBody({
      Tag: "faqs", TTL 1 saat; admin replaceFaqs sonrası invalidate.
      🛡️ PHASE 11 — locale BAŞINA AYRI cache key'i (çapraz-dil sızıntısı
      yapısal olarak imkânsız; bkz. lib/cache.helpers.ts).
-     Boş array dönerse section + JSON-LD render YOK (caller guard). */
-  const faqs = await getCachedFaqs(locale).catch(() => []);
+     Boş array dönerse section + JSON-LD render YOK (caller guard).
+     🌐 Faz 6 Dalga 4 — soru/cevap merkezi servisten (istenen dil → ana
+     dil → diğer aktif diller; pasif dil yok). Sıra ana tablodaki gibi;
+     hiçbir aktif dilde soru/cevabı olmayan öğe gizlenir. */
+  const faqs = await getPublicFaqs(locale);
 
   /* 🛡️ FAZ 39F — Hero floating review card real-data wiring.
      Tek query global aggregate (cached, tag villa-reviews); admin
@@ -90,10 +93,14 @@ export default async function HomePageBody({
   /* 🛡️ PHASE 11 — hero metinleri locale'e göre: çeviri (mig. 085) →
      yoksa TR canonical → yoksa dictionary default. CTA href'leri ve
      hero görseli DİL BAĞIMSIZ. */
+  /* 🌐 Faz 6 Dalga 4 — hero metinleri merkezi içerik servisinden
+     (tekil kayıt kuralı: istenen dil → ana dil satırı AYNEN → diğer
+     aktif diller; pasif dil yok). Ana dil TR iken eskisiyle birebir. */
+  const heroTexts = await getPublicSettingsTexts(locale);
   const heroContent = resolveHeroContent(settings, {
     cacheKey: heroCacheKey,
     locale,
-    translations: settings?.translations ?? null,
+    texts: heroTexts,
   });
 
   const websiteLd = buildWebsite(

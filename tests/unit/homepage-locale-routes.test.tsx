@@ -4,8 +4,8 @@
    Kapsam:
      A) `/`, `/en`, `/de` üçü de AYNI `HomePageBody` component'ini
         render eder (üç ayrı kopya YOK) ve DOĞRU locale'i geçirir
-     B) EN/DE `setRequestLocale` + `requirePublicLocaleEnabled` gate
-        davranışı KORUNDU (multilingual kapalıyken notFound)
+     B) 🌐 Faz 6 Dalga 4 — tek modül (`_routes/home.tsx`) + dispatcher:
+        `setRequestLocale` her dil için; pasif dil / çoklu dil kapalı → 404
      C) EN/DE ana sayfasında placeholder `noindex` KALDIRILDI
      D) 🔴 CACHE LOCALE İZOLASYONU — SSS cache key'i locale içerir,
         yani EN çevirisi TR isteğine servis EDİLEMEZ
@@ -17,77 +17,75 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const requirePublicLocaleEnabledMock = vi.fn();
 const setRequestLocaleMock = vi.fn();
+const ctx = vi.hoisted(() => ({ value: { root: "tr", enabled: ["tr", "en", "de"], slugs: {}, redirects: {} } as Record<string, unknown> }));
 
-vi.mock("@/lib/i18n/public-locale-gate.server", () => ({
-  requirePublicLocaleEnabled: () => requirePublicLocaleEnabledMock(),
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
+  permanentRedirect: (u: string) => {
+    throw new Error(`NEXT_REDIRECT:${u}`);
+  },
 }));
 vi.mock("@/lib/i18n/request-locale.server", () => ({
   setRequestLocale: (...a: unknown[]) => setRequestLocaleMock(...a),
 }));
+vi.mock("@/lib/i18n/routing/context.server", () => ({ primeRoutingContext: async () => ctx.value }));
 
 import HomePageBody from "@/app/components/home/HomePageBody";
+import { localeRouteFor } from "@/lib/i18n/routing/locale-route";
+import { homeRouteModule } from "@/app/(public)/_routes/home";
+import { setRoutingContext, type RoutingContext } from "@/lib/i18n/routing/context";
+
+const route = localeRouteFor("home", homeRouteModule);
+const props = (lang: string) => ({ params: Promise.resolve({ lang }), searchParams: Promise.resolve({}) }) as never;
+async function render(lang: string) {
+  const outer = (await route.Page(props(lang))) as { type: (p: unknown) => unknown; props: Record<string, unknown> };
+  return (await outer.type(outer.props)) as { type: unknown; props: { locale: string } };
+}
+function setCtx(root: string, enabled: string[]) {
+  ctx.value = { root, enabled, slugs: {}, redirects: {} };
+  setRoutingContext(ctx.value as RoutingContext);
+}
 
 beforeEach(() => {
-  requirePublicLocaleEnabledMock.mockReset();
   setRequestLocaleMock.mockReset();
-  requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
+  setCtx("tr", ["tr", "en", "de"]);
 });
 
 /* ===============================================================
    A + B) ROUTE DAVRANIŞI
    =============================================================== */
-const LOCALE_ROUTES: Array<[string, "en" | "de"]> = [
-  ["@/app/(public)/en/locale-page", "en"],
-  ["@/app/(public)/de/locale-page", "de"],
-];
-
-describe.each(LOCALE_ROUTES)("%s", (modulePath, locale) => {
-  it(`1) gate geçerse ORTAK HomePageBody'yi locale="${locale}" ile render eder`, async () => {
-    const { default: Page } = await import(modulePath);
-    const element = await Page();
-
+describe.each(["tr", "en", "de"])("ana sayfa /%s", (locale) => {
+  it(`1) ORTAK HomePageBody'yi locale="${locale}" ile render eder`, async () => {
+    const el = await render(locale);
     expect(setRequestLocaleMock).toHaveBeenCalledWith(locale);
-    expect(requirePublicLocaleEnabledMock).toHaveBeenCalledTimes(1);
-    expect(element.type).toBe(HomePageBody);
-    expect(element.props.locale).toBe(locale);
+    expect(el.type).toBe(HomePageBody);
+    expect(el.props.locale).toBe(locale);
   });
 
-  it(`2) multilingual KAPALI → gate'in notFound()'u PROPAGATE eder`, async () => {
-    const notFoundError = new Error("NEXT_NOT_FOUND");
-    requirePublicLocaleEnabledMock.mockRejectedValue(notFoundError);
-
-    const { default: Page } = await import(modulePath);
-    await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
+  it("2) pasif dil → 404 (eski gate ile aynı)", async () => {
+    setCtx(locale === "tr" ? "en" : "tr", ["tr", "en", "de"].filter((l) => l !== locale));
+    await expect(route.Page(props(locale))).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
-  it(`3) placeholder koşulsuz noindex KALDIRILDI (statik metadata YOK)`, async () => {
-    const mod = await import(modulePath);
-    expect(mod.metadata).toBeUndefined();
-    expect(typeof mod.generateMetadata).toBe("function");
+  it("3) placeholder koşulsuz noindex YOK (metadata dile göre üretilir)", async () => {
+    expect(homeRouteModule.metadata).toBeUndefined();
+    expect(typeof homeRouteModule.generateMetadata).toBe("function");
   });
 });
 
-describe("app/(public)/locale-page.tsx — TR", () => {
-  it("4) ORTAK HomePageBody'yi locale='tr' ile render eder", async () => {
-    const { default: Page } = await import("@/app/(public)/locale-page");
-    const element = await Page();
-    expect(element.type).toBe(HomePageBody);
-    expect(element.props.locale).toBe("tr");
+describe("tek modül", () => {
+  it("4) çoklu dil KAPALI (yalnız ana dil aktif) → EN/DE 404, ana dil render", async () => {
+    setCtx("tr", ["tr"]);
+    await expect(route.Page(props("en"))).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(route.Page(props("de"))).rejects.toThrow("NEXT_NOT_FOUND");
+    expect((await render("tr")).props.locale).toBe("tr");
   });
 
-  it("5) TR'de locale gate'i ÇAĞRILMAZ (davranış değişmedi)", async () => {
-    const { default: Page } = await import("@/app/(public)/locale-page");
-    await Page();
-    expect(requirePublicLocaleEnabledMock).not.toHaveBeenCalled();
-    expect(setRequestLocaleMock).not.toHaveBeenCalled();
-  });
-
-  it("6) üç route da AYNI component referansını kullanır (kopya YOK)", async () => {
-    const tr = await (await import("@/app/(public)/locale-page")).default();
-    const en = await (await import("@/app/(public)/en/locale-page")).default();
-    const de = await (await import("@/app/(public)/de/locale-page")).default();
+  it("6) üç dil de AYNI component referansını kullanır (kopya YOK)", async () => {
+    const [tr, en, de] = [await render("tr"), await render("en"), await render("de")];
     expect(tr.type).toBe(en.type);
     expect(en.type).toBe(de.type);
   });

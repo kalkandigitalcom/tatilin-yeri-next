@@ -11,7 +11,8 @@ import { getDictionary } from "@/lib/i18n/get-dictionary";
 /* 🛡️ NAVIGATION LOCALE PERSISTENCE — iç link aktif locale'i taşır
    (bkz. lib/i18n/locale-href.ts). */
 import { localeHref } from "@/lib/i18n/locale-href";
-import { getVillaBadgesByLocale } from "@/lib/i18n/get-villa-badge-translations.server";
+import { loadCollectionCardTexts } from "@/lib/i18n/content/public-shared-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 
 /* 🛡️ KART GÖRSELİ `sizes` — yalnız ana sayfa VillaList grid'ine göre
    (kart 1 / sm 2 / lg 4 sütun; max-w 1280). Değerler ölçülen kart
@@ -47,12 +48,23 @@ export default async function VillaList({
 
   /* Manuel koleksiyon varsa onu kullan, VillaCard prop shape'ine
      map'le. Yoksa otomatik liste (DTO shape zaten uyumlu). */
+  /* 🌐 Faz 6 Dalga 4 — kart metinleri merkezi servisten (özel başlık:
+     homepage_collection.custom_title; rozet: villa.badge). Kaynak liste
+     (manuel koleksiyon → yoksa otomatik), sıra ve kart verisi AYNEN. */
+  const texts = await loadCollectionCardTexts(
+    publicContentReader,
+    "homepage_collection",
+    collection.length > 0
+      ? collection
+      : autoVillas.map((v) => ({ id: v.id, title: v.title, display_title: v.title })),
+    locale
+  );
   const villas =
     collection.length > 0
       ? collection.map((c) => ({
           id: c.id,
           slug: c.slug,
-          title: c.display_title,
+          title: texts.title(c),
           location: c.location,
           price: c.price ?? 0,
           currency: c.currency,
@@ -67,12 +79,6 @@ export default async function VillaList({
         }))
       : autoVillas;
 
-  /* 🛡️ PHASE 11 — rozet çevirileri TEK batch sorguda (N+1 YOK).
-     TR'de sorgu HİÇ atılmaz → davranış ve maliyet BİREBİR eskisi gibi. */
-  const badgeByVillaId = await getVillaBadgesByLocale(
-    villas.map((v) => v.id),
-    locale
-  );
 
   if (!villas.length) {
     return (
@@ -122,7 +128,7 @@ export default async function VillaList({
               price={villa.price}
               currency={villa.currency || "TRY"}
               images={villa.images}
-              badge={badgeByVillaId.get(villa.id) ?? villa.badge}
+              badge={texts.badge(villa.id)}
               bedrooms={villa.bedrooms || 1}
               bathrooms={villa.bathrooms || 1}
               guests={villa.guests || 2}

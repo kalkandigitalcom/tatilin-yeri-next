@@ -33,6 +33,13 @@ const { insertVilla, emptyList, SOURCE_ROW } = vi.hoisted(() => ({
   } as Record<string, unknown>,
 }));
 
+/* Faz 5 dalga 2 — bu dosya ESKİ yazma yolunu test eder; modül merkezi
+   yazmaya geçtiğinde eski yol kapalıdır (faz5-dalga2 testi). */
+vi.mock("@/lib/i18n/content/content-write-modules", () => ({
+  isContentWriteMigrated: () => false,
+  LEGACY_WRITE_DISABLED_MESSAGE: "kapalı",
+  CONTENT_WRITE_MIGRATED: new Set(),
+}));
 vi.mock("@/lib/db/villa.repository.server", () => ({
   villaAdminRepository: {
     findRawById: async () => ({ data: SOURCE_ROW, error: null }),

@@ -1,5 +1,9 @@
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { VillaFeatureTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /**
  * 🛡️ PHASE 10D — Batch 1 — Özellik/Olanak (villa_features) Çeviri Servisi
@@ -58,6 +62,11 @@ export async function getFeatureTranslations(
 export async function upsertFeatureTranslation(
   input: FeatureTranslationInput
 ): Promise<FeatureTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("villa_feature")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const featureId = (input.featureId ?? "").toString().trim();
   if (!featureId) return { ok: false, error: "Geçersiz özellik" };
 

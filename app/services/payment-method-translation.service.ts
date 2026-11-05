@@ -1,5 +1,9 @@
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { PaymentMethodTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /* ===============================================================
    🛡️ ÖDEME YÖNTEMİ ADI ÇEVİRİ SERVİSİ (migration 088)
@@ -68,6 +72,11 @@ export async function getPaymentMethodTranslations(
 export async function upsertPaymentMethodTranslation(
   input: PaymentMethodTranslationInput
 ): Promise<PaymentMethodTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("payment_method")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const paymentMethodId = (input.paymentMethodId ?? "").toString().trim();
   if (!paymentMethodId) return { ok: false, error: "Geçersiz ödeme yöntemi" };
 

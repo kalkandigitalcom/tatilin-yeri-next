@@ -1,5 +1,9 @@
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { FaqTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /* ===============================================================
    🛡️ SSS (FAQ) ÇEVİRİ SERVİSİ — ADMIN YAZMA/OKUMA
@@ -106,6 +110,11 @@ export async function getFaqTranslations(
 export async function upsertFaqTranslation(
   input: FaqTranslationInput
 ): Promise<FaqTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("faq")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const faqId = (input.faqId ?? "").toString().trim();
   if (!faqId) return { ok: false, error: "Geçersiz SSS kaydı" };
 

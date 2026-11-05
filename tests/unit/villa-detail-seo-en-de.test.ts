@@ -3,8 +3,10 @@
    CANONICAL + HREFLANG (7C) + SEO_DESCRIPTION (8C)
    ===============================================================
    Hedef:
-     app/(public)/en/kiralik-villa/[slug]/locale-page.tsx > generateMetadata
-     app/(public)/de/kiralik-villa/[slug]/locale-page.tsx > generateMetadata
+     (🌐 Faz 6 Dalga 2) tek villa route modülü
+     app/(public)/_routes/villa.tsx > villaRouteMetadata (locale "en" | "de").
+     Eski EN/DE modülleri eşdeğerlik testinden sonra kaldırıldı; çeviri
+     okuyucuları (get-villa-translation.server) yerine MERKEZİ servis.
 
    Mock seviyesi Phase 6B/locale-routes.test.tsx ile AYNI desen:
    `@/lib/i18n/public-locale-gate.server`, `@/app/services/villa.service`,
@@ -24,57 +26,26 @@
    =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
 
-const requirePublicLocaleEnabledMock = vi.fn();
 const getVillaBySlugMock = vi.fn();
-const getVillaTranslatedSeoDescriptionMock = vi.fn();
-/* 🛡️ PHASE 10B, Section 11 — generateMetadata artık seo_title
-   çevirisini de okuyor (varsa title yerine onu kullanır). */
-const getVillaTranslatedSeoTitleMock = vi.fn();
 const getCachedSettingsMock = vi.fn();
+const contentSpy = vi.fn();
 
-vi.mock("@/lib/i18n/public-locale-gate.server", () => ({
-  requirePublicLocaleEnabled: () => requirePublicLocaleEnabledMock(),
-}));
 vi.mock("@/app/services/villa.service", () => ({
   getVillaBySlug: (...args: unknown[]) => getVillaBySlugMock(...args),
 }));
-vi.mock("@/lib/i18n/get-villa-translation.server", () => ({
-  /* 🛡️ PHASE 8C — generateMetadata artık bunu da import ediyor;
-     mock'lanmazsa `undefined` çağrılır ve TypeError fırlatır. */
-  getVillaTranslatedSeoDescription: (...args: unknown[]) =>
-    getVillaTranslatedSeoDescriptionMock(...args),
-  /* 🛡️ PHASE 10B, Section 11 — AYNI zorunlu düzeltme (bkz. üst yorum). */
-  getVillaTranslatedSeoTitle: (...args: unknown[]) =>
-    getVillaTranslatedSeoTitleMock(...args),
-}));
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock((...a) => contentSpy(...a))
+);
 vi.mock("@/lib/cache.helpers", () => ({
   getCachedSettings: (...args: unknown[]) => getCachedSettingsMock(...args),
 }));
 
 beforeEach(() => {
-  requirePublicLocaleEnabledMock.mockReset();
-  requirePublicLocaleEnabledMock.mockResolvedValue(undefined);
+  resetContentTables();
+  contentSpy.mockReset();
   getVillaBySlugMock.mockReset();
-  getVillaTranslatedSeoDescriptionMock.mockReset();
-  /* 🛡️ PHASE 8C — varsayılan: gerçek fallback/excerpt mantığı burada
-     test edilmiyor (bkz. get-villa-translation.test.ts); testler
-     ihtiyaç duyduğunda kendi mockResolvedValue'sini set eder. */
-  getVillaTranslatedSeoDescriptionMock.mockResolvedValue(
-    "Translated SEO description."
-  );
-  /* 🛡️ PHASE 10B, Section 11 — varsayılan: ECHO deseni (originalSeoTitle
-     geri döner). `BASE_VILLA`'da `seo_title` alanı YOK (undefined) →
-     `translatedSeoTitle` undefined'a çözülür → page.tsx'in
-     `(translatedSeoTitle && ...) || fallbackTitle` mantığı fallbackTitle'a
-     düşer — fallbackTitle ARTIK canonical `villa.title`'dır (villa adı
-     çevrilmez). seo_title-spesifik testler kendi
-     mockResolvedValue'sini set eder. */
-  getVillaTranslatedSeoTitleMock.mockReset();
-  getVillaTranslatedSeoTitleMock.mockImplementation(
-    (_villaId: string, originalSeoTitle: string | null | undefined) =>
-      Promise.resolve(originalSeoTitle)
-  );
   getCachedSettingsMock.mockReset();
 });
 
@@ -95,21 +66,27 @@ const ROUTES: Array<{
   locale: "en" | "de";
   notFoundTitle: string;
 }> = [
-  {
-    modulePath: "@/app/(public)/en/kiralik-villa/[slug]/locale-page",
-    locale: "en",
-    notFoundTitle: "Villa not found",
-  },
-  {
-    modulePath: "@/app/(public)/de/kiralik-villa/[slug]/locale-page",
-    locale: "de",
-    notFoundTitle: "Villa nicht gefunden",
-  },
+  { modulePath: "villaRouteMetadata(en)", locale: "en", notFoundTitle: "Villa not found" },
+  { modulePath: "villaRouteMetadata(de)", locale: "de", notFoundTitle: "Villa nicht gefunden" },
 ];
 
+/** Villa'yı sahte servise; TR satırı (ayna) + istenen dilin satırını merkezi tabloya yazar. */
+function useVilla(v: typeof BASE_VILLA | null, own?: Record<string, string | null>, locale = "en") {
+  getVillaBySlugMock.mockResolvedValue(v);
+  if (v) {
+    contentTables.villa = {
+      [v.id]: {
+        tr: { description: v.description, seo_title: null, seo_description: v.seo_description },
+        ...(own ? { [locale]: own } : {}),
+      },
+    };
+  }
+}
+
 async function callGenerateMetadata(modulePath: string, slug = "villa-in-love") {
-  const mod = await import(/* @vite-ignore */ modulePath);
-  return mod.generateMetadata({ params: Promise.resolve({ slug }) });
+  const locale = modulePath.includes("(de)") ? "de" : "en";
+  const { villaRouteMetadata } = await import("@/app/(public)/_routes/villa");
+  return villaRouteMetadata({ locale, params: { slug }, searchParams: Promise.resolve({}) });
 }
 
 describe.each(ROUTES)(
@@ -118,7 +95,7 @@ describe.each(ROUTES)(
     /* --- 2/3) EN/DE locale canonical --- */
     it(`canonical '/${locale}/kiralik-villa/{slug}' formatındadır`, async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.alternates?.canonical).toBe(
@@ -129,7 +106,7 @@ describe.each(ROUTES)(
     /* --- 4) multilingual_enabled=true iken dört hreflang key'i --- */
     it("multilingual_enabled=true iken languages tr/en/de/x-default TAMAMI mevcut", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       const languages = result.alternates?.languages as
@@ -144,7 +121,7 @@ describe.each(ROUTES)(
     /* --- 5) x-default TR --- */
     it("x-default HER ZAMAN TR path'tir", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       const languages = result.alternates?.languages as
@@ -157,7 +134,7 @@ describe.each(ROUTES)(
        YANLIŞLIKLA 404 URL olarak üretilmemesi --- */
     it("multilingual_enabled=false iken `languages` key'i HİÇ YOK", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.alternates).toEqual({
@@ -180,7 +157,7 @@ describe.each(ROUTES)(
        test). --- */
     it("robots override YOK — flag kapalıyken de root politikası miras alınır", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.robots).toBeUndefined();
@@ -188,7 +165,7 @@ describe.each(ROUTES)(
 
     it("robots override YOK — flag açıkken de (hreflang ile tutarlı)", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.robots).toBeUndefined();
@@ -196,7 +173,7 @@ describe.each(ROUTES)(
 
     it("villa bulunamazsa (null) → notFound title + noindex, alternates YOK", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-      getVillaBySlugMock.mockResolvedValue(null);
+      useVilla(null);
 
       const result = await callGenerateMetadata(modulePath, "olmayan-slug");
       expect(result.title).toBe(notFoundTitle);
@@ -209,7 +186,7 @@ describe.each(ROUTES)(
        ayrı testte doğrulanıyor). --- */
     it("title canonical villa.title'dan gelir (çeviri helper'ı YOK)", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.title).toBe(BASE_VILLA.title);
@@ -218,50 +195,66 @@ describe.each(ROUTES)(
     /* --- 🛡️ PHASE 8C — description artık getVillaTranslatedSeoDescription'dan
        set ediliyor (eski "SET EDİLMEZ" beklentisi Phase 7C'ye özgüydü,
        Phase 8C audit raporunun onayladığı tek adımla güncellendi). --- */
-    it("description metadata'da getVillaTranslatedSeoDescription'ın döndürdüğü değeri İÇERİR", async () => {
+    it("description: istenen dilin seo_description'ı (merkezi servis, tek okuma)", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
-      getVillaTranslatedSeoDescriptionMock.mockResolvedValue(
-        `Translated ${locale} SEO description.`
-      );
+      useVilla(BASE_VILLA, { description: "<p>Own text.</p>", seo_description: `Translated ${locale} SEO description.` }, locale);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.description).toBe(`Translated ${locale} SEO description.`);
-      expect(getVillaTranslatedSeoDescriptionMock).toHaveBeenCalledWith(
-        BASE_VILLA.id,
-        BASE_VILLA.seo_description,
-        BASE_VILLA.description,
-        locale
-      );
+      expect(contentSpy).toHaveBeenCalledWith("villa", [BASE_VILLA.id], locale);
     });
 
-    it("openGraph.description ve twitter.description EKLENMEZ (bu faz yalnız metadata.description'ı hedefler)", async () => {
+    it("description: istenen dilde seo_description yoksa İSTENEN DİLDEKİ açıklamanın özeti (başka dilin seo_description'ı geçmez)", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
-      getVillaTranslatedSeoDescriptionMock.mockResolvedValue(
-        `Translated ${locale} SEO description.`
-      );
+      useVilla(BASE_VILLA, { description: "<p>Own locale text.</p>", seo_description: null }, locale);
 
       const result = await callGenerateMetadata(modulePath);
-      expect(
-        (result.openGraph as Record<string, unknown> | undefined)?.description
-      ).toBeUndefined();
-      expect(
-        (result as Record<string, unknown>).twitter
-      ).toBeUndefined();
+      expect(result.description).toBe("Own locale text.");
     });
 
-    it("villa bulunamazsa (null) → getVillaTranslatedSeoDescription HİÇ ÇAĞRILMAZ", async () => {
+    it("description: istenen dilde hiç satır yoksa ana dil zinciri (ana dil TR)", async () => {
+      getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
+      useVilla(BASE_VILLA);
+
+      const result = await callGenerateMetadata(modulePath);
+      /* Yedek dilin seo_description'ı istenen dile GEÇMEZ (Faz 3.1); yedek
+         açıklamanın özeti — eski getVillaTranslatedSeoDescription ile aynı sonuç. */
+      expect(result.description).toBe("Orijinal TR açıklaması.");
+      expect(result.robots).toBeUndefined();
+    });
+
+    it("seo_title istenen dilde varsa başlık o; villa adı çevrilmez", async () => {
+      getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
+      useVilla(BASE_VILLA, { seo_title: `SEO ${locale}`, description: "<p>x</p>" }, locale);
+
+      const result = await callGenerateMetadata(modulePath);
+      expect(result.title).toBe(`SEO ${locale}`);
+    });
+
+    it("openGraph.description ve twitter artık TR ile AYNI biçimde (🌐 Faz 6 Dalga 2 tek modül — bilinçli ekleme)", async () => {
+      getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
+      useVilla(BASE_VILLA, { description: "<p>x</p>", seo_description: `Translated ${locale} SEO description.` }, locale);
+
+      const result = await callGenerateMetadata(modulePath);
+      expect((result.openGraph as Record<string, unknown>).description).toBe(`Translated ${locale} SEO description.`);
+      expect((result as Record<string, unknown>).twitter).toEqual({
+        card: "summary",
+        title: BASE_VILLA.title,
+        description: `Translated ${locale} SEO description.`,
+      });
+    });
+
+    it("villa bulunamazsa (null) → merkezi içerik HİÇ OKUNMAZ", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-      getVillaBySlugMock.mockResolvedValue(null);
+      useVilla(null);
 
       await callGenerateMetadata(modulePath, "olmayan-slug");
-      expect(getVillaTranslatedSeoDescriptionMock).not.toHaveBeenCalled();
+      expect(contentSpy).not.toHaveBeenCalled();
     });
 
     it("openGraph.url canonical ile AYNI", async () => {
       getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
-      getVillaBySlugMock.mockResolvedValue(BASE_VILLA);
+      useVilla(BASE_VILLA);
 
       const result = await callGenerateMetadata(modulePath);
       expect(result.openGraph?.url).toBe(result.alternates?.canonical);

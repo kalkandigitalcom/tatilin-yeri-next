@@ -12,6 +12,7 @@
 =============================================================== */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
 
 const getTranslationMock = vi.fn();
 vi.mock("@/lib/i18n/get-translation.server", async (orig) => {
@@ -21,6 +22,14 @@ vi.mock("@/lib/i18n/get-translation.server", async (orig) => {
     getTranslation: (...a: unknown[]) => getTranslationMock(...a),
   };
 });
+
+/* 🌐 Faz 6 Dalga 3 — buildCmsPageMetadata artık MERKEZİ servisten okur
+   (tablo tabanlı sahte; TR satırı = pages aynası). resolvePageContent
+   (eski okuyucu) testleri AYNEN kalır — yardımcı hâlâ mevcut. */
+const contentSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock((...a) => contentSpy(...a))
+);
 
 const getPageBySlugMock = vi.fn();
 vi.mock("@/app/services/page.service", () => ({
@@ -82,10 +91,31 @@ const DE_ROW = {
   seo_description: "DE SEO Beschreibung",
 };
 
+type Row = Record<string, unknown>;
+const pick = (r: Row) => ({
+  title: r.title ?? null,
+  excerpt: r.excerpt ?? null,
+  body: r.body ?? null,
+  seo_title: r.seo_title ?? null,
+  seo_description: r.seo_description ?? null,
+});
+/** Merkezi depoya: TR satırı = sayfanın kendisi (107 aynası) + verilen dil satırları. */
+function useRows(page: Row, rows: { en?: Row; de?: Row } = {}) {
+  getPageBySlugMock.mockResolvedValue(page);
+  contentTables.page = {
+    [PAGE_ID]: {
+      tr: { ...pick(page), sections: (page.sections as never) ?? null },
+      ...(rows.en ? { en: pick(rows.en) } : {}),
+      ...(rows.de ? { de: pick(rows.de) } : {}),
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  resetContentTables();
   getTranslationMock.mockResolvedValue(null);
-  getPageBySlugMock.mockResolvedValue(TR_PAGE);
+  useRows(TR_PAGE);
   getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: false });
 });
 
@@ -217,6 +247,8 @@ describe("buildCmsPageMetadata — TR (mevcut davranış korunuyor)", () => {
     expect(md.alternates).toEqual({ canonical: `/p/${SLUG}` });
     expect(md.robots).toEqual({ index: true, follow: true });
     expect(getTranslationMock).not.toHaveBeenCalled();
+    /* Merkezi okuma: yalnız istenen dil (tek dilli sitede ek okuma yok). */
+    expect(contentSpy.mock.calls).toEqual([["page", [PAGE_ID], "tr"]]);
   });
 
   it("12) TR: openGraph/twitter alanları önceki yapıyla aynı", async () => {
@@ -231,11 +263,7 @@ describe("buildCmsPageMetadata — TR (mevcut davranış korunuyor)", () => {
   });
 
   it("13) seo_title boşsa title'a, seo_description boşsa excerpt'e düşer", async () => {
-    getPageBySlugMock.mockResolvedValue({
-      ...TR_PAGE,
-      seo_title: null,
-      seo_description: null,
-    });
+    useRows({ ...TR_PAGE, seo_title: null, seo_description: null });
     const md = await buildCmsPageMetadata(SLUG, "tr");
     expect(md.title).toBe(TR_PAGE.title);
     expect(md.description).toBe(TR_PAGE.excerpt);
@@ -262,8 +290,7 @@ describe("buildCmsPageMetadata — TR (mevcut davranış korunuyor)", () => {
   });
 
   it("15) page.noindex her locale'de uygulanır", async () => {
-    getPageBySlugMock.mockResolvedValue({ ...TR_PAGE, noindex: true });
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    useRows({ ...TR_PAGE, noindex: true }, { en: EN_ROW });
     const md = await buildCmsPageMetadata(SLUG, "en");
     expect(md.robots).toEqual({ index: false, follow: false });
   });
@@ -271,7 +298,7 @@ describe("buildCmsPageMetadata — TR (mevcut davranış korunuyor)", () => {
 
 describe("buildCmsPageMetadata — EN / DE", () => {
   it("16) EN: SEO başlık/açıklama çeviriden gelir, canonical '/en/p/{slug}'", async () => {
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    useRows(TR_PAGE, { en: EN_ROW });
     const md = await buildCmsPageMetadata(SLUG, "en");
     expect(md.title).toBe(EN_ROW.seo_title);
     expect(md.description).toBe(EN_ROW.seo_description);
@@ -280,15 +307,15 @@ describe("buildCmsPageMetadata — EN / DE", () => {
   });
 
   it("17) DE: SEO başlık/açıklama çeviriden gelir, canonical '/de/p/{slug}'", async () => {
-    getTranslationMock.mockResolvedValue(DE_ROW);
+    useRows(TR_PAGE, { de: DE_ROW });
     const md = await buildCmsPageMetadata(SLUG, "de");
     expect(md.title).toBe(DE_ROW.seo_title);
     expect(md.description).toBe(DE_ROW.seo_description);
     expect(md.alternates).toEqual({ canonical: `/de/p/${SLUG}` });
   });
 
-  it("18) EN çevirisi yoksa SEO TR'ye düşer ama URL /en/p/… kalır", async () => {
-    getTranslationMock.mockResolvedValue(null);
+  it("18) EN çevirisi yoksa SEO ana dile (TR) düşer ama URL /en/p/… kalır", async () => {
+    useRows(TR_PAGE);
     const md = await buildCmsPageMetadata(SLUG, "en");
     expect(md.title).toBe(TR_PAGE.seo_title);
     expect(md.description).toBe(TR_PAGE.seo_description);
@@ -297,7 +324,7 @@ describe("buildCmsPageMetadata — EN / DE", () => {
 
   it("19) multilingual AÇIK → hreflang seti eklenir (3 locale + x-default)", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    useRows(TR_PAGE, { en: EN_ROW, de: DE_ROW });
     const md = await buildCmsPageMetadata(SLUG, "en");
     expect(md.alternates).toEqual({
       canonical: `/en/p/${SLUG}`,
@@ -310,9 +337,9 @@ describe("buildCmsPageMetadata — EN / DE", () => {
     });
   });
 
-  it("20) slug ÇEVRİLMEZ — üç locale de aynı slug'ı taşır", async () => {
+  it("20) dil slug'ı yoksa üç locale de teknik anahtarı (aynı slug) taşır", async () => {
     getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    useRows(TR_PAGE, { en: EN_ROW, de: DE_ROW });
     const md = await buildCmsPageMetadata(SLUG, "de");
     const langs = (md.alternates as { languages: Record<string, string> })
       .languages;
@@ -323,8 +350,24 @@ describe("buildCmsPageMetadata — EN / DE", () => {
 
   it("21) settings okunamazsa fail-safe: yalnız canonical", async () => {
     getCachedSettingsMock.mockRejectedValue(new Error("db"));
-    getTranslationMock.mockResolvedValue(EN_ROW);
+    useRows(TR_PAGE, { en: EN_ROW });
     const md = await buildCmsPageMetadata(SLUG, "en");
     expect(md.alternates).toEqual({ canonical: `/en/p/${SLUG}` });
+  });
+});
+
+describe("buildCmsPageMetadata — 🌐 Faz 6 Dalga 3 hreflang/noindex (merkezi)", () => {
+  it("19b) çevirisi olmayan dil hreflang'de YOK; o dilde noindex,follow", async () => {
+    getCachedSettingsMock.mockResolvedValue({ multilingual_enabled: true });
+    useRows(TR_PAGE, { en: EN_ROW });
+    const en = await buildCmsPageMetadata(SLUG, "en");
+    expect((en.alternates as { languages: Record<string, string> }).languages).toEqual({
+      tr: `/p/${SLUG}`,
+      en: `/en/p/${SLUG}`,
+      "x-default": `/p/${SLUG}`,
+    });
+    const de = await buildCmsPageMetadata(SLUG, "de");
+    expect(de.robots).toEqual({ index: false, follow: true });
+    expect(de.alternates).toEqual({ canonical: `/de/p/${SLUG}` });
   });
 });

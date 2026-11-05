@@ -57,10 +57,17 @@ export const TRANSLATION_LOCALES: ReadonlyArray<{
 export function TranslationLanguageTabs({
   active,
   onChange,
+  rootLocale = "tr",
 }: {
   active: TranslationLocale;
   onChange: (locale: TranslationLocale) => void;
+  /** Faz 5: salt okunur (kilitli) sekme = ana dil; ilk sırada gösterilir. */
+  rootLocale?: TranslationLocale;
 }) {
+  const ordered = [
+    ...TRANSLATION_LOCALES.filter((l) => l.code === rootLocale),
+    ...TRANSLATION_LOCALES.filter((l) => l.code !== rootLocale),
+  ];
   return (
     <nav
       aria-label="Çeviri dili"
@@ -71,7 +78,7 @@ export function TranslationLanguageTabs({
         aria-label="Çeviri dili"
         className="inline-flex gap-1.5 rounded-2xl border border-[var(--color-stone-100)] bg-white p-1.5 shadow-sm w-max"
       >
-        {TRANSLATION_LOCALES.map((loc) => {
+        {ordered.map((loc) => {
           const isActive = loc.code === active;
           return (
             <button
@@ -87,7 +94,7 @@ export function TranslationLanguageTabs({
                   : "text-[var(--color-stone-600)] hover:bg-[var(--color-sand-50)] hover:text-[var(--color-stone-900)]")
               }
             >
-              {loc.code === "tr" && (
+              {loc.code === rootLocale && (
                 <Lock
                   size={11}
                   aria-hidden="true"
@@ -261,9 +268,12 @@ export function TranslationField({
   value,
   onChange,
   saving = false,
+  rootLocale = "tr",
 }: {
   label: string;
   locale: TranslationLocale;
+  /** Faz 5: salt okunur dil = ana dil (varsayılan TR — eski davranış). */
+  rootLocale?: TranslationLocale;
   /** Mevcut settings'teki TR canonical değer (server-side okunur). */
   canonicalValue: string;
   hint?: string;
@@ -278,8 +288,9 @@ export function TranslationField({
   /** Kayıt sürerken input'lar kilitlenir. */
   saving?: boolean;
 }) {
-  const isTr = locale === "tr";
-  /* 🛡️ TR asla düzenlenemez — `onChange` geçilse bile. */
+  const isTr = locale === rootLocale;
+  const rootName = localeLabel(rootLocale);
+  /* 🛡️ Ana dil bu ekranda asla düzenlenemez — `onChange` geçilse bile. */
   const editable = !isTr && typeof onChange === "function";
   const hasCanonical = canonicalValue.trim().length > 0;
 
@@ -288,16 +299,16 @@ export function TranslationField({
   const placeholder = isTr
     ? "Bu alan henüz doldurulmamış"
     : editable
-      ? "Boş bırakılırsa Türkçe metin gösterilir"
+      ? `Boş bırakılırsa ${rootName} metin gösterilir`
       : "Çeviri sistemi henüz bağlanmadı";
 
   const composedHint = [
     hint,
     placeholderHint,
     isTr
-      ? "Türkçe canonical içeriktir; ilgili ayar sayfasından düzenlenir."
+      ? `${rootName} ana dil içeriğidir; ilgili ayar sayfasından düzenlenir.`
       : editable
-        ? "Boş bırakılırsa bu dilde Türkçe canonical metin gösterilir."
+        ? `Boş bırakılırsa bu dilde ${rootName} (ana dil) metin gösterilir.`
         : "Bu alan çeviri veritabanı bağlantısı tamamlandığında aktif olacak.",
   ]
     .filter((part): part is string => !!part)

@@ -27,6 +27,7 @@ import {
   Home,
   Image as ImageIcon,
 } from "lucide-react";
+import CollectionTitleTranslations from "@/app/components/admin/shared/CollectionTitleTranslations";
 
 /* 🛡️ FAZ 2 frontend purge — `import { eski sağlayıcı }` KALDIRILDI.
    Villa list /api/admin/villas?activeOnly=1 üzerinden (aynı select +
@@ -44,6 +45,8 @@ import {
   toggleHomepageCollectionActiveAction as toggleHomepageCollectionActive,
   updateHomepageCollectionItemAction as updateHomepageCollectionItem,
   reorderHomepageCollectionAction as reorderHomepageCollection,
+  loadHomepageCollectionTitleTranslationsAction,
+  saveHomepageCollectionTitleTranslationAction,
 } from "./homepage-collection.action";
 import type { HomepageCollectionItem } from "@/app/services/homepage-collection.service";
 import { revalidateHomepage } from "@/app/services/revalidate.actions";
@@ -333,13 +336,20 @@ export default function HomepageCollectionPage() {
           >
             <div className="space-y-2.5">
               {items.map((item) => (
+                <div key={item.id} className="space-y-1">
                 <SortableRow
-                  key={item.id}
                   item={item}
                   onRemove={() => handleRemove(item)}
                   onToggle={() => handleToggle(item)}
                   onSaveTitle={(t) => handleSaveTitle(item, t)}
                 />
+                <CollectionTitleTranslations
+                  itemId={item.id}
+                  referenceTitle={item.custom_title ?? item.villa?.title ?? ""}
+                  load={loadHomepageCollectionTitleTranslationsAction}
+                  save={saveHomepageCollectionTitleTranslationAction}
+                />
+                </div>
               ))}
             </div>
           </SortableContext>

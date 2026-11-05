@@ -1,6 +1,10 @@
 import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import { blogServerRepository } from "@/lib/db/blog.repository.server";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 import type { BlogPostTranslationRow } from "@/lib/i18n/translations.types";
 
 /**
@@ -90,6 +94,10 @@ export async function getBlogTranslations(
 export async function upsertBlogTranslation(
   input: BlogTranslationInput
 ): Promise<BlogTranslationResult> {
+  /* 🌐 Faz 5 dalga 2 — merkezi yazmaya geçildiyse eski yol KAPALI. */
+  if (isContentWriteMigrated("blog_post")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const postId = (input.postId ?? "").toString().trim();
   if (!postId) return { ok: false, error: "Geçersiz blog yazısı" };
 

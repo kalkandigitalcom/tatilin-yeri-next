@@ -3,12 +3,14 @@
 import { buildRoutePath } from "@/lib/i18n/routing/url";
 import type { RouteKey, SlugKind } from "@/lib/i18n/routing/route-registry";
 import { checkLocalizedSlugFormat } from "@/lib/i18n/routing/slug-validation";
+import type { Locale } from "@/lib/i18n/config";
 
 /* ===============================================================
    🌐 DİL BAZLI SEO SLUG ALANI — Çok Dilli Mimari Faz 2 (admin)
    ===============================================================
    Çeviri kartlarında (villa, villa tipi, blog, CMS sayfası) o dilin
-   URL slug'ı. Boş bırakılırsa o dilde Türkçe slug kullanılır. Biçim
+   URL slug'ı. Faz 5: TR de bir dil slug'ıdır; boş bırakılırsa o dilde
+   kaydın TEKNİK ANAHTARI (ana tablo slug'ı, değişmez) kullanılır. Biçim
    anında kontrol edilir; çakışma kontrolü kayıtta sunucudadır.
    =============================================================== */
 
@@ -28,10 +30,11 @@ export default function LocalizedSlugField({
   disabled,
 }: {
   kind: SlugKind;
-  locale: "en" | "de";
+  /** Faz 5: TR dahil her dil (teknik anahtar ≠ TR URL slug'ı). */
+  locale: Locale;
   value: string;
   onChange: (next: string) => void;
-  /** Kaydın Türkçe (taban) slug'ı — önizleme için. */
+  /** Kaydın TEKNİK ANAHTARI (ana tablo slug'ı) — boş slug'ın yerine geçer. */
   baseSlug?: string | null;
   disabled?: boolean;
 }) {
@@ -41,7 +44,7 @@ export default function LocalizedSlugField({
     effective !== null && effective
       ? buildRoutePath(ROUTE_OF[kind], { slug: effective }, locale, {
           root: "tr",
-          enabled: ["tr", locale],
+          enabled: ["tr", "en", "de"],
           slugs: {},
         })
       : null;
@@ -77,7 +80,7 @@ export default function LocalizedSlugField({
           ? check.error
           : check.slug
             ? `Adres: ${preview}`
-            : `Boş bırakılırsa Türkçe adres kullanılır${preview ? `: ${preview}` : ""}. Küçük harf, rakam ve tire.`}
+            : `Boş bırakılırsa teknik anahtar kullanılır${preview ? `: ${preview}` : ""}. Küçük harf, rakam ve tire.`}
       </p>
     </div>
   );

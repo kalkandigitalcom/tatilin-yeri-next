@@ -4,44 +4,68 @@ import {
   callerHasPermission,
   requirePermission,
 } from "@/lib/auth/action-authz";
-import {
-  getFaqTranslations,
-  upsertFaqTranslation,
-  type FaqTranslationInput,
-  type FaqTranslationResult,
-  type FaqTranslationsMapResult,
-} from "@/app/services/faq-translation.service";
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
+import type { Locale } from "@/lib/i18n/config";
+import type { AdminLocaleLayout } from "@/lib/i18n/content/content-admin";
+import {
+  getAdminContentRows,
+  getAdminLocaleLayout,
+} from "@/lib/i18n/content/content-admin.server";
+import { saveTranslationRow } from "@/app/(admin)/maki-admin/_content/simple-content.server";
 
 /* ===============================================================
-   🛡️ SSS ÇEVİRİ SERVER ACTION'LARI
+   🌐 Faz 5 — SSS çevirileri (ana dil DIŞINDAKİ diller)
    ===============================================================
-   `app/(admin)/maki-admin/menu/menu-translations.action.ts` ve
-   `types/type-translations.action.ts` ile BİREBİR AYNI desen.
-
-   Okuma: sayfa zaten middleware ile korunuyor — ekstra auth gerekmez.
-   Yazma: `authorizeAdminSession()` İLK kontrol — yetkisiz çağrıda
-   servis/DB'ye HİÇ ulaşılmaz.
-
-   ⚠️ İnce wrapper — iş mantığı YOK. Mevcut `faqs.action.ts`
-   (canonical CRUD) DEĞİŞTİRİLMEDİ.
+   Okuma: requirePermission("faqs") — TEK batch okuma (kayıt başına sorgu
+   yok). Yazma: authorizeAdminSession + callerHasPermission → merkezi
+   saveContent + denetim kaydı. Boş alan "" olarak yazılır (bilerek
+   boşaltma → okuma tarafında ana dile düşer). Eski
+   faq-translation.service yazması KAPALI.
    =============================================================== */
 
-export async function loadFaqTranslationsAction(
-  faqIds: string[]
-): Promise<FaqTranslationsMapResult> {
+export type FaqTranslationFields = { question: string; answer: string };
+export type FaqTranslationInput = { faqId: string; locale: Locale; question: string; answer: string };
+export type FaqTranslationsMapResult =
+  | { ok: true; map: Record<string, Partial<Record<Locale, FaqTranslationFields>>>; layout?: AdminLocaleLayout }
+  | { ok: false; error: string };
+
+export async function loadFaqTranslationsAction(faqIds: string[]): Promise<FaqTranslationsMapResult> {
   await requirePermission("faqs");
-  return getFaqTranslations(faqIds);
+  try {
+    const layout = await getAdminLocaleLayout();
+    const ids = Array.from(new Set((faqIds || []).filter((id) => typeof id === "string" && id.trim())));
+    const rows = await getAdminContentRows("faq", ids);
+    const map: Record<string, Partial<Record<Locale, FaqTranslationFields>>> = {};
+    for (const [id, byLocale] of rows) {
+      for (const l of layout.translations) {
+        const v = byLocale[l];
+        if (!v) continue;
+        (map[id] ??= {})[l] = {
+          question: typeof v.question === "string" ? v.question : "",
+          answer: typeof v.answer === "string" ? v.answer : "",
+        };
+      }
+    }
+    return { ok: true, map, layout };
+  } catch {
+    return { ok: false, error: "Çeviriler okunamadı" };
+  }
 }
 
 export async function saveFaqTranslationAction(
   input: FaqTranslationInput
-): Promise<FaqTranslationResult> {
+): Promise<{ ok: true; row: Record<string, unknown> } | { ok: false; error: string }> {
   const auth = await authorizeAdminSession();
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
   if (!(await callerHasPermission(auth.caller.id, "faqs"))) {
     return { ok: false, error: "Yetkisiz" };
   }
-
-  return upsertFaqTranslation(input);
+  return saveTranslationRow(
+    auth.caller,
+    "faq",
+    input.faqId,
+    input.locale,
+    { question: (input.question ?? "").toString().trim(), answer: (input.answer ?? "").toString().trim() },
+    { route: "/maki-admin/faqs" }
+  );
 }

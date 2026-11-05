@@ -37,6 +37,18 @@ vi.mock("@/app/services/page-translation.service", () => ({
     upsertPageTranslationMock(...args),
 }));
 
+/* 🌐 Faz 5 dalga 2 — "page" merkezi yazmada: action eski servis yerine
+   page-content.server'ın merkezi yardımcılarına delege eder. Aynı mock'lara
+   yönlendirilir → yetki/delegasyon beklentileri AYNEN doğrulanır. */
+const centralCallers: unknown[] = [];
+vi.mock("@/app/(admin)/maki-admin/pages/_content/page-content.server", () => ({
+  loadPageTranslationsCentral: (...a: unknown[]) => getPageTranslationsMock(...a),
+  savePageTranslationCentral: (caller: unknown, input: unknown) => {
+    centralCallers.push(caller);
+    return upsertPageTranslationMock(input);
+  },
+}));
+
 import {
   loadPageTranslationsAction,
   savePageTranslationAction,
@@ -98,6 +110,7 @@ describe("savePageTranslationAction", () => {
     await savePageTranslationAction(input);
     expect(authorizeAdminSessionMock).toHaveBeenCalledTimes(1);
     expect(upsertPageTranslationMock).toHaveBeenCalledWith(input);
+    expect(centralCallers.at(-1)).toEqual({ id: "admin-1" });
   });
 
   it("4) yetkili oturum → DE de delege edilir", async () => {

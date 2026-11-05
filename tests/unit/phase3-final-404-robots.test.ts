@@ -280,7 +280,7 @@ vi.mock("@/lib/db/villa.repository.server", () => ({
 vi.mock("@/lib/db/pages.repository", () => ({
   pagesRepository: {
     findActivePages: async () => ({
-      data: [{ slug: "hakkimizda", created_at: "2024-01-01T00:00:00.000Z" }],
+      data: [{ id: "p1", slug: "hakkimizda", created_at: "2024-01-01T00:00:00.000Z" }],
       error: null,
     }),
   },
@@ -295,11 +295,18 @@ vi.mock("@/lib/db/blog.repository", () => ({
 }));
 vi.mock("@/lib/i18n/sitemap-data.server", () => ({
   loadNoindexSlugs: async () => ({ villa: new Set(), page: new Set(), blog: new Set() }),
-  loadTranslatedContentLocales: async () => ({
-    blog: new Map([["ilk-yazi", ["tr", "en", "de"]]]),
-    page: new Map([["hakkimizda", ["tr", "en"]]]),
-  }),
+  loadSitemapIds: async () => ({ villa: new Map(), blog: new Map([["ilk-yazi", "b1"]]) }),
 }));
+/* 🌐 Faz 6 Dalga 5 — çeviri kapsamı merkezi servisten (eski SQL kaldırıldı):
+   blog üç dilde, CMS sayfası TR + EN. */
+vi.mock("@/lib/i18n/content/public-seo-content.server", async () =>
+  (await import("../fixtures/faz6/sitemap-content")).sitemapReaderMock(() => ({
+    blog_post: { b1: { tr: { title: "TR" }, en: { title: "EN" }, de: { title: "DE" } } },
+    page: { p1: { tr: { title: "TR" }, en: { title: "EN" } } },
+    /* Kategori adı merkezi içerikte var → indexlenebilir → sitemap'te. */
+    villa_type: { "1": { tr: { name: "Balayı" } } },
+  }))
+);
 
 function settingsFor(root: Locale, enabled: Locale[] = ["tr", "en", "de"]) {
   return {

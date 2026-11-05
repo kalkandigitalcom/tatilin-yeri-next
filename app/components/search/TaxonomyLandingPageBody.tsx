@@ -13,8 +13,11 @@ import {
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { formatDictionaryString } from "@/lib/i18n/format-dictionary-string";
 import { buildLocaleAlternates, pickSeoAlternates } from "@/lib/i18n/seo-alternates";
-import { getVillaTypeNamesByLocale } from "@/lib/i18n/get-villa-type-translations.server";
-import { resolveTaxonomyName } from "@/lib/i18n/taxonomy-name.helper";
+import {
+  loadContentLabels,
+  resolveCategoryName,
+} from "@/lib/i18n/content/public-villa-content";
+import { publicContentReader } from "@/lib/i18n/content/public-villa-content.server";
 import {
   DEFAULT_PUBLIC_PAGE_SIZE,
   parsePublicPage,
@@ -53,6 +56,9 @@ export type LandingKind = "category" | "region";
 type Resolved = {
   landing: CategoryLanding | RegionGroupLanding;
   displayName: string;
+  /** 🌐 Faz 6 Dalga 2 — kategori adı hiçbir aktif dilde yoksa false
+   *  (sözlükteki genel etiket gösterilir + noindex,follow). Bölge: daima true. */
+  hasContent: boolean;
   trPath: string;
 };
 
@@ -64,32 +70,36 @@ async function resolveLanding(
   if (kind === "category") {
     const landing = await resolveCategoryLanding(rawSlug);
     if (!landing) return null;
-    /* Kategori adı: mevcut çeviri sistemi (TR'de sorgu YOK). */
-    let displayName = landing.name;
-    if (locale !== DEFAULT_LOCALE) {
-      const byId = await getVillaTypeNamesByLocale([landing.id]).catch(
-        () => ({})
-      );
-      displayName = resolveTaxonomyName(
-        landing.name,
-        (byId as Record<string, Parameters<typeof resolveTaxonomyName>[1]>)[
-          landing.id
-        ],
-        locale
-      );
-    }
+    /* 🌐 Faz 6 Dalga 2 — kategori adı MERKEZİ servisten (bütün dillerde
+       aynı yol; istenen → ana dil → aktif diller). Ad hiçbir aktif dilde
+       yoksa sözlükteki genel etiket — slug/teknik anahtar GÖSTERİLMEZ. */
+    const names = await loadContentLabels(
+      publicContentReader,
+      "villa_type",
+      "name",
+      [landing.id],
+      locale
+    );
+    const { name: displayName, hasContent } = resolveCategoryName(
+      names,
+      landing.id,
+      getDictionary(locale).taxonomyLanding.categoryHeroEyebrow
+    );
     return {
       landing,
       displayName,
+      hasContent,
       trPath: `${CATEGORY_LANDING_TR_PREFIX}/${encodeURIComponent(landing.slug)}`,
     };
   }
   const landing = await resolveRegionGroupLanding(rawSlug);
   if (!landing) return null;
-  /* Bölge adları çevrilmez (Phase 10I — özel isim). */
+  /* Bölge adları çevrilmez (Phase 10I — özel isim); bölge sorguları ve
+     ilişkileri değişmez. */
   return {
     landing,
     displayName: landing.name,
+    hasContent: true,
     trPath: `${REGION_LANDING_TR_PREFIX}/${encodeURIComponent(landing.slug)}`,
   };
 }
@@ -145,12 +155,16 @@ export async function buildTaxonomyLandingMetadata(
 
   const { canonical, languages } = buildLocaleAlternates(resolved.trPath, locale);
   const canonicalUrl = `${canonical}${pageQuery}`;
+  /* 🌐 Faz 6 Dalga 5 — kategori adı hiçbir aktif dilde yoksa (noindex,
+     follow) hreflang basılmaz (sitemap'te de yok). Villa sayısı 0
+     durumunda hreflang davranışı DEĞİŞMEDİ. */
   const alternates = pickSeoAlternates(
     settings,
     canonicalUrl,
     Object.fromEntries(
       Object.entries(languages).map(([k, v]) => [k, `${v}${pageQuery}`])
-    )
+    ),
+    resolved.hasContent ? {} : { available: [], locale }
   );
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
@@ -171,9 +185,10 @@ export async function buildTaxonomyLandingMetadata(
       title: t.metaTitle,
       description: t.metaDescription,
     },
-    /* Villa yoksa indexleme; aksi halde root layout'un site geneli
-       robots politikası (settings.robots_index/follow) miras kalır. */
-    ...(count === 0 ? { robots: { index: false, follow: true } } : {}),
+    /* Villa yoksa veya (🌐 Faz 6 Dalga 2) kategori adı hiçbir aktif dilde
+       yoksa indexleme; aksi halde root layout'un site geneli robots
+       politikası (settings.robots_index/follow) miras kalır. */
+    ...(count === 0 || !resolved.hasContent ? { robots: { index: false, follow: true } } : {}),
   };
 }
 

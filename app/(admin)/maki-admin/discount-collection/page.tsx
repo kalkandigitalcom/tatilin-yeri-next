@@ -29,6 +29,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import CollectionTitleTranslations from "@/app/components/admin/shared/CollectionTitleTranslations";
 
 import { adminFetch } from "@/lib/admin-fetch";
 import { resolveVillaImageUrl } from "@/lib/storage.helpers";
@@ -45,6 +46,8 @@ import {
   reorderDiscountCollectionAction as reorderDiscountCollection,
   listVillaDiscountPeriodsAction,
   type VillaDiscountPeriodOption,
+  loadDiscountCollectionTitleTranslationsAction,
+  saveDiscountCollectionTitleTranslationAction,
 } from "./discount-collection.action";
 import type {
   DiscountCollectionItem,
@@ -357,14 +360,21 @@ export default function DiscountCollectionPage() {
           >
             <div className="space-y-2.5">
               {items.map((item) => (
+                <div key={item.id} className="space-y-1">
                 <SortableRow
-                  key={item.id}
                   item={item}
                   onRemove={() => handleRemove(item)}
                   onToggle={() => handleToggle(item)}
                   onSaveTitle={(t) => handleSaveTitle(item, t)}
                   onSaveRanges={(r) => handleSaveRanges(item, r)}
                 />
+                <CollectionTitleTranslations
+                  itemId={item.id}
+                  referenceTitle={item.custom_title ?? item.villa?.title ?? ""}
+                  load={loadDiscountCollectionTitleTranslationsAction}
+                  save={saveDiscountCollectionTitleTranslationAction}
+                />
+                </div>
               ))}
             </div>
           </SortableContext>

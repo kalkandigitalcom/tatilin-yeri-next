@@ -4,45 +4,50 @@ import {
   callerHasPermission,
   requirePermission,
 } from "@/lib/auth/action-authz";
-import {
-  getPaymentMethodTranslations,
-  upsertPaymentMethodTranslation,
-  type PaymentMethodTranslationInput,
-  type PaymentMethodTranslationsListResult,
-  type PaymentMethodTranslationResult,
-} from "@/app/services/payment-method-translation.service";
 import { authorizeAdminSession } from "@/lib/admin-route-auth";
+import type { Locale } from "@/lib/i18n/config";
+import { PAYMENT_METHOD_TR_NAME_REQUIRED } from "@/lib/i18n/content/payment-method-tr";
+import type {
+  LocaleTranslationsLoadResult,
+  LocaleTranslationsSaveResult,
+} from "@/app/components/admin/shared/LocaleTranslationsPanel";
+import {
+  loadTranslationRows,
+  saveTranslationRow,
+} from "@/app/(admin)/maki-admin/_content/simple-content.server";
 
 /* ===============================================================
-   🛡️ ÖDEME YÖNTEMİ ÇEVİRİ SERVER ACTION'LARI (migration 088)
+   🌐 Faz 5 — Ödeme yöntemi çevirileri (ana dil DIŞINDAKİ diller)
    ===============================================================
-   `app/(admin)/maki-admin/types/type-translations.action.ts` ve
-   `menu/menu-translations.action.ts` ile BİREBİR AYNI desen.
-
-   Okuma: sayfa zaten middleware ile korunuyor — ekstra auth gerekmez.
-   Yazma: `authorizeAdminSession()` İLK kontrol — yetkisiz çağrıda
-   servis/DB'ye HİÇ ulaşılmaz.
-
-   ⚠️ İnce wrapper — iş mantığı YOK. Mevcut `payment-method.action.ts`
-   (canonical CRUD) DEĞİŞTİRİLMEDİ. Yeni bir yetki anahtarı EKLENMEDİ —
-   ekran zaten `payment_methods` yetkisiyle korunuyor.
+   Okuma: requirePermission("payment_methods"). Yazma: authorizeAdminSession +
+   callerHasPermission (eski desen) → merkezi saveContent + denetim
+   kaydı. Eski çeviri servisi yazması bu modül için KAPALI.
    =============================================================== */
+
+export type PaymentMethodTranslationInput = { paymentMethodId: string; locale: Locale; name: string };
 
 export async function loadPaymentMethodTranslationsAction(
   paymentMethodId: string
-): Promise<PaymentMethodTranslationsListResult> {
+): Promise<LocaleTranslationsLoadResult> {
   await requirePermission("payment_methods");
-  return getPaymentMethodTranslations(paymentMethodId);
+  return loadTranslationRows("payment_method", paymentMethodId, ["name"]);
 }
 
 export async function savePaymentMethodTranslationAction(
   input: PaymentMethodTranslationInput
-): Promise<PaymentMethodTranslationResult> {
+): Promise<LocaleTranslationsSaveResult> {
   const auth = await authorizeAdminSession();
   if (!auth.ok) return { ok: false, error: "Yetkisiz" };
   if (!(await callerHasPermission(auth.caller.id, "payment_methods"))) {
     return { ok: false, error: "Yetkisiz" };
   }
-
-  return upsertPaymentMethodTranslation(input);
+  const name = (input?.name ?? "").toString();
+  /* 🌐 Faz 5 dalga 2 — ödeme yöntemine özel: TR adı (voucher/e-posta)
+     boşaltılamaz. Yalnız bu modül; genel mimaride TR zorunlu değil. */
+  if (input?.locale === "tr" && !name.trim()) {
+    return { ok: false, error: PAYMENT_METHOD_TR_NAME_REQUIRED };
+  }
+  return saveTranslationRow(auth.caller, "payment_method", input.paymentMethodId, input.locale, { name }, {
+    route: "/maki-admin/payment-methods",
+  });
 }

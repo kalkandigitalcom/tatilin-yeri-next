@@ -31,7 +31,10 @@ import type { Locale } from "@/lib/i18n/config";
 export type TranslatableLocale = Exclude<Locale, "tr">;
 
 /** Bir taxonomy kaydının locale → çevrilmiş ad haritası (kısmi). */
-export type TaxonomyNameByLocale = Partial<Record<TranslatableLocale, string>>;
+/** 🌐 Faz 6 Dalga 4 — `tr` anahtarı OPSİYONEL: yalnız merkezi okumayla
+ *  (public-shared-content `loadLabelMapsByLocale`) üretilen haritalarda
+ *  bulunur; eski EN/DE okuyucuları onu hiç üretmez. */
+export type TaxonomyNameByLocale = Partial<Record<Locale, string>>;
 
 /**
  * Görünen taxonomy adını locale'e göre çözer.
@@ -48,8 +51,13 @@ export function resolveTaxonomyName(
   nameByLocale: TaxonomyNameByLocale | null | undefined,
   locale: Locale
 ): string {
-  /* TR canonical kaynaktır — sözlüğe/DB'ye HİÇ bakılmaz. */
-  if (locale === "tr") return canonicalName;
+  /* TR: haritada `tr` yoksa (eski okuyucular) canonical AYNEN — eski
+     davranış birebir. 🌐 Faz 6 Dalga 4: merkezi haritada `tr` varsa o
+     (ana dil TR değilken TR etiketi de merkezi zincirle çözülür). */
+  if (locale === "tr") {
+    const tr = nameByLocale?.tr;
+    return typeof tr === "string" && tr.trim() !== "" ? tr : canonicalName;
+  }
 
   const translated = nameByLocale?.[locale];
   if (typeof translated === "string" && translated.trim() !== "") {

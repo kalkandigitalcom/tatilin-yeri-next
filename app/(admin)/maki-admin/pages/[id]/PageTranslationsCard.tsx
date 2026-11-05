@@ -56,8 +56,12 @@ import {
 import { revalidateMenu } from "@/app/services/revalidate.actions";
 /* 🛡️ MIGRATION 091 — canonical bölüm yapısı için TEK parser (REUSE). */
 import { parsePageSections, type PageSection } from "@/lib/page-sections";
+import type { Locale } from "@/lib/i18n/config";
+import { ADMIN_LOCALE_LABELS } from "@/lib/i18n/content/content-admin";
+import { useAdminLocaleLayout } from "@/app/components/admin/shared/useAdminLocaleLayout";
 
-type WritableLocale = "en" | "de";
+/* 🌐 Faz 5 dalga 2 — düzenlenen diller = ana dil DIŞINDAKİ iki dil. */
+type WritableLocale = Locale;
 
 type LocaleFormState = {
   title: string;
@@ -168,10 +172,7 @@ function buildTranslatedSections(
   });
 }
 
-const LOCALE_LABELS: Record<WritableLocale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
+const LOCALE_LABELS: Record<WritableLocale, string> = ADMIN_LOCALE_LABELS;
 
 type Props = {
   pageId: string;
@@ -189,7 +190,11 @@ export default function PageTranslationsCard({
 }: Props) {
   const toast = useNotify();
 
+  const layout = useAdminLocaleLayout();
+  const editable = layout.translations;
+  const rootLabel = LOCALE_LABELS[layout.root];
   const [forms, setForms] = useState<Record<WritableLocale, LocaleFormState>>({
+    tr: EMPTY_FORM,
     en: EMPTY_FORM,
     de: EMPTY_FORM,
   });
@@ -202,8 +207,11 @@ export default function PageTranslationsCard({
   );
   const [sectionDrafts, setSectionDrafts] = useState<
     Record<WritableLocale, SectionDraft[]>
-  >({ en: [], de: [] });
-  const [activeLocale, setActiveLocale] = useState<WritableLocale>("en");
+  >({ tr: [], en: [], de: [] });
+  const [selectedLocale, setActiveLocale] = useState<WritableLocale>(editable[0] ?? "en");
+  /* Ana dil değişince (düzen geç yüklenir) seçili sekme geçersiz kalırsa
+     ilk düzenlenebilir dile düşülür — türetilmiş değer, effect yok. */
+  const activeLocale: WritableLocale = editable.includes(selectedLocale) ? selectedLocale : editable[0];
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -226,15 +234,17 @@ export default function PageTranslationsCard({
 
       setForms((prev) => {
         const next = { ...prev };
+        const t = (v: unknown) => (typeof v === "string" ? v : "");
         for (const row of result.rows) {
-          if (row.locale !== "en" && row.locale !== "de") continue;
-          next[row.locale] = {
-            title: row.title ?? "",
-            excerpt: row.excerpt ?? "",
-            body: row.body ?? "",
-            seoTitle: row.seo_title ?? "",
-            slug: row.slug ?? "",
-            seoDescription: row.seo_description ?? "",
+          const loc = row.locale as WritableLocale;
+          if (loc !== "tr" && loc !== "en" && loc !== "de") continue;
+          next[loc] = {
+            title: t(row.title),
+            excerpt: t(row.excerpt),
+            body: t(row.body),
+            seoTitle: t(row.seo_title),
+            slug: t(row.slug),
+            seoDescription: t(row.seo_description),
           };
         }
         return next;
@@ -244,12 +254,14 @@ export default function PageTranslationsCard({
       setSectionDrafts(() => {
         const empty = canonical.map(() => EMPTY_DRAFT);
         const next: Record<WritableLocale, SectionDraft[]> = {
+          tr: empty,
           en: empty,
           de: empty,
         };
         for (const row of result.rows) {
-          if (row.locale !== "en" && row.locale !== "de") continue;
-          next[row.locale] = draftsFromSaved(canonical, row.sections);
+          const loc = row.locale as WritableLocale;
+          if (loc !== "tr" && loc !== "en" && loc !== "de") continue;
+          next[loc] = draftsFromSaved(canonical, row.sections);
         }
         return next;
       });
@@ -332,12 +344,12 @@ export default function PageTranslationsCard({
       setForms((prev) => ({
         ...prev,
         [activeLocale]: {
-          title: result.row.title ?? "",
-          excerpt: result.row.excerpt ?? "",
-          body: result.row.body ?? "",
-          seoTitle: result.row.seo_title ?? "",
-          slug: result.row.slug ?? "",
-          seoDescription: result.row.seo_description ?? "",
+          title: typeof result.row.title === "string" ? result.row.title : "",
+          excerpt: typeof result.row.excerpt === "string" ? result.row.excerpt : "",
+          body: typeof result.row.body === "string" ? result.row.body : "",
+          seoTitle: typeof result.row.seo_title === "string" ? result.row.seo_title : "",
+          slug: typeof result.row.slug === "string" ? result.row.slug : "",
+          seoDescription: typeof result.row.seo_description === "string" ? result.row.seo_description : "",
         },
       }));
       /* Sunucunun sanitize ettiği bölümlerle senkronla (diğer alanlarla
@@ -369,14 +381,14 @@ export default function PageTranslationsCard({
         <div>
           <p className="eyebrow">Çok Dilli İçerik</p>
           <h2 className="text-lg font-semibold text-[var(--color-stone-900)]">
-            Çeviriler (EN / DE)
+            Çeviriler ({editable.map((l) => l.toUpperCase()).join(" / ")})
           </h2>
           <p className="mt-1 text-sm text-[var(--color-stone-500)]">
-            Bu alanlar yalnızca İngilizce ve Almanca sürümler içindir. Türkçe
-            içerik buradan düzenlenemez; boş bırakılan alanlar public tarafta
-            Türkçe içeriğe geri döner. Slug çevrilmez. Bölümlerin
-            (sections) yapısı Türkçe içerikten gelir; burada yalnız
-            metinleri çevirirsiniz.
+            Bu alanlar {editable.map((l) => LOCALE_LABELS[l]).join(" ve ")} sürümleri
+            içindir. Ana dil ({rootLabel}) yukarıdaki formdan düzenlenir; boş
+            bırakılan alanlar public tarafta ana dil içeriğine geri döner. Her dilin
+            kendi URL slug&apos;ı vardır. Bölümlerin (sections) yapısı ana dil
+            içeriğinden gelir; burada yalnız metinleri çevirirsiniz.
           </p>
         </div>
       </header>
@@ -384,7 +396,7 @@ export default function PageTranslationsCard({
       {pageTitle ? (
         <div>
           <p className="text-[11px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-400)]">
-            Türkçe (referans, salt okunur)
+            {rootLabel} (ana dil — referans, salt okunur)
           </p>
           <p className="text-sm text-[var(--color-stone-600)] mt-1">
             {pageTitle}
@@ -393,7 +405,7 @@ export default function PageTranslationsCard({
       ) : null}
 
       <div className="flex gap-2">
-        {(Object.keys(LOCALE_LABELS) as WritableLocale[]).map((locale) => (
+        {editable.map((locale) => (
           <button
             key={locale}
             type="button"

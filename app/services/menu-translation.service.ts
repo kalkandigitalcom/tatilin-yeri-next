@@ -1,6 +1,10 @@
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import { menuServerRepository } from "@/lib/db/menu.repository.server";
 import type { MenuTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /* ===============================================================
    🛡️ MENÜ ADI ÇEVİRİ SERVİSİ (migration 086)
@@ -78,6 +82,11 @@ export async function getMenuTranslations(
 export async function upsertMenuTranslation(
   input: MenuTranslationInput
 ): Promise<MenuTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("menu")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const menuId = (input.menuId ?? "").toString().trim();
   if (!menuId) return { ok: false, error: "Geçersiz menü" };
 

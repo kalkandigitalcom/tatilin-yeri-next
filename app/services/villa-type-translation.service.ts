@@ -1,6 +1,10 @@
 import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import type { VillaTypeTranslationRow } from "@/lib/i18n/translations.types";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 
 /**
  * 🛡️ PHASE 10D — Batch 1 — Villa Tipi (villa_types) Çeviri Servisi
@@ -63,6 +67,11 @@ export async function getTypeTranslations(
 export async function upsertTypeTranslation(
   input: TypeTranslationInput
 ): Promise<TypeTranslationResult> {
+  /* 🌐 Faz 5 — bu modül merkezi içerik servisine geçti: ESKİ yazma
+     yolu KAPALI (iki yol aynı anda çalışmaz). */
+  if (isContentWriteMigrated("villa_type")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const typeId = (input.typeId ?? "").toString().trim();
   if (!typeId) return { ok: false, error: "Geçersiz villa tipi" };
 

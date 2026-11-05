@@ -10,13 +10,16 @@ import { isSupportedLocale, SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/co
      1) Dizi olmalı; yalnız desteklenen dil kodları (tekrarlar atılır).
      2) En az bir dil aktif olmalı.
      3) Ana dil (settings.public_default_locale) mutlaka aktif olmalı.
-     4) FAZ 1 KISITI — Türkçe kapatılamaz: TR sayfaları bugün öneksiz
-        kök route'larda çalışıyor ve dil kapısından geçmiyor; TR'nin
-        güvenle kapatılması Faz 2'nin dinamik URL mimarisini gerektirir.
+     4) (Faz 6 Dalga 1'de kaldırıldı) Eski FAZ 1 kısıtı "Türkçe
+        kapatılamaz" artık yok: bütün diller dil kapısından ([lang]
+        dispatcher + proxy) geçiyor; TR'ye özel istisna bulunmaz.
    =============================================================== */
 
-/** Faz 1'de kapatılamayan diller (ana dile EK olarak). */
-export const ALWAYS_ENABLED_LOCALES: readonly Locale[] = ["tr"];
+/** Faz 1'de kapatılamayan diller (ana dile EK olarak).
+ *  🌐 Faz 6 Dalga 1 — TR'ye özel istisna KALDIRILDI: TR de EN/DE gibi
+ *  kapatılabilir. Tek zorunlu kural: ana dil (public_default_locale)
+ *  daima aktiftir (aşağıdaki kural + DB trigger'ı 101). */
+export const ALWAYS_ENABLED_LOCALES: readonly Locale[] = [];
 
 export type EnabledLocalesValidation =
   | { ok: true; enabled: Locale[] }

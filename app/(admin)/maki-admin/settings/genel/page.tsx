@@ -1,5 +1,6 @@
 "use client";
 
+import RootLocaleNote from "@/app/components/admin/shared/RootLocaleNote";
 import { useEffect, useState } from "react";
 
 import {
@@ -332,6 +333,7 @@ export default function SettingsGeneralPage() {
         <h1 className="font-display text-3xl md:text-4xl text-[var(--color-stone-900)] mt-2 tracking-[-0.02em]">
           Genel
         </h1>
+        <RootLocaleNote scope="form" />
         <p className="text-sm text-[var(--color-stone-500)] mt-2 max-w-2xl">
           Site adı, logo, watermark ve anasayfa hero içerik yönetimi.
           Tek "Kaydet" tüm bölümleri atomik günceller.

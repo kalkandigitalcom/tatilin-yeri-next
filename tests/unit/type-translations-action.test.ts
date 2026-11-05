@@ -33,11 +33,22 @@ vi.mock("@/lib/admin-route-auth", () => ({
     authorizeAdminSessionMock(...args),
 }));
 
-vi.mock("@/app/services/villa-type-translation.service", () => ({
-  getTypeTranslations: (...args: unknown[]) => getTypeTranslationsMock(...args),
-  upsertTypeTranslation: (...args: unknown[]) =>
-    upsertTypeTranslationMock(...args),
+/* 🌐 Faz 5 — eylem artık ESKİ villa-type-translation.service'e değil,
+   merkezi içerik katmanına (simple-content.server → saveContent) delege
+   eder. Yetki sözleşmesi (authorizeAdminSession İLK, yetkisizde yazma
+   YOK) AYNEN korunur; yalnız delege edilen hedef değişti. */
+vi.mock("@/app/(admin)/maki-admin/_content/simple-content.server", () => ({
+  loadTranslationRows: (...args: unknown[]) => getTypeTranslationsMock(...args),
+  saveTranslationRow: (...args: unknown[]) => upsertTypeTranslationMock(...args),
 }));
+vi.mock("@/lib/i18n/content/content-admin.server", () => ({
+  getAdminLocaleLayout: async () => ({ root: "tr", translations: ["en", "de"], enabled: ["tr", "en", "de"], multilingual: true }),
+  getSlugSeparationCapability: async () => false,
+  getTechnicalKey: async () => "luks-villalar",
+  getAdminContent: async () => ({}),
+  adminSaveContent: vi.fn(),
+}));
+vi.mock("@/lib/i18n/routing/slug-map.server", () => ({ revalidateLocaleSlugs: vi.fn() }));
 
 import {
   loadTypeTranslationsAction,
@@ -60,7 +71,11 @@ beforeEach(() => {
     ok: true,
     row: { type_id: TYPE_ID, locale: "en", name: "Luxury Villa" },
   });
-  getTypeTranslationsMock.mockResolvedValue({ ok: true, rows: [] });
+  getTypeTranslationsMock.mockResolvedValue({
+    ok: true,
+    rows: [],
+    layout: { root: "tr", translations: ["en", "de"], enabled: ["tr", "en", "de"], multilingual: true },
+  });
 });
 
 describe("saveTypeTranslationAction — authorizeAdminSession İLK kontrol", () => {
@@ -97,7 +112,7 @@ describe("saveTypeTranslationAction — authorizeAdminSession İLK kontrol", () 
     expect(upsertTypeTranslationMock).not.toHaveBeenCalled();
   });
 
-  it("3) yetkili oturum → servise AYNEN delege edilir (EN)", async () => {
+  it("3) yetkili oturum → merkezi içerik katmanına delege edilir (EN)", async () => {
     const result = await saveTypeTranslationAction({
       typeId: TYPE_ID,
       locale: "en",
@@ -105,11 +120,14 @@ describe("saveTypeTranslationAction — authorizeAdminSession İLK kontrol", () 
     });
 
     expect(authorizeAdminSessionMock).toHaveBeenCalledTimes(1);
-    expect(upsertTypeTranslationMock).toHaveBeenCalledWith({
-      typeId: TYPE_ID,
-      locale: "en",
-      name: "Luxury Villa",
-    });
+    expect(upsertTypeTranslationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "admin-1" }),
+      "villa_type",
+      TYPE_ID,
+      "en",
+      { name: "Luxury Villa" },
+      expect.anything()
+    );
     expect(result).toEqual({
       ok: true,
       row: { type_id: TYPE_ID, locale: "en", name: "Luxury Villa" },
@@ -123,11 +141,14 @@ describe("saveTypeTranslationAction — authorizeAdminSession İLK kontrol", () 
       name: "Luxusvilla",
     });
 
-    expect(upsertTypeTranslationMock).toHaveBeenCalledWith({
-      typeId: TYPE_ID,
-      locale: "de",
-      name: "Luxusvilla",
-    });
+    expect(upsertTypeTranslationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "admin-1" }),
+      "villa_type",
+      TYPE_ID,
+      "de",
+      { name: "Luxusvilla" },
+      expect.anything()
+    );
   });
 });
 
@@ -139,7 +160,7 @@ describe("loadTypeTranslationsAction — okuma (sayfa zaten middleware korumalı
     const result = await loadTypeTranslationsAction(TYPE_ID);
 
     expect(authorizeAdminSessionMock).toHaveBeenCalledTimes(1);
-    expect(getTypeTranslationsMock).toHaveBeenCalledWith(TYPE_ID);
-    expect(result).toEqual({ ok: true, rows: [] });
+    expect(getTypeTranslationsMock).toHaveBeenCalledWith("villa_type", TYPE_ID, ["name"]);
+    expect(result).toMatchObject({ ok: true, rows: [], technicalKey: "luks-villalar", slugSeparated: false });
   });
 });

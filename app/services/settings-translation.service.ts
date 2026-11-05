@@ -1,4 +1,8 @@
 import { settingsServerRepository } from "@/lib/db/settings.repository.server";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 import { settingsTranslationRepository } from "@/lib/db/settings-translation.repository.server";
 import {
   SETTINGS_TRANSLATABLE_FIELDS,
@@ -151,6 +155,10 @@ export async function getPublicSettingsTranslations(
 export async function upsertSettingsTranslation(
   input: SettingsTranslationInput
 ): Promise<SettingsTranslationSaveResult> {
+  /* 🌐 Faz 5 dalga 2 — merkezi yazmaya geçildiyse eski yol KAPALI. */
+  if (isContentWriteMigrated("settings")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   if (!isSettingsTranslationLocale(input?.locale)) {
     return {
       ok: false,
@@ -206,6 +214,9 @@ export async function upsertSettingsTranslation(
 export async function deleteSettingsTranslation(
   locale: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (isContentWriteMigrated("settings")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   if (!isSettingsTranslationLocale(locale)) {
     return {
       ok: false,

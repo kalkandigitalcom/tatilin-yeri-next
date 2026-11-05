@@ -7,6 +7,11 @@ import {
 } from "@/lib/auth/action-authz";
 import { settingsServerRepository } from "@/lib/db/settings.repository.server";
 import { invalidatePublicRoutingCaches } from "@/lib/i18n/routing/invalidate.server";
+import { isContentWriteMigrated } from "@/lib/i18n/content/content-write-modules";
+import {
+  overlaySettingsRootContent,
+  saveSettingsCentral,
+} from "@/app/(admin)/maki-admin/settings/_content/settings-content.server";
 
 /* ===============================================================
    🛡️ /api/admin/settings — SETTINGS READ (admin-only)
@@ -72,7 +77,13 @@ export async function GET(req: Request): Promise<NextResponse> {
       });
     }
 
-    return NextResponse.json({ ok: true, settings: data });
+    /* 🌐 Faz 5 dalga 2 — çevrilebilir alanlar ANA DİLİN değeriyle döner
+       (ana form ana dili düzenler). Ana dil TR iken satır aynen döner. */
+    const settings =
+      data && isContentWriteMigrated("settings")
+        ? await overlaySettingsRootContent(data as Record<string, unknown>)
+        : data;
+    return NextResponse.json({ ok: true, settings });
   } catch (err) {
     /* 🛡️ SON KAPI — authorizeAdminCaller (verifyToken/dbAdmin)
        veya beklenmedik bir throw route'tan kaçarsa Next HTML 500 döner
@@ -180,13 +191,28 @@ export async function PUT(req: Request): Promise<NextResponse> {
       );
     }
 
-    const { error } = await settingsServerRepository.updateById(id, values);
-    if (error) {
-      console.error("[admin.settings.update] FAILED", error.message);
-      return NextResponse.json(
-        { ok: false, error: error.message || "Settings güncellenemedi" },
-        { status: 500 }
-      );
+    /* 🌐 Faz 5 dalga 2 — merkezi yazma: çevrilebilir 9 alan ana dilin
+       içeriğine, kalan (dilden bağımsız) kolonlar aynı transaction'da
+       ana tabloya. Eski doğrudan updateById yolu bu modül için KAPALI. */
+    if (isContentWriteMigrated("settings")) {
+      const r = await saveSettingsCentral(auth.caller, id, values);
+      if (!r.ok) {
+        console.error("[admin.settings.update] FAILED", r.error);
+        const status = r.code === "validation" ? 400 : r.code === "guard" ? 409 : 500;
+        return NextResponse.json(
+          { ok: false, error: r.error || "Settings güncellenemedi" },
+          { status }
+        );
+      }
+    } else {
+      const { error } = await settingsServerRepository.updateById(id, values);
+      if (error) {
+        console.error("[admin.settings.update] FAILED", error.message);
+        return NextResponse.json(
+          { ok: false, error: error.message || "Settings güncellenemedi" },
+          { status: 500 }
+        );
+      }
     }
 
     /* Çoklu dil aç/kapa aktif dil kümesini ve URL'leri değiştirir →

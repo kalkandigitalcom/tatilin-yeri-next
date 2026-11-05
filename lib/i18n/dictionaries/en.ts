@@ -513,6 +513,9 @@ export const en: Dictionary = {
     seo: {
       websiteDescription:
         "Private pools, sea views and boutique comfort in the Mediterranean's finest villas.",
+      metaTitleFallback: "Villa Rentals — A Luxury Villa Experience",
+      metaDescriptionFallback:
+        "Private pools, sea views and boutique comfort in the Mediterranean's finest villas. Discover your dream holiday.",
     },
     months: {
       1: "January",

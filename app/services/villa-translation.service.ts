@@ -1,4 +1,8 @@
 import { validateLocalizedSlug } from "@/lib/i18n/routing/slug-validation.server";
+import {
+  isContentWriteMigrated,
+  LEGACY_WRITE_DISABLED_MESSAGE,
+} from "@/lib/i18n/content/content-write-modules";
 import { translationRepository } from "@/lib/db/translation.repository.server";
 import { villaAdminRepository } from "@/lib/db/villa.repository.server";
 import type { VillaTranslationRow } from "@/lib/i18n/translations.types";
@@ -71,6 +75,10 @@ export async function getVillaTranslations(
 export async function upsertVillaTranslation(
   input: VillaTranslationInput
 ): Promise<VillaTranslationResult> {
+  /* 🌐 Faz 5 dalga 2 — merkezi yazmaya geçildiyse eski yol KAPALI. */
+  if (isContentWriteMigrated("villa")) {
+    return { ok: false, error: LEGACY_WRITE_DISABLED_MESSAGE };
+  }
   const villaId = (input.villaId ?? "").toString().trim();
   if (!villaId) return { ok: false, error: "Geçersiz villa" };
 

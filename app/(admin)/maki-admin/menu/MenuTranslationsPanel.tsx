@@ -30,12 +30,21 @@ import {
    değiştirildiğinde çağrılan AYNI invalidation (`revalidateMenu`).
    Yeni bir cache/invalidation mekanizması İCAT EDİLMEDİ. */
 import { revalidateMenu } from "@/app/services/revalidate.actions";
+import type { Locale } from "@/lib/i18n/config";
+import { ADMIN_LOCALE_LABELS, type AdminLocaleLayout } from "@/lib/i18n/content/content-admin";
 
-type WritableLocale = "en" | "de";
+/* 🌐 Faz 5 — diller ANA DİLE göre kurulur (ana dil TR → EN, DE;
+   ana dil EN → TR, DE; ana dil DE → TR, EN). Ana dil adı ana formda
+   (menü satırı) düzenlenir, burada referanstır. */
+type WritableLocale = Locale;
 
-export const MENU_LOCALE_LABELS: Record<WritableLocale, string> = {
-  en: "English",
-  de: "Deutsch",
+export const MENU_LOCALE_LABELS: Record<Locale, string> = ADMIN_LOCALE_LABELS;
+
+const DEFAULT_LAYOUT: AdminLocaleLayout = {
+  root: "tr",
+  translations: ["en", "de"],
+  enabled: ["tr", "en", "de"],
+  multilingual: true,
 };
 
 /** Panel + "Menü ekle" formu AYNI sınırı kullanır (DB kolonu `text`;
@@ -51,7 +60,8 @@ type Props = {
 export default function MenuTranslationsPanel({ menuId, menuName }: Props) {
   const toast = useNotify();
 
-  const [forms, setForms] = useState<Record<WritableLocale, string>>({
+  const [layout, setLayout] = useState<AdminLocaleLayout>(DEFAULT_LAYOUT);
+  const [forms, setForms] = useState<Partial<Record<WritableLocale, string>>>({
     en: "",
     de: "",
   });
@@ -75,14 +85,16 @@ export default function MenuTranslationsPanel({ menuId, menuName }: Props) {
         return;
       }
 
-      setForms((prev) => {
-        const next = { ...prev };
-        for (const row of result.rows) {
-          if (row.locale !== "en" && row.locale !== "de") continue;
-          next[row.locale] = row.name ?? "";
-        }
-        return next;
-      });
+      const lay = result.layout ?? DEFAULT_LAYOUT;
+      const next: Partial<Record<WritableLocale, string>> = {};
+      for (const l of lay.translations) next[l] = "";
+      for (const row of result.rows) {
+        const l = row.locale as Locale;
+        if (!lay.translations.includes(l)) continue;
+        next[l] = typeof row.name === "string" ? row.name : "";
+      }
+      setLayout(lay);
+      setForms(next);
       setLoading(false);
     })();
 
@@ -97,11 +109,11 @@ export default function MenuTranslationsPanel({ menuId, menuName }: Props) {
     try {
       /* İki locale AYRI upsert (UNIQUE(menu_id, locale)); sıralı —
          tek bir hata bile kullanıcıya bildirilir. */
-      for (const locale of ["en", "de"] as WritableLocale[]) {
+      for (const locale of layout.translations) {
         const result = await saveMenuTranslationAction({
           menuId,
           locale,
-          name: forms[locale],
+          name: forms[locale] ?? "",
         });
         if (!result.ok) {
           toast.error("Kaydedilemedi", {
@@ -132,7 +144,7 @@ export default function MenuTranslationsPanel({ menuId, menuName }: Props) {
 
       <div>
         <p className="text-[11px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-400)]">
-          Menü Adı (Türkçe — referans)
+          Menü Adı ({ADMIN_LOCALE_LABELS[layout.root]} — referans)
         </p>
         <p className="text-sm text-[var(--color-stone-600)] mt-1">{menuName}</p>
       </div>
@@ -144,17 +156,22 @@ export default function MenuTranslationsPanel({ menuId, menuName }: Props) {
         </div>
       ) : (
         <div className="space-y-4">
-          {(Object.keys(MENU_LOCALE_LABELS) as WritableLocale[]).map(
+          {layout.translations.map(
             (locale) => (
               <div key={locale} className="space-y-1.5">
                 <label className="text-[12px] tracking-[0.08em] uppercase font-semibold text-[var(--color-stone-500)] block">
                   {MENU_LOCALE_LABELS[locale]}
+                  {!(forms[locale] ?? "").trim() && (
+                    <span className="ml-2 normal-case tracking-normal font-normal text-amber-700">
+                      (çeviri eksik)
+                    </span>
+                  )}
                 </label>
                 <input
                   aria-label={MENU_LOCALE_LABELS[locale]}
                   className="input"
                   maxLength={MENU_TRANSLATION_MAX_LEN}
-                  value={forms[locale]}
+                  value={forms[locale] ?? ""}
                   onChange={(e) =>
                     setForms((prev) => ({
                       ...prev,
@@ -167,8 +184,8 @@ export default function MenuTranslationsPanel({ menuId, menuName }: Props) {
           )}
 
           <p className="text-xs text-[var(--color-stone-400)]">
-            Boş bırakılan dilde Türkçe menü adı gösterilir. Bağlantı
-            adresi çevrilmez.
+            Boş bırakılan dilde ana dildeki ({ADMIN_LOCALE_LABELS[layout.root]}) menü adı
+            gösterilir. Bağlantı adresi çevrilmez.
           </p>
 
           <button

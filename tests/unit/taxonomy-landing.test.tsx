@@ -18,6 +18,7 @@
      J) Admin: kategori adı değişince slug korunur
 =============================================================== */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { contentCtx, contentTables, resetContentTables } from "../fixtures/faz6/content-table-mock";
 import { render, screen } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
@@ -64,13 +65,13 @@ vi.mock("@/lib/db/villa.repository.server", () => ({
   },
 }));
 
-const typeNamesMock = vi.fn();
-vi.mock("@/lib/i18n/get-villa-type-translations.server", () => ({
-  getVillaTypeNamesByLocale: (ids: string[]) => typeNamesMock(ids),
-}));
-vi.mock("@/lib/i18n/get-villa-badge-translations.server", () => ({
-  getVillaBadgesByLocale: async () => new Map(),
-}));
+/* 🌐 Faz 6 Dalga 2 — kategori adı (ve arşiv gövdesindeki kart rozeti /
+   sidebar adları) MERKEZİ servisten. Tablo tabanlı sahte: TR satırı ana
+   tablonun aynası (107); zincir istenen → ana dil → aktif diller. */
+const contentSpy = vi.fn();
+vi.mock("@/lib/i18n/content/content-read.server", async () =>
+  (await import("../fixtures/faz6/content-table-mock")).contentReadServerMock((...a) => contentSpy(...a))
+);
 vi.mock("@/lib/db/villa-feature.repository", () => ({
   villaFeatureRepository: { findAllForPublicTaxonomy: async () => ({ data: [], error: null }) },
 }));
@@ -135,7 +136,13 @@ beforeEach(() => {
   locationsMock.mockResolvedValue(LOCATIONS);
   villasMock.mockResolvedValue(VILLAS);
   settingsMock.mockResolvedValue({ site_name: "Balayı Villanız", multilingual_enabled: false });
-  typeNamesMock.mockResolvedValue({ "t-muh": { en: "Conservative Villas", de: "Konservative Villen" } });
+  resetContentTables();
+  contentSpy.mockReset();
+  contentTables.villa_type = {
+    "t-muh": { tr: { name: "Muhafazakar Villalar" }, en: { name: "Conservative Villas" }, de: { name: "Konservative Villen" } },
+    "t-bos": { tr: { name: "Boş Kategori" } },
+    "t-noslug": { tr: { name: "Slugsuz" } },
+  };
   typeRelsMock.mockImplementation(async (ids: string[]) => ({
     data: ids[0] === "t-muh"
       ? ["v1", "v2", "v3", "v99-inactive"].map((villa_id) => ({ villa_id, type_id: "t-muh" }))
@@ -292,7 +299,7 @@ describe("D) metadata", () => {
     );
   });
 
-  it("EN kategori adı mevcut çeviri sisteminden; canonical /en/... ; hreflang açık", async () => {
+  it("EN kategori adı merkezi servisten (istenen dil); canonical /en/... ; hreflang açık", async () => {
     settingsMock.mockResolvedValue({ site_name: "Balayı Villanız", multilingual_enabled: true });
     const { buildTaxonomyLandingMetadata } = await import(
       "@/app/components/search/TaxonomyLandingPageBody"
@@ -337,12 +344,88 @@ describe("D) metadata", () => {
     );
   });
 
+  /* 🌐 Faz 6 Dalga 2 — merkezi okuma kuralları (ana dil TR / EN / DE). */
+  it("kategori adı istenen dilde yoksa ana dil zinciri; robots miras (index)", async () => {
+    delete contentTables.villa_type["t-muh"].de;
+    const { buildTaxonomyLandingMetadata } = await import(
+      "@/app/components/search/TaxonomyLandingPageBody"
+    );
+    const m = await buildTaxonomyLandingMetadata("category", "muhafazakar-villalar", "de", sp());
+    expect(m.title).toBe("Muhafazakar Villalar | Balayı Villanız");
+    expect(m.robots).toBeUndefined();
+    expect(contentSpy).toHaveBeenCalledWith("villa_type", ["t-muh"], "de");
+  });
+
+  it.each(["tr", "en", "de"] as const)(
+    "ana dil %s: ad zinciri ana dilden başlar (TR'ye özel değil)",
+    async (root) => {
+      contentCtx.root = root;
+      contentTables.villa_type["t-muh"] = { [root]: { name: `Ad-${root}` } };
+      const { buildTaxonomyLandingMetadata } = await import(
+        "@/app/components/search/TaxonomyLandingPageBody"
+      );
+      for (const l of ["tr", "en", "de"] as const) {
+        const m = await buildTaxonomyLandingMetadata("category", "muhafazakar-villalar", l, sp());
+        expect(m.title).toBe(`Ad-${root} | Balayı Villanız`);
+      }
+    }
+  );
+
+  it("ad YALNIZ pasif dilde varsa kullanılmaz → sözlükteki genel etiket + noindex,follow (slug gösterilmez)", async () => {
+    settingsMock.mockResolvedValue({ site_name: "Balayı Villanız", multilingual_enabled: true });
+    contentCtx.enabled = ["tr", "en"];
+    contentTables.villa_type["t-muh"] = { de: { name: "Nur Deutsch" } };
+    const { buildTaxonomyLandingMetadata } = await import(
+      "@/app/components/search/TaxonomyLandingPageBody"
+    );
+    const m = await buildTaxonomyLandingMetadata("category", "muhafazakar-villalar", "en", sp());
+    expect(m.title).toBe(`${en.taxonomyLanding.categoryHeroEyebrow} | Balayı Villanız`);
+    expect(String(m.title)).not.toContain("muhafazakar-villalar");
+    expect(String(m.title)).not.toContain("Nur Deutsch");
+    expect(m.robots).toEqual({ index: false, follow: true });
+    /* 🌐 Faz 6 Dalga 5 — noindex (ad yok) → hreflang basılmaz; sitemap'te de yok. */
+    expect((m.alternates as { languages?: unknown }).languages).toBeUndefined();
+    expect(String((m.alternates as { canonical: string }).canonical)).toContain("muhafazakar-villalar");
+  });
+
+  it("ad hiçbir aktif dilde yoksa (TR dahil) genel etiket + noindex,follow; sayfa 404 değil", async () => {
+    contentTables.villa_type["t-muh"] = {};
+    const { buildTaxonomyLandingMetadata } = await import(
+      "@/app/components/search/TaxonomyLandingPageBody"
+    );
+    const m = await buildTaxonomyLandingMetadata("category", "muhafazakar-villalar", "tr", sp());
+    expect(m.title).toBe(`${tr.taxonomyLanding.categoryHeroEyebrow} | Balayı Villanız`);
+    expect(m.robots).toEqual({ index: false, follow: true });
+  });
+
+  it("bölge adı merkezi servise SORULMAZ (özel isim, dil bağımsız)", async () => {
+    const { buildTaxonomyLandingMetadata } = await import(
+      "@/app/components/search/TaxonomyLandingPageBody"
+    );
+    await buildTaxonomyLandingMetadata("region", "bodrum", "en", sp());
+    expect(contentSpy.mock.calls.filter((c) => c[0] === "villa_location")).toEqual([]);
+    expect(contentSpy.mock.calls.filter((c) => c[0] === "villa_type")).toEqual([]);
+  });
+
   it("villası olmayan kategori → noindex,follow (404 değil)", async () => {
     const { buildTaxonomyLandingMetadata } = await import(
       "@/app/components/search/TaxonomyLandingPageBody"
     );
     const m = await buildTaxonomyLandingMetadata("category", "bos-kategori", "tr", sp());
     expect(m.robots).toEqual({ index: false, follow: true });
+  });
+
+  it("🌐 Faz 6 Dalga 5 — adı olan kategori: hreflang bütün aktif diller (değişmedi)", async () => {
+    settingsMock.mockResolvedValue({ site_name: "Balayı Villanız", multilingual_enabled: true });
+    contentTables.villa_type["t-muh"] = { tr: { name: "Muhafazakâr" } };
+    const { buildTaxonomyLandingMetadata } = await import(
+      "@/app/components/search/TaxonomyLandingPageBody"
+    );
+    const m = await buildTaxonomyLandingMetadata("category", "muhafazakar-villalar", "en", sp());
+    expect(m.robots).toBeUndefined();
+    expect(Object.keys((m.alternates as { languages: Record<string, string> }).languages).sort()).toEqual(
+      ["de", "en", "tr", "x-default"]
+    );
   });
 
   it("geçersiz slug / alt bölge / UUID → notFound()", async () => {
@@ -459,7 +542,11 @@ describe("F) sitemap", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "app/sitemap.ts"), "utf-8");
     expect(src).toContain("getTaxonomyLandingSitemapPaths");
     /* Faz 3 — çok dilli sitemap: landing yolları dil bazlı girdilere açılır. */
-    expect(src).toMatch(/for \(const path of \[\.\.\.categories, \.\.\.regions\]\)/);
+    /* 🌐 Faz 6 Dalga 5 — kategoriler merkezi ad kontrolünden geçer
+       (sayfa noindex kuralıyla aynı); bölgeler aynen. */
+    expect(src).toMatch(/for \(const path of categories\)/);
+    expect(src).toMatch(/for \(const path of regions\)/);
+    expect(src).toContain("categoryIndexableLocales");
   });
 });
 
@@ -512,20 +599,37 @@ describe("G) link üreticileri", () => {
    =============================================================== */
 describe("H) route dosyaları", () => {
   const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf-8");
-  for (const [seg, kind] of [["villa-turleri", "category"], ["bolgeler", "region"]] as const) {
-    it(`${seg}: TR/EN/DE dosyaları ortak gövdeyi doğru locale ile çağırır`, () => {
-      const trSrc = read(`app/(public)/${seg}/[slug]/locale-page.tsx`);
-      expect(trSrc).toContain(`kind="${kind}"`);
-      expect(trSrc).toContain('locale="tr"');
-      expect(trSrc).not.toContain("requirePublicLocaleEnabled");
-      for (const loc of ["en", "de"]) {
-        const s = read(`app/(public)/${loc}/${seg}/[slug]/locale-page.tsx`);
-        expect(s).toContain(`locale="${loc}"`);
-        expect(s).toContain(`setRequestLocale("${loc}")`);
-        expect(s).toContain(`await requirePublicLocaleEnabled("${loc}");`);
-      }
-    });
-  }
+  /* 🌐 Faz 6 Dalga 2 — kategori landing TEK, dile duyarlı route modülü. */
+  it("villa-turleri: tek modül ortak gövdeyi kind=category, dispatcher'dan gelen dil ve TEKNİK ANAHTAR ile çağırır; eski kopyalar YOK", () => {
+    const mod = read("app/(public)/_routes/villa-type.tsx");
+    expect(mod).toContain('kind="category"');
+    expect(mod).toContain("locale={locale}");
+    expect(mod).toContain("slug={params.slug}");
+    expect(mod).not.toContain("requirePublicLocaleEnabled");
+    expect(mod).not.toMatch(/locale="(tr|en|de)"/);
+    const page = read("app/(public)/[lang]/(site)/villa-turleri/[slug]/page.tsx");
+    expect(page).toContain('localeRouteFor("villaType", villaTypeRouteModule)');
+    for (const loc of ["", "en/", "de/"]) {
+      expect(fs.existsSync(path.join(process.cwd(), `app/(public)/${loc}villa-turleri/[slug]/locale-page.tsx`))).toBe(false);
+    }
+  });
+
+  /* 🌐 Faz 6 Dalga 2 — bölge landing TEK, dile duyarlı route modülü. */
+  it("bolgeler: tek modül ortak gövdeyi kind=region, dispatcher'dan gelen dil ve slug ile çağırır; eski kopyalar YOK", () => {
+    const mod = read("app/(public)/_routes/region.tsx");
+    expect(mod).toContain('kind="region"');
+    expect(mod).toContain("locale={locale}");
+    expect(mod).toContain("slug={params.slug}");
+    expect(mod).not.toContain("requirePublicLocaleEnabled");
+    expect(mod).not.toMatch(/locale="(tr|en|de)"/);
+    /* Bölge adı özel isim → merkezi içerik okuması yok. */
+    expect(mod).not.toContain("public-villa-content");
+    const page = read("app/(public)/[lang]/(site)/bolgeler/[slug]/page.tsx");
+    expect(page).toContain('localeRouteFor("region", regionRouteModule)');
+    for (const loc of ["", "en/", "de/"]) {
+      expect(fs.existsSync(path.join(process.cwd(), `app/(public)/${loc}bolgeler/[slug]/locale-page.tsx`))).toBe(false);
+    }
+  });
 
   it("robots.ts landing prefix'lerini engellemiyor; /arama engeli AYNEN", () => {
     const src = read("app/robots.ts");

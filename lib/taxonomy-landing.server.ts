@@ -148,6 +148,9 @@ export async function countPublicLandingVillas(
 export async function getTaxonomyLandingSitemapPaths(): Promise<{
   categories: string[];
   regions: string[];
+  /** 🌐 Faz 6 Dalga 5 — kategori yolu → villa_types kimliği (merkezi ad
+   *  kontrolü için; ek alan, mevcut alanlar değişmedi). */
+  categoryIds: Map<string, string>;
 }> {
   const [types, locations, covers, locationCounts] = await Promise.all([
     getCachedVillaTypes(),
@@ -157,11 +160,14 @@ export async function getTaxonomyLandingSitemapPaths(): Promise<{
   ]);
 
   const categories: string[] = [];
+  const categoryIds = new Map<string, string>();
   for (const t of types) {
     const slug = landingSlugOf(t.slug);
     if (!slug) continue;
     if ((covers[String(t.id)]?.villaCount ?? 0) < 1) continue;
-    categories.push(`${CATEGORY_LANDING_TR_PREFIX}/${encodeURIComponent(slug)}`);
+    const p = `${CATEGORY_LANDING_TR_PREFIX}/${encodeURIComponent(slug)}`;
+    categories.push(p);
+    categoryIds.set(p, String(t.id));
   }
 
   const regions: string[] = [];
@@ -176,5 +182,5 @@ export async function getTaxonomyLandingSitemapPaths(): Promise<{
     regions.push(`${REGION_LANDING_TR_PREFIX}/${encodeURIComponent(slug)}`);
   }
 
-  return { categories, regions };
+  return { categories, regions, categoryIds };
 }

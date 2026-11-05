@@ -166,8 +166,9 @@ describe("Phase 12C — multilingual_enabled kapısı", () => {
     expect(loadPageTranslationsMock).toHaveBeenCalledWith(PAGE_ID);
     expect(screen.getByText("English")).toBeTruthy();
     expect(screen.getByText("Deutsch")).toBeTruthy();
-    /* TR referans salt okunur gösterilir */
-    expect(screen.getByText("Türkçe (referans, salt okunur)")).toBeTruthy();
+    /* Ana dil (varsayılan düzen: TR) referans olarak salt okunur gösterilir
+       — Faz 5 dalga 2: etiket ana dili adlandırır. */
+    expect(screen.getByText("Türkçe (ana dil — referans, salt okunur)")).toBeTruthy();
     expect(screen.getAllByText(PAGE_ROW.title).length).toBeGreaterThan(0);
   });
 });

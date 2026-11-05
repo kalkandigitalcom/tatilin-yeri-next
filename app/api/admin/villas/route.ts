@@ -145,7 +145,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   try {
-    const newId = await createVillaFull(body);
+    const newId = await createVillaFull(body, { actor: auth.caller });
     /* 🛡️ Başarılı oluşturma → public villa listesi cache'i tazelenir. */
     invalidateVillasCache("admin.villas.create");
     return NextResponse.json({ ok: true, id: newId });

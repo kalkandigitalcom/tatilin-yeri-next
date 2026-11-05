@@ -122,7 +122,9 @@ describe("slug biçimi + harita", () => {
     expect(checkLocalizedSlugFormat("villa", "success").ok).toBe(false);
     expect(checkLocalizedSlugFormat("blog", "x".repeat(161)).ok).toBe(false);
   });
-  it("rowsToSlugMap: TR ve bilinmeyen diller atılır", () => {
+  /* Faz 5 kararı: teknik anahtar ≠ TR URL slug'ı → TR satırları da
+     haritaya girer; yalnız bilinmeyen diller atılır. */
+  it("rowsToSlugMap: TR dahil edilir (Faz 5), bilinmeyen diller atılır", () => {
     expect(
       rowsToSlugMap([
         { kind: "villa", base: "a", locale: "en", slug: "a-en" },
@@ -130,7 +132,7 @@ describe("slug biçimi + harita", () => {
         { kind: "blog", base: "b", locale: "tr", slug: "x" },
         { kind: "blog", base: "b", locale: "fr", slug: "y" },
       ])
-    ).toEqual({ villa: { a: { en: "a-en", de: "a-de" } } });
+    ).toEqual({ villa: { a: { en: "a-en", de: "a-de" } }, blog: { b: { tr: "x" } } });
   });
 });
 

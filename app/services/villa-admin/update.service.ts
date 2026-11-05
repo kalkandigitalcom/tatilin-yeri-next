@@ -18,6 +18,9 @@ import {
 } from "./_helpers/relations";
 
 import type { VillaUpdatePayload } from "./types";
+import type { AuthorizedAdminCaller } from "@/lib/admin-route-auth";
+import { isContentWriteMigrated, LEGACY_WRITE_DISABLED_MESSAGE } from "@/lib/i18n/content/content-write-modules";
+import { updateVillaCoreCentral } from "./_helpers/content.server";
 
 /* ===============================================================
    🛡️ FAZ 3 — updateVillaFull (ORCHESTRATOR)
@@ -63,39 +66,54 @@ export async function updateVillaFull({
   prices,
   selectedRules,
   selectedPriceIncludes,
-}: VillaUpdatePayload): Promise<true> {
+}: VillaUpdatePayload,
+  /** Faz 5 dalga 2 — merkezi yazma için çağıran admin (audit). */
+  opts?: { actor?: AuthorizedAdminCaller }
+): Promise<true> {
 
   if (!form.title) {
     throw new Error("Villa adı zorunlu");
   }
 
-  // ✅ UNIQUE SLUG
-  const slug =
-    await generateUniqueSlug(
-      form.title,
-      id
+  /* 🌐 Faz 5 dalga 2 — merkezi yazma: ana dil içeriği (açıklama, rozet,
+     SEO) + teknik alanlar (ad, kapasite, konum, harita, havuz, noindex…)
+     TEK transaction. TEKNİK ANAHTAR (villa.slug) ad değişince DEĞİŞMEZ;
+     dil URL slug'ları çeviri satırlarında. Eski doğrudan update KAPALI.
+     İlişkiler / mesafeler / fiyatlar aşağıda AYNEN (değişmedi). */
+  if (isContentWriteMigrated("villa")) {
+    if (!opts?.actor) throw new Error(LEGACY_WRITE_DISABLED_MESSAGE);
+    const core = buildVillaCorePayload({ form, mapData, selectedLocation, slug: "" }) as unknown as Record<string, unknown>;
+    delete core.slug;
+    await updateVillaCoreCentral(opts.actor, id, core);
+  } else {
+    // ✅ UNIQUE SLUG
+    const slug =
+      await generateUniqueSlug(
+        form.title,
+        id
+      );
+
+    // 🔥 UPDATE
+    /* FAZ 37: DB I/O villaAdminRepository.updateVillaById delege.
+       Predicate (.eq("id", id)) repo içinde aynen. */
+    const { error } = await villaAdminRepository.updateVillaById(
+      id,
+      buildVillaCorePayload({
+        form,
+        mapData,
+        selectedLocation,
+        slug,
+      })
     );
 
-  // 🔥 UPDATE
-  /* FAZ 37: DB I/O villaAdminRepository.updateVillaById delege.
-     Predicate (.eq("id", id)) repo içinde aynen. */
-  const { error } = await villaAdminRepository.updateVillaById(
-    id,
-    buildVillaCorePayload({
-      form,
-      mapData,
-      selectedLocation,
-      slug,
-    })
-  );
+    if (error) {
+      console.error(
+        "❌ Villa update error:",
+        error.message
+      );
 
-  if (error) {
-    console.error(
-      "❌ Villa update error:",
-      error.message
-    );
-
-    throw error;
+      throw error;
+    }
   }
 
   // 🔥 RESET TYPES

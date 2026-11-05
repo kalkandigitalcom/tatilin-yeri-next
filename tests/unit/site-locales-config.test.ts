@@ -161,15 +161,23 @@ describe("validateEnabledLocalesInput", () => {
       error: "Ana dil kapatılamaz.",
     });
   });
-  it("Faz 1 kısıtı: TR (öneksiz kök route'lar) kapatılamaz", () => {
-    const r = validateEnabledLocalesInput(["en", "de"], "en");
-    expect(r.ok).toBe(false);
+  /* Faz 6 Dalga 1 (karar K4): TR'ye özel kilit KALDIRILDI. Tek kural: ana
+     dil kapatılamaz — bu kural her dil için aynı ve aşağıda 3 ana dille
+     doğrulanıyor. */
+  it("TR ana dil değilken kapatılabilir; ana dil (hangisi olursa) kapatılamaz", () => {
+    expect(validateEnabledLocalesInput(["en", "de"], "en")).toEqual({ ok: true, enabled: ["en", "de"] });
+    expect(validateEnabledLocalesInput(["de"], "de")).toEqual({ ok: true, enabled: ["de"] });
+    for (const root of ["tr", "en", "de"] as const) {
+      const others = (["tr", "en", "de"] as const).filter((l) => l !== root);
+      expect(validateEnabledLocalesInput([...others], root)).toEqual({ ok: false, error: "Ana dil kapatılamaz." });
+    }
   });
-  it("anahtar kilidi: ana dil ve TR kilitli, diğerleri açık", () => {
-    expect(isLocaleToggleLocked("tr", "tr")).toBe(true);
-    expect(isLocaleToggleLocked("en", "tr")).toBe(false);
-    expect(isLocaleToggleLocked("de", "de")).toBe(true);
-    expect(isLocaleToggleLocked("tr", "de")).toBe(true);
+  it("anahtar kilidi: YALNIZ ana dil kilitli (TR dahil hiçbir dile özel kilit yok)", () => {
+    for (const root of ["tr", "en", "de"] as const) {
+      for (const l of ["tr", "en", "de"] as const) {
+        expect({ root, l, locked: isLocaleToggleLocked(l, root) }).toEqual({ root, l, locked: l === root });
+      }
+    }
   });
 });
 
