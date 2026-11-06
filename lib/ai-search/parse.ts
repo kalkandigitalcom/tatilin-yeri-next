@@ -129,6 +129,7 @@ export function parseNaturalQuery(
     toks
       .slice(from, to)
       .map((t) => t.raw)
+      .filter((r) => r.length > 0)
       .join(" ")
       .replace(/\s+([-–—])\s+/g, "$1")
       .trim();
@@ -430,6 +431,14 @@ export function parseNaturalQuery(
     const e = exprs[0];
     if (e.ambiguousFormat) {
       dateIssue = { code: "ambiguous_format", phrase: e.phrase };
+    } else if (
+      !isRealDate(e.start.y ?? 2028, e.start.m, e.start.d) ||
+      (e.end && !isRealDate(e.end.y ?? 2028, e.end.m, e.end.d))
+    ) {
+      /* "30 Şubat" gibi takvimde olmayan gün, eksik ifade olsa bile
+         önce geçersiz tarih olarak raporlanır (yıl yoksa artık yıl
+         2028 ile denetlenir: "29 Şubat" tek başına geçerli sayılır). */
+      dateIssue = { code: "invalid_calendar", phrase: e.phrase };
     } else if (!e.end && e.nights === null) {
       dateIssue = { code: "partial", phrase: e.phrase };
     } else {
@@ -659,6 +668,7 @@ export function parseNaturalQuery(
       if (NORM.numberSuffixFragments.has(t.norm) && toks[i - 1]?.kind === "num") continue;
       if (t.norm.length < 2) continue;
     }
+    if (t.raw.length === 0) continue;
     if (!unknown.includes(t.raw)) unknown.push(t.raw);
 
     if (t.kind === "word" && t.norm.length >= 4) {

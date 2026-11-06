@@ -98,6 +98,11 @@ function parseNumericDate(raw: string, sep: "." | "/" | "-"): NumericDate | null
   return { d, m, y, sep };
 }
 
+/** Bileşik villa kelimesi: en az 3 harflik önek + villa/villen/villas. */
+const COMPOUND_VILLA_RE = /^([a-z]{3,})(villa|villen|villas)$/;
+/** Kendisi zaten "villa" anlamı taşıyan bileşikler bölünmez. */
+const COMPOUND_KEEP = new Set(["ferienvilla", "ferienvillen", "ferienvillas"]);
+
 export function tokenize(input: string): Token[] {
   const text = String(input ?? "");
   const out: Token[] = [];
@@ -132,7 +137,18 @@ export function tokenize(input: string): Token[] {
     } else if (m[7]) {
       const norm = normalizeToken(m[7]);
       const suffix = m[8] ? normalizeToken(m[8]) : undefined;
-      if (norm.length > 0) tok = { kind: "word", raw, norm, suffix };
+      if (norm.length > 0) {
+        /* Almanca bileşik "Luxusvilla"/"Luxusvillen": önek + "villa"
+           olarak iki token'a ayrılır (ikinci token'ın gösterim metni
+           boştur; ifade birleştirilirken atlanır). */
+        const cm = COMPOUND_VILLA_RE.exec(norm);
+        if (cm && !COMPOUND_KEEP.has(norm)) {
+          out.push({ kind: "word", raw, norm: cm[1], index: 0 });
+          tok = { kind: "word", raw: "", norm: cm[2], suffix };
+        } else {
+          tok = { kind: "word", raw, norm, suffix };
+        }
+      }
     } else if (m[9]) {
       tok = { kind: "dash", raw, norm: "-" };
     } else if (m[10]) {

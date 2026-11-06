@@ -389,7 +389,7 @@ export const STOPWORDS = [
   // DE
   "ich", "wir", "suche", "suchen", "eine", "einen", "ein", "einer", "die", "der", "das", "den",
   "dem", "des", "mit", "und", "oder", "im", "fur", "fuer", "von", "vom", "bis", "zum", "zur",
-  "villen", "ferienhaus", "ferienvilla", "ferienvillen", "haus", "urlaub", "gibt", "es",
+  "villen", "ferien", "ferienhaus", "ferienvilla", "ferienvillen", "haus", "urlaub", "gibt", "es",
   "bitte", "hallo", "mochte", "mochten", "moechte", "brauchen", "brauche", "zwischen", "ist",
   "sind", "haben", "verfugbar", "mieten", "uns", "familie", "freunden", "fur", "eine", "schone",
   "schoene", "gerne", "idealerweise", "moglichst",

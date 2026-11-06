@@ -309,3 +309,65 @@ describe("4) Özel havuz ≠ korunaklı havuz ≠ muhafazakâr villa (canlı adl
     expect(de.unsupported.map((u) => u.concept)).toEqual(["private_pool"]);
   });
 });
+
+describe("UX turu düzeltmeleri — geçersiz tek tarih + Almanca bileşik villa", () => {
+  it.each([
+    ["30 Şubat Kalkan", "tr", "30 Şubat"],
+    ["31 Nisan Kaş", "tr", "31 Nisan"],
+    ["31 Nisan - 3 Mayıs Kaş", "tr", "31 Nisan-3 Mayıs"],
+    ["February 30 in Kalkan", "en", "February 30"],
+    ["30. Februar in Kalkan", "de", "30. Februar"],
+  ] as const)("%s → invalid_calendar (partial DEĞİL)", (q, locale, phrase) => {
+    const r = parse(q, locale);
+    expect(r.dateIssue).toEqual({ code: "invalid_calendar", phrase });
+    expect(r.start).toBeNull();
+    expect(r.end).toBeNull();
+  });
+
+  it("yılsız 29 Şubat geçerli gün sayılır → yalnız eksik tarih (partial)", () => {
+    expect(parse("29 Şubat Kaş").dateIssue?.code).toBe("partial");
+  });
+
+  it.each([
+    ["Luxusvilla", null],
+    ["Luxusvillen in Kalkan", "L:kalkan"],
+    ["luxus villa", null],
+  ] as const)("%s → Lüks villa tipi (de)", (q, region) => {
+    const r = parse(q, "de");
+    expect(r.types.length).toBe(1);
+    expect(ids(r.types)).toEqual(["T:luks-villalar"]);
+    expect(ids(r.regions)).toEqual(region ? [region] : []);
+    expect(r.unknown).toEqual([]);
+  });
+
+  it("Luxusvilla im August → tip + yalnız ay (month_only)", () => {
+    const r = parse("Luxusvilla im August", "de");
+    expect(r.types.length).toBe(1);
+    expect(r.dateIssue).toEqual({ code: "month_only", phrase: "August" });
+  });
+
+  it("Ferienvilla / Ferienvillen bölünmez, bilinmeyen üretmez", () => {
+    for (const q of ["Ferienvilla in Kalkan", "Ferienvillen in Kalkan"]) {
+      const r = parse(q, "de");
+      expect(ids(r.regions)).toEqual(["L:kalkan"]);
+      expect(r.types).toEqual([]);
+      expect(r.unknown).toEqual([]);
+    }
+  });
+});
+
+describe("Tip + özellik çakışması otomatik seçilmez (UX turu)", () => {
+  it.each([
+    ["ısıtmalı kapalı havuz", "tr", ["F:Kapalı Havuzu Isıtmalı", "T:kapali-havuzlu-isitmali-villalar"]],
+    ["ısıtmalı havuz", "tr", ["F:Kapalı Havuzu Isıtmalı", "T:kapali-havuzlu-isitmali-villalar"]],
+    ["çocuk oyun alanı", "tr", ["F:Çocuk Oyun Alanı", "T:cocuk-oyun-alanli-villalar"]],
+    ["children's play area", "en", ["F:Çocuk Oyun Alanı", "T:cocuk-oyun-alanli-villalar"]],
+    ["Kinderspielplatz", "de", ["F:Çocuk Oyun Alanı", "T:cocuk-oyun-alanli-villalar"]],
+  ] as const)("%s → ambiguous_match sorusu, tip/özellik boş", (q, locale, options) => {
+    const r = parse(q, locale);
+    expect(r.types).toEqual([]);
+    expect(r.features).toEqual([]);
+    expect(r.choices.map((c) => c.reason)).toEqual(["ambiguous_match"]);
+    expect(choiceIds(r)).toEqual([...options].sort());
+  });
+});

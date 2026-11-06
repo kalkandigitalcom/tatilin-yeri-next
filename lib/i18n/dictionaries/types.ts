@@ -717,6 +717,22 @@ export type Dictionary = {
       resolveChoicesFirst: string;
       emptyQuery: string;
       loadError: string;
+      understoodLabel: string;
+      showVillas: string;
+      searchWithoutDates: string;
+      pickDates: string;
+      notFilteredLabel: string;
+      notUnderstoodLabel: string;
+      notesHint: string;
+      redirecting: string;
+      editCriteria: string;
+      editChip: string;
+      addCriterion: string;
+      close: string;
+      apply: string;
+      guestsDecrease: string;
+      guestsIncrease: string;
+      questionProgress: string;
     };
     advantages: {
       sectionAriaLabel: string;
