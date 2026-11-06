@@ -293,6 +293,11 @@ export const DATE_FILLERS = [
   "arasi", "arasinda", "arasindaki", "tarihleri", "tarihlerinde", "tarihinde",
   "tarihleri", "itibaren", "baslayarak", "kadar", "ayinda", "ayi", "ayindaki",
   "th", "st", "nd", "rd",
+  // giriş/çıkış kelimeleri ve "tarihlerim" türleri (tarih aralığının parçası)
+  "tarihlerim", "tarihlerimiz", "tarihim", "tarihimiz", "tarihler",
+  "giris", "girisi", "giriste", "cikis", "cikisi", "cikista",
+  "check", "checkin", "checkout", "out", "arrival", "departure",
+  "anreise", "abreise", "ankunft",
 ];
 
 /** Göreli/belirsiz tarih ifadeleri — tarih UYDURULMAZ, netleştirme istenir. */

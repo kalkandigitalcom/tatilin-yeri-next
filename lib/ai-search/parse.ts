@@ -26,6 +26,7 @@ import {
   AMBIGUOUS_NUMBER_WORDS,
   NORM,
   NUMBER_WORDS,
+  VILLA_WORDS,
   type GuestRole,
   type UnsupportedCode,
 } from "./lexicon";
@@ -323,15 +324,20 @@ export function parseNaturalQuery(
     }
 
     // c) "2-8 Ağustos [2027]" · "2. bis 8. August" · "between 2 and 8 August"
+    //    · "20 25 Haziran" / "20/25 Haziran" (ayırıcısız: ikinci gün büyük olmalı)
+    //    · "20th to 25th June"
     const d1 = dayAt(i);
-    if (d1 !== null && isRangeSep(i + 1)) {
-      const d2 = dayAt(i + 2);
-      if (d2 !== null) {
-        const k = skipFillers(i + 3);
-        const m = monthAt(k);
+    if (d1 !== null) {
+      let k = skipFillers(i + 1);
+      const hasSep = isRangeSep(k);
+      if (hasSep) k = skipFillers(k + 1);
+      const d2 = dayAt(k);
+      if (d2 !== null && (hasSep || d2 > d1)) {
+        const km = skipFillers(k + 1);
+        const m = monthAt(km);
         if (m !== null) {
-          const y = yearAt(k + 1);
-          pushExpr(i, y !== null ? k + 2 : k + 1, {
+          const y = yearAt(km + 1);
+          pushExpr(i, y !== null ? km + 2 : km + 1, {
             start: { d: d1, m, y },
             end: { d: d2, m, y },
             ambiguousFormat: false,
@@ -381,6 +387,22 @@ export function parseNaturalQuery(
       pushExpr(i, h1.next, { start: h1.p, end: null, ambiguousFormat: false });
       continue;
     }
+  }
+
+  /* İki ayrı tek tarih → giriş/çıkış aralığı
+     ("20 Haziran'da giriş, 25 Haziran'da çıkış" · "check-in 20 June, check-out 25 June"). */
+  if (
+    exprs.length === 2 &&
+    exprs.every((e) => !e.end && e.nights === null && !e.ambiguousFormat)
+  ) {
+    const [a, b] = exprs;
+    exprs.splice(0, 2, {
+      start: a.start,
+      end: b.start,
+      nights: null,
+      ambiguousFormat: false,
+      phrase: `${a.phrase} · ${b.phrase}`,
+    });
   }
 
   // Göreli ifadeler ("hafta sonu", "next week", "im Sommer")
@@ -570,6 +592,27 @@ export function parseNaturalQuery(
       ? tokenMatches(t.norm, aliasTok)
       : t.kind === "num" && /^\d+$/.test(aliasTok) && t.norm === aliasTok;
 
+  /* Bağlam ipuçları (otomatik çözümleme): villa kelimesine uzaklık. */
+  const isVillaTok = (j: number) =>
+    j >= 0 && j < n && toks[j].kind === "word" && (VILLA_WORDS.has(toks[j].norm) || /^(villa|villen)/.test(toks[j].norm));
+  const LINK = new Set(["with", "mit", "ile", "olan", "a", "an", "the", "einem", "einer", "eine", "ein"]);
+  /** Eşleşmenin bittiği yerden sonraki ilk villa kelimesine kadar kaç token var (yoksa ∞). */
+  const villaGapAfter = (end: number) => {
+    for (let j = end; j < Math.min(n, end + 3); j++) if (isVillaTok(j)) return j - end;
+    return Infinity;
+  };
+  const attachedAt = (from: number, to: number) => {
+    if (isVillaTok(to)) return true;
+    let k = from - 1;
+    let gaps = 0;
+    while (k >= 0 && toks[k].kind === "word" && LINK.has(toks[k].norm) && gaps < 2) {
+      k--;
+      gaps++;
+    }
+    return gaps > 0 && isVillaTok(k);
+  };
+  const typeEnds = new Map<string, number>();
+
   for (let i = 0; i < n; i++) {
     if (!free(i) || (toks[i].kind !== "word" && toks[i].kind !== "num")) continue;
     let best = 0;
@@ -635,8 +678,15 @@ export function parseNaturalQuery(
         }
       } else if (found.length === 1) {
         addRef(found[0]);
+        if (found[0].kind === "type" && !typeEnds.has(found[0].id)) typeEnds.set(found[0].id, i + best);
       } else {
-        choices.push({ key: `c${choices.length}`, reason: "ambiguous_match", phrase, options: found.map(ref) });
+        choices.push({
+          key: `c${choices.length}`,
+          reason: "ambiguous_match",
+          phrase,
+          options: found.map(ref),
+          attachedToVilla: attachedAt(i, i + best),
+        });
       }
     } else if (missingConcepts.length) {
       addUnsupported("not_in_system", phrase, missingConcepts[0]);
@@ -648,7 +698,22 @@ export function parseNaturalQuery(
 
   // Villa tipleri `/arama`'da AND çalışır → birden fazla tip otomatik gönderilmez.
   if (types.length > 1) {
-    choices.push({ key: "types", reason: "multiple_types", phrase: types.map((t) => t.label).join(" · "), options: [...types] });
+    let head: string | undefined;
+    let bestGap = Infinity;
+    for (const t of types) {
+      const g = villaGapAfter(typeEnds.get(t.id) ?? n);
+      if (g < bestGap) {
+        bestGap = g;
+        head = t.id;
+      }
+    }
+    choices.push({
+      key: "types",
+      reason: "multiple_types",
+      phrase: types.map((t) => t.label).join(" · "),
+      options: [...types],
+      ...(head ? { head } : {}),
+    });
     types.length = 0;
   }
 

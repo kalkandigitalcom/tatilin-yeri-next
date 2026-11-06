@@ -3,18 +3,15 @@
    ===============================================================
    • Varsayılan sekme "Tarihle Ara"; panel (children) değişmeden
      render edilir ve AI sekmesine geçince unmount EDİLMEZ.
-   • B temelli akıllı karma akış:
-       – temiz sonuç → kompakt "Anladığım" özeti → otomatik /arama;
-       – "Düzenle" / çip düzenleme otomatik geçişi iptal eder;
-       – seçim gereken kriter → yalnız o soru (sırayla);
-       – tarih sorunu → "Tarih seç" | "Tarihsiz ara";
-       – desteklenmeyen/anlaşılmayan → uyarı + "Villaları göster"
-         (otomatik geçiş YOK, hiçbir kriter sessizce kaybolmaz);
-       – hiçbir şey → örnekler + Tarihle Ara'ya geç.
-   • Çip düzenleyici: masaüstünde popover, mobilde alt sayfa (portal).
+   • Doğrudan arama: "Villa Bul" → ayrıştır → otomatik çöz → mevcut
+     /arama URL'si (router.push). Ara ekran, özet, soru, takvim veya
+     ikinci onay düğmesi YOK.
+   • Belirsizlikler bağlamla otomatik çözülür; desteklenmeyen /
+     anlaşılmayan / geçersiz tarih ifadeleri aramayı durdurmaz.
+   • Hiçbir kriter tanınmazsa yönlendirme yok: kısa satır + Tarihle Ara.
    =============================================================== */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
 import { getDictionary } from "@/lib/i18n/get-dictionary";
@@ -80,12 +77,14 @@ async function ask(text: string) {
   });
 }
 
-const fmt = (tpl: string, v: Record<string, string | number>) =>
-  tpl.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k]));
-const editName = (label: string) => fmt(dict.editChip, { label });
-const sleep = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
-const summary = () => screen.getByRole("region", { name: dict.understoodLabel });
-const expectPush = (url: string) => waitFor(() => expect(pushMock).toHaveBeenCalledWith(url), { timeout: 2000 });
+/** Ara ekran olmadığını doğrular: diyalog, özet bölgesi, ikinci düğme yok. */
+function expectNoIntermediateUi() {
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(document.querySelector('input[type="date"]')).toBeNull();
+}
 
 describe("HeroSearchModes", () => {
   it("varsayılan: Tarihle Ara seçili, panel görünür", async () => {
@@ -106,205 +105,101 @@ describe("HeroSearchModes", () => {
   });
 });
 
-describe("HeroAiSearch — akıllı karma akış", () => {
-  it("temiz sonuç: kompakt özet çipleri → kısa bekleme → otomatik /arama", async () => {
+describe("HeroAiSearch — doğrudan arama", () => {
+  it("Villa Bul → ara ekran olmadan doğrudan /arama", async () => {
     await renderModes();
     await ask("Kalkan'da 6 kişilik, korunaklı havuzlu ve jakuzili villa arıyorum.");
-    const s = summary();
-    expect(within(s).getByRole("button", { name: editName("Kalkan") })).toBeInTheDocument();
-    expect(within(s).getByRole("button", { name: editName("6 kişi") })).toBeInTheDocument();
-    expect(within(s).getByRole("button", { name: editName("Korunaklı Havuz") })).toBeInTheDocument();
-    expect(within(s).getByRole("button", { name: editName("Jakuzi") })).toBeInTheDocument();
-    expect(screen.getByText(dict.redirecting)).toBeInTheDocument();
-    expect(screen.queryByText(dict.reviewTitle)).not.toBeInTheDocument();
-    expect(pushMock).not.toHaveBeenCalled();
-    await expectPush("/arama?bolgeler=kalkan&guests=6&ozellikler=f-kor%2Cf-jak");
     expect(pushMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan&guests=6&ozellikler=f-kor%2Cf-jak");
+    expectNoIntermediateUi();
   });
 
-  it("Düzenle otomatik geçişi iptal eder; Villaları göster ile aranır", async () => {
+  it("Enter tuşu da doğrudan arar", async () => {
     await renderModes();
-    await ask("Kalkan'da 6 kişilik jakuzili villa");
-    fireEvent.click(screen.getByRole("button", { name: dict.editCriteria }));
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: dict.showVillas }));
-    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan&guests=6&ozellikler=f-jak");
+    const input = await openAi();
+    fireEvent.change(input, { target: { value: "Kaş 4 kişi" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kas&guests=4");
   });
 
-  it("çipe dokununca popover açılır; kişi ve özellik düzenlemesi URL'ye yansır", async () => {
+  it("çoklu villa tipi → soru yok; villa kelimesine bağlı tip (baş isim) seçilir", async () => {
     await renderModes();
-    await ask("Kalkan'da 6 kişilik jakuzili villa");
-    fireEvent.click(screen.getByRole("button", { name: editName("6 kişi") }));
-    const dlg = screen.getByRole("dialog", { name: dict.guestsLabel });
-    expect(dlg).not.toHaveAttribute("aria-modal");
-    fireEvent.click(within(dlg).getByRole("button", { name: dict.guestsDecrease }));
-    fireEvent.click(within(dlg).getByRole("button", { name: dict.guestsDecrease }));
-    fireEvent.click(within(dlg).getByRole("button", { name: dict.apply }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: editName("4 kişi") })).toBeInTheDocument();
+    await ask("muhafazakar balayı villası 2 kişi");
+    expect(pushMock).toHaveBeenCalledWith("/arama?villa-turleri=balayi-villalari&guests=2");
+    expectNoIntermediateUi();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: editName("Jakuzi") }));
-    fireEvent.click(screen.getByRole("button", { name: "Jakuzi kaldır" }));
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: dict.showVillas }));
+  it("desteklenmeyen + anlaşılmayan ifadeler aramayı durdurmaz, URL'ye girmez", async () => {
+    await renderModes();
+    await ask("Kalkan 3 yatak odalı denize yakın sessiz villa");
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan");
+  });
+
+  it("yalnız ay → tarih gönderilmez, takvim/soru açılmaz", async () => {
+    await renderModes();
+    await ask("Ağustos ayında Kalkan");
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan");
+    expectNoIntermediateUi();
+  });
+
+  it("geçersiz tarih (30 Şubat) → tarih uygulanmadan diğer kriterlerle aranır", async () => {
+    await renderModes();
+    await ask("30 Şubat Kalkan 4 kişi");
     expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan&guests=4");
   });
 
-  it("+ çipi ile yeni kriter (villa tipi) eklenir", async () => {
-    await renderModes();
-    await ask("Kalkan 2 kişi");
-    fireEvent.click(screen.getByRole("button", { name: dict.addCriterion }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: dict.typeLabel }));
-    fireEvent.change(screen.getByRole("combobox", { name: dict.chooseType }), { target: { value: "type-bal" } });
-    expect(screen.getByRole("button", { name: editName("Balayı Villaları") })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: dict.showVillas }));
-    expect(pushMock).toHaveBeenCalledWith("/arama?villa-turleri=balayi-villalari&bolgeler=kalkan&guests=2");
-  });
-
-  it("çoklu villa tipi → yalnız o kriter için soru; cevaplanınca otomatik aranır", async () => {
-    await renderModes();
-    await ask("muhafazakar balayı villası 2 kişi");
-    expect(screen.getByText(/Birden fazla villa tipi yazdınız/)).toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Balayı Villaları" }));
-    await expectPush("/arama?villa-turleri=balayi-villalari&guests=2");
-  });
-
-  it("desteklenmeyen + anlaşılamayan → küçük uyarı, otomatik geçiş YOK, Villaları göster", async () => {
-    await renderModes();
-    await ask("Kalkan 3 yatak odalı denize yakın sessiz villa");
-    expect(screen.getByText(`${dict.notFilteredLabel}:`)).toBeInTheDocument();
-    expect(screen.getByText("3 yatak odalı")).toBeInTheDocument();
-    expect(screen.getByText("denize yakın")).toBeInTheDocument();
-    expect(screen.getByText(`${dict.notUnderstoodLabel}:`).parentElement).toHaveTextContent("sessiz");
-    expect(screen.getByText(dict.notesHint)).toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: dict.showVillas }));
-    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan");
-  });
-
-  it("yazım önerisi eklenince kalan not yoksa otomatik aranır", async () => {
-    await renderModes();
-    await ask("Fethye 2 kişi");
-    expect(screen.getByText(`${dict.notUnderstoodLabel}:`).parentElement).toHaveTextContent("Fethye");
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Fethiye ekle" }));
-    await expectPush("/arama?bolgeler=fethiye&guests=2");
-  });
-
-  it("yalnız ay → tarih sorusu; Tarihsiz ara mevcut kriterlerle arar", async () => {
-    await renderModes();
-    await ask("Ağustos ayında Kalkan");
-    expect(screen.getByText(/Gün aralığı atamadık/)).toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: dict.searchWithoutDates }));
-    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kalkan");
-  });
-
-  it("tarih sorusu → Tarih seç → tarihler uygulanınca otomatik aranır", async () => {
-    await renderModes();
-    await ask("Ağustos ayında Kalkan 4 kişi");
-    fireEvent.click(screen.getByRole("button", { name: dict.pickDates }));
-    const dlg = screen.getByRole("dialog", { name: dict.dateLabel });
-    const apply = within(dlg).getByRole("button", { name: dict.apply });
-    expect(apply).toBeDisabled();
-    fireEvent.change(within(dlg).getByLabelText(dict.startLabel), { target: { value: "2027-08-03" } });
-    fireEvent.change(within(dlg).getByLabelText(dict.endLabel), { target: { value: "2027-08-10" } });
-    fireEvent.click(apply);
-    await expectPush("/arama?bolgeler=kalkan&start=2027-08-03&end=2027-08-10&guests=4");
-  });
-
-  it("geçersiz tek tarih (30 Şubat) → geçersiz tarih mesajı", async () => {
-    await renderModes();
-    await ask("30 Şubat Kalkan");
-    expect(screen.getByText(fmt(dict.dateIssueInvalidCalendar, { phrase: "30 Şubat" }))).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: dict.pickDates })).toBeInTheDocument();
-    expect(pushMock).not.toHaveBeenCalled();
-  });
-
-  it("tarih aralığı temizse çip gösterilir ve URL'ye YYYY-MM-DD yazılır", async () => {
+  it("tarih aralığı (yıl yok) → gelecekteki ilk uygun yıl, YYYY-MM-DD", async () => {
     await renderModes();
     await ask("2-8 Ağustos Kaş'ta 4 kişilik");
-    expect(within(summary()).getByRole("button", { name: /Ağu/ })).toBeInTheDocument();
-    await expectPush("/arama?bolgeler=kas&start=2027-08-02&end=2027-08-08&guests=4");
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kas&start=2027-08-02&end=2027-08-08&guests=4");
   });
 
-  it("hiçbir şey anlaşılmadı → örnekler + Tarihle Ara'ya geç", async () => {
+  it("\"20 25 haziran\" ayırıcısız aralık", async () => {
+    await renderModes();
+    await ask("Kaş 2 kişi tarihlerim 20 25 haziran");
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kas&start=2027-06-20&end=2027-06-25&guests=2");
+  });
+
+  it("hiçbir kriter yoksa yönlendirme yok; kısa satır + Tarihle Ara", async () => {
     await renderModes();
     await ask("asdf qwerty");
+    expect(pushMock).not.toHaveBeenCalled();
     expect(screen.getByText(dict.nothingParsed)).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: dict.understoodLabel })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: dict.example1 })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: dict.showVillas })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: dict.switchToDate }));
     expect(screen.getByRole("tab", { name: dict.tabDate })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("date-panel")).toBeVisible();
   });
 
-  it("mobil: çip düzenleyici body'ye portal edilen alt sayfa (aria-modal) olarak açılır", async () => {
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn((q: string) => ({
-        matches: q.includes("max-width"),
-        media: q,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }))
-    );
+  it("örnek arama tıklanınca doğrudan aranır", async () => {
     await renderModes();
-    await ask("Kalkan'da 6 kişilik jakuzili villa");
-    fireEvent.click(screen.getByRole("button", { name: editName("Kalkan") }));
-    const dlg = screen.getByRole("dialog", { name: dict.regionsLabel });
-    expect(dlg).toHaveAttribute("aria-modal", "true");
-    expect(summary().contains(dlg)).toBe(false);
-    expect(document.querySelector("[data-ai-sheet]")).not.toBeNull();
-    fireEvent.click(within(dlg).getByRole("button", { name: dict.close }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await openAi();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: dict.example3 }));
+    });
+    expect(pushMock).toHaveBeenCalledWith("/arama?villa-turleri=balayi-villalari&bolgeler=fethiye&guests=2");
   });
 
-  it("EN arayüz: çipler İngilizce, URL Tarihle Ara ile aynı localeHref hedefi", async () => {
+  it.each([
+    ["en", "Conservative villa in Kas for 2 people", "/arama?villa-turleri=muhafazakar-villalar&bolgeler=kas&guests=2", /^\/en\/search\?/],
+    ["de", "Flitterwochen Villa in Kalkan für 2 Personen vom 20. bis 25. Juni", "/arama?villa-turleri=balayi-villalari&bolgeler=kalkan&start=2027-06-20&end=2027-06-25&guests=2", /^\/de\/suche\?/],
+  ] as const)("%s: doğrudan localeHref hedefi", async (loc, q, path, re) => {
     const { default: HeroSearchModes } = await import("@/app/components/ui/hero/_components/HeroSearchModes");
-    const en = getDictionary("en").home.aiSearch;
+    const d = getDictionary(loc).home.aiSearch;
     render(
-      <HeroSearchModes locale="en">
+      <HeroSearchModes locale={loc}>
         <DatePanelStub />
       </HeroSearchModes>
     );
-    fireEvent.click(screen.getByRole("tab", { name: en.tabAi }));
-    const input = await screen.findByPlaceholderText(en.placeholder);
-    fireEvent.change(input, { target: { value: "Conservative villa in Kas for 2 people" } });
+    fireEvent.click(screen.getByRole("tab", { name: d.tabAi }));
+    const input = await screen.findByPlaceholderText(d.placeholder);
+    fireEvent.change(input, { target: { value: q } });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: en.submit }));
+      fireEvent.click(screen.getByRole("button", { name: d.submit }));
     });
-    expect(screen.getByRole("button", { name: fmt(en.editChip, { label: "Conservative Villas" }) })).toBeInTheDocument();
-    expect(screen.getByText(en.redirecting)).toBeInTheDocument();
-    await expectPush(localeHref("/arama?villa-turleri=muhafazakar-villalar&bolgeler=kas&guests=2", "en"));
-    expect(pushMock.mock.calls[0][0]).toMatch(/^\/en\/search\?/);
-  });
-
-  it("DE arayüz: URL /de/suche", async () => {
-    const { default: HeroSearchModes } = await import("@/app/components/ui/hero/_components/HeroSearchModes");
-    const de = getDictionary("de").home.aiSearch;
-    render(
-      <HeroSearchModes locale="de">
-        <DatePanelStub />
-      </HeroSearchModes>
-    );
-    fireEvent.click(screen.getByRole("tab", { name: de.tabAi }));
-    const input = await screen.findByPlaceholderText(de.placeholder);
-    fireEvent.change(input, { target: { value: "Luxusvilla in Kalkan für 4 Personen" } });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: de.submit }));
-    });
-    await expectPush(localeHref("/arama?villa-turleri=luks-villalar&bolgeler=kalkan&guests=4", "de"));
-    expect(pushMock.mock.calls[0][0]).toMatch(/^\/de\/suche\?/);
+    expect(pushMock).toHaveBeenCalledWith(localeHref(path, loc));
+    expect(pushMock.mock.calls[0][0]).toMatch(re);
   });
 
   it("kullanıcı metni taksonomi isteği dışında hiçbir yere gönderilmez", async () => {
@@ -313,5 +208,6 @@ describe("HeroAiSearch — akıllı karma akış", () => {
     const calls = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     expect(calls.every(([u]) => u === "/api/public/taxonomies")).toBe(true);
     expect(JSON.stringify(calls)).not.toContain("gizli");
+    expect(JSON.stringify(pushMock.mock.calls)).not.toContain("gizli");
   });
 });

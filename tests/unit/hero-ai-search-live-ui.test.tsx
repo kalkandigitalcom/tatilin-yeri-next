@@ -1,14 +1,17 @@
 /* ===============================================================
-   🧪 HERO AI — CANLI TAKSONOMİ: TİP / ÖZELLİK ÇAKIŞMASI ARAYÜZDE
+   🧪 HERO AI — CANLI TAKSONOMİ ADLARIYLA DOĞRUDAN ARAMA
    ===============================================================
-   "ısıtmalı kapalı havuz" ve "çocuk oyun alanı" hem bir villa tipine
-   hem bir özelliğe uyar. Arayüz OTOMATİK SEÇMEZ ve otomatik arama
-   yapmaz; yalnız bu kriter için küçük bir soru sorar. Cevaptan sonra
-   başka not yoksa mevcut /arama URL'sine geçer.
-   (Sözlük modül düzeyinde önbelleklendiği için ayrı dosya.)
+   DasVilla referansı: "Üzümlü'de 2 kişilik balayı villası arıyorum
+   tarihlerim 20 25 haziran" → ara ekran olmadan sonuç sayfası
+   (bizde: canonical Üzümlü + Balayı Villaları + 2 kişi + 20–25.06.2027).
+   Tip/özellik çakışmaları ve aynı adlı alt bölgeler bağlamla, soru
+   sorulmadan çözülür. (Sözlük modül düzeyinde önbelleklendiği için
+   ayrı dosya.)
    =============================================================== */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+
+import { localeHref } from "@/lib/i18n/locale-href";
 
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 
@@ -20,7 +23,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
 }));
 
-const dict = getDictionary("tr").home.aiSearch;
 
 beforeEach(() => {
   pushMock.mockReset();
@@ -36,52 +38,47 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function ask(text: string) {
+async function ask(text: string, locale: "tr" | "en" | "de" = "tr") {
   const { default: HeroAiSearch } = await import("@/app/components/ui/hero/_components/HeroAiSearch");
-  render(<HeroAiSearch locale="tr" />);
-  fireEvent.change(screen.getByPlaceholderText(dict.placeholder), { target: { value: text } });
+  const d = getDictionary(locale).home.aiSearch;
+  render(<HeroAiSearch locale={locale} />);
+  fireEvent.change(screen.getByPlaceholderText(d.placeholder), { target: { value: text } });
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: dict.submit }));
+    fireEvent.click(screen.getByRole("button", { name: d.submit }));
   });
 }
-const sleep = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
 
-describe("Tip/özellik çakışması — otomatik seçim yok", () => {
-  it("ısıtmalı kapalı havuz → soru; özellik seçilince aranır", async () => {
-    await ask("Kalkan ısıtmalı kapalı havuz");
-    expect(screen.getByText(/birden fazla filtreye uyuyor/)).toBeInTheDocument();
-    const typeBtn = screen.getByRole("button", { name: "Kapalı Havuzlu Isıtmalı Villalar" });
-    const featBtn = screen.getByRole("button", { name: "Kapalı Havuzu Isıtmalı" });
-    expect(typeBtn).toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(featBtn);
-    await waitFor(() => expect(pushMock).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    const url = pushMock.mock.calls[0][0] as string;
-    expect(url).toMatch(/^\/arama\?/);
-    expect(url).toContain("bolgeler=kalkan");
-    expect(url).toContain("ozellikler=");
-    expect(url).not.toContain("villa-turleri=");
+const DASVILLA_TR = "/arama?villa-turleri=balayi-villalari&bolgeler=uzumlu&start=2027-06-20&end=2027-06-25&guests=2";
+
+describe("DasVilla referans sorgusu — doğrudan sonuç", () => {
+  it.each([
+    ["tr", "Üzümlü'de 2 kişilik balayı villası arıyorum tarihlerim 20 25 haziran"],
+    ["tr", "Üzümlü'de 2 kişilik balayı villası 20-25 haziran"],
+    ["tr", "Üzümlü balayı villası 2 kişi 20 haziranda giriş 25 haziranda çıkış"],
+    ["en", "Honeymoon villa in Uzumlu for 2 people from 20 June to 25 June"],
+    ["de", "Flitterwochen-Villa in Üzümlü für 2 Personen vom 20. bis 25. Juni"],
+  ] as const)("[%s] %s", async (loc, q) => {
+    await ask(q, loc);
+    expect(pushMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith(localeHref(DASVILLA_TR, loc));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 
-  it("çocuk oyun alanı → soru; tip seçilince aranır", async () => {
-    await ask("çocuk oyun alanı olan villa");
-    expect(screen.getByRole("button", { name: "Çocuk Oyun Alanlı Villalar" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Çocuk Oyun Alanı" })).toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Çocuk Oyun Alanlı Villalar" }));
-    await waitFor(
-      () => expect(pushMock).toHaveBeenCalledWith("/arama?villa-turleri=cocuk-oyun-alanli-villalar"),
-      { timeout: 2000 }
-    );
+  it("\"Fethiye Üzümlü\" bağlamı Fethiye'deki kaydı seçer", async () => {
+    await ask("Fethiye Üzümlü 2 kişi");
+    expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=fethiye-uzumlu&guests=2");
   });
+});
 
-  it("Hiçbiri seçilirse ve başka kriter yoksa 'anlaşılamadı' durumuna düşer, arama yapılmaz", async () => {
-    await ask("çocuk oyun alanı");
-    fireEvent.click(screen.getByRole("button", { name: dict.choiceSkip }));
-    expect(screen.getByText(dict.nothingParsed)).toBeInTheDocument();
-    await sleep(900);
-    expect(pushMock).not.toHaveBeenCalled();
+describe("Tip/özellik çakışması — soru yok, bağlamla otomatik", () => {
+  it.each([
+    ["Kalkan ısıtmalı kapalı havuz", "/arama?bolgeler=kalkan&ozellikler=F%3AKapal%C4%B1+Havuzu+Is%C4%B1tmal%C4%B1"],
+    ["Kalkan ısıtmalı kapalı havuzlu villa", "/arama?villa-turleri=kapali-havuzlu-isitmali-villalar&bolgeler=kalkan"],
+    ["çocuk oyun alanlı villa", "/arama?villa-turleri=cocuk-oyun-alanli-villalar"],
+    ["çocuk oyun alanlı balayı villası", "/arama?villa-turleri=balayi-villalari&ozellikler=F%3A%C3%87ocuk+Oyun+Alan%C4%B1"],
+  ])("%s", async (q, url) => {
+    await ask(q);
+    expect(pushMock).toHaveBeenCalledWith(url);
   });
 });

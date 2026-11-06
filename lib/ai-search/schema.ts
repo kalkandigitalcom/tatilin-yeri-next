@@ -112,6 +112,12 @@ export const ParseResultSchema = z.object({
           z.object({ kind: z.literal("guests"), id: nonEmpty, label: nonEmpty, value: z.number().int().min(1).max(50) }),
         ])
       ).min(2),
+      /** Bağlam ipucu (otomatik çözümleme için): çoklu tipte villa
+       *  kelimesine en yakın (baş isim) tipin id'si. */
+      head: z.string().optional(),
+      /** Bağlam ipucu: ifade bir villa kelimesine bağlı ("…lı villa",
+       *  "villa with …"). */
+      attachedToVilla: z.boolean().optional(),
     })
   ),
   unsupported: z.array(
