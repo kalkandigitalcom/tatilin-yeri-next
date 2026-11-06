@@ -9,6 +9,7 @@ import {
 } from "@/lib/hero.helpers";
 
 import HeroSearchPanel from "./hero/_components/HeroSearchPanel";
+import HeroSearchModes from "./hero/_components/HeroSearchModes";
 /* 🛡️ PHASE 11 — Hero locale-aware. İÇERİK (badge/title/subtitle/CTA
    metinleri) zaten `resolveHeroContent` tarafından locale'e göre
    çözülüp `content` prop'uyla gelir; burada yalnız görsel alt metni
@@ -434,8 +435,12 @@ export default function Hero({
         </div>
         </div>
 
-        {/* ─── FLOATING SEARCH PANEL — client island, AYNEN ───── */}
-        <HeroSearchPanel locale={locale} />
+        {/* ─── FLOATING SEARCH PANEL — client island, AYNEN ─────
+            🛡️ ADDITIVE — "Tarihle Ara" | "Yapay Zekâ ile Ara" sekmeleri.
+            HeroSearchPanel değişmeden `children` olarak geçer. */}
+        <HeroSearchModes locale={locale}>
+          <HeroSearchPanel locale={locale} />
+        </HeroSearchModes>
       </div>
 
       {/* 🛡️ DATEPICKER PORTAL TARGET — HeroSearchPanel'in
