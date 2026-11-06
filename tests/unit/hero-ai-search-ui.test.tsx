@@ -202,6 +202,40 @@ describe("HeroAiSearch — doğrudan arama", () => {
     expect(pushMock.mock.calls[0][0]).toMatch(re);
   });
 
+  it.each(["tr", "en", "de"] as const)(
+    "%s: teklif bağlantısı ve gizlilik açıklaması gösterilmez",
+    async (loc) => {
+      const { default: HeroSearchModes } = await import("@/app/components/ui/hero/_components/HeroSearchModes");
+      const d = getDictionary(loc).home.aiSearch;
+      const { container } = render(
+        <HeroSearchModes locale={loc}>
+          <DatePanelStub />
+        </HeroSearchModes>
+      );
+      fireEvent.click(screen.getByRole("tab", { name: d.tabAi }));
+      await screen.findByPlaceholderText(d.placeholder);
+      expect(container.querySelector('a[href*="teklif-al"], a[href*="request-offer"], a[href*="angebot"]')).toBeNull();
+      expect(container.querySelectorAll("a").length).toBe(0);
+      expect(container.textContent).not.toMatch(
+        /Biz bulalım|Let us find it|Wir finden es|yalnızca tarayıcınızda|only in your browser|nur in Ihrem Browser/
+      );
+      expect("offerPrompt" in d || "offerLink" in d || "privacyNote" in d).toBe(false);
+    }
+  );
+
+  it("input: saf beyaz alan, lacivert yazı, okunaklı placeholder, turkuaz odak", async () => {
+    await renderModes();
+    const input = await openAi();
+    const cls = input.className;
+    expect(cls).toContain("!bg-[#FFFFFF]");
+    expect(cls).toContain("!text-[#0b1f3a]");
+    expect(cls).toContain("placeholder:!text-[#64748b]");
+    const field = input.closest("label")!;
+    expect(field.className).toContain("bg-[#FFFFFF]");
+    expect(field.className).toContain("focus-within:!border-[#02AAE5]");
+    expect(field.className).not.toMatch(/bg-white\/85/);
+  });
+
   it("kullanıcı metni taksonomi isteği dışında hiçbir yere gönderilmez", async () => {
     await renderModes();
     await ask("Kalkan 6 kişilik gizli-metin-123");

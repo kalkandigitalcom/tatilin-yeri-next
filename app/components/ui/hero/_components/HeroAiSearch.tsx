@@ -1,13 +1,11 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
-import { localeHref } from "@/lib/i18n/locale-href";
 import { todayIstanbulYmd } from "@/lib/date-format";
 import { parseNaturalQuery } from "@/lib/ai-search/parse";
 import { autoResolve } from "@/lib/ai-search/auto-resolve";
@@ -107,7 +105,19 @@ export default function HeroAiSearch({ locale = DEFAULT_LOCALE, onSwitchToDate }
         aria-busy={working}
         className="relative flex flex-col gap-2 rounded-[16px] border border-white/30 bg-gradient-to-b from-white/30 to-white/[0.14] p-2 shadow-[0_20px_50px_-24px_rgba(9,115,186,0.35),0_14px_38px_-26px_rgba(237,121,38,0.3)] backdrop-blur-xl md:flex-row md:items-stretch md:p-2.5"
       >
-        <label className="flex min-w-0 flex-1 items-start gap-3 rounded-xl border border-white/50 bg-white/85 px-4 py-3">
+        {/* Saf beyaz alan: kenarlık ve odak halkası etikette (focus-within);
+            textarea'nın global form stilleri (kenarlık, renk, odak gölgesi,
+            placeholder) ve global `* { border-color }` kuralı burada
+            nötrlenir — globals.css katmansız olduğu için `!` ile. */}
+        <label
+          className={[
+            "group/ai-input flex min-w-0 flex-1 cursor-text items-start gap-3 rounded-xl px-4 py-3",
+            "border !border-[#dbe3ee] bg-[#FFFFFF] shadow-[0_1px_2px_rgba(11,31,58,0.06)]",
+            "transition-[border-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+            "hover:not-focus-within:!border-[#9fd3ec]",
+            "focus-within:!border-[#02AAE5] focus-within:shadow-[0_0_0_4px_rgba(2,170,229,0.18),0_8px_22px_-10px_rgba(2,170,229,0.45)]",
+          ].join(" ")}
+        >
           <Sparkles size={18} aria-hidden className="mt-0.5 shrink-0 text-[#ED7926]" />
           <span className="sr-only">{dict.inputLabel}</span>
           <textarea
@@ -126,7 +136,7 @@ export default function HeroAiSearch({ locale = DEFAULT_LOCALE, onSwitchToDate }
             }}
             placeholder={dict.placeholder}
             aria-describedby="hero-ai-examples"
-            className="min-h-[24px] w-full resize-none bg-transparent text-[15px] text-[var(--color-stone-900)] placeholder:text-[var(--color-stone-500)] focus:outline-none [field-sizing:content] max-h-[96px]"
+            className="min-h-[24px] max-h-[96px] w-full resize-none !rounded-none !border-0 !bg-[#FFFFFF] p-0 text-[15px] leading-[1.5] !text-[#0b1f3a] caret-[#02AAE5] placeholder:!text-[#64748b] focus:outline-none focus:!shadow-none [field-sizing:content]"
           />
         </label>
         <button
@@ -182,14 +192,6 @@ export default function HeroAiSearch({ locale = DEFAULT_LOCALE, onSwitchToDate }
           </button>
         ))}
       </div>
-
-      <p className="mt-3 text-[13px] text-white/90 [text-shadow:0_1px_10px_rgb(0_15_45/50%)]">
-        {dict.offerPrompt}{" "}
-        <Link href={localeHref("/teklif-al", locale)} className="font-semibold underline underline-offset-[3px]">
-          {dict.offerLink} →
-        </Link>
-        <span className="mt-1 block text-[11.5px] text-white/70">{dict.privacyNote}</span>
-      </p>
     </div>
   );
 }

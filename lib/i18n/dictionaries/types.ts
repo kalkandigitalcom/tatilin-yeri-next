@@ -659,9 +659,6 @@ export type Dictionary = {
       example1: string;
       example2: string;
       example3: string;
-      privacyNote: string;
-      offerPrompt: string;
-      offerLink: string;
       nothingParsed: string;
       switchToDate: string;
       emptyQuery: string;
