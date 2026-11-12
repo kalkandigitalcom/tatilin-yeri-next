@@ -41,7 +41,8 @@ export default function HeroVoiceButton({ status, error, speaking, labels, descr
 
   const listening = status === "listening";
   const starting = status === "starting";
-  const active = listening || starting;
+  const stopping = status === "stopping"; // önceki oturum kapanıyor (kısa süre)
+  const active = listening || starting || stopping;
   const blocked = status === "error" && (error === "denied" || error === "service-off" || error === "unsupported");
 
   const onClick = (e: MouseEvent<HTMLButtonElement>) => {
@@ -52,7 +53,7 @@ export default function HeroVoiceButton({ status, error, speaking, labels, descr
 
   return (
     <span className="relative -my-2.5 -mr-2 inline-flex shrink-0">
-      {active && (
+      {(listening || starting) && (
         <span
           aria-hidden
           data-speaking={speaking ? "true" : "false"}
@@ -63,6 +64,8 @@ export default function HeroVoiceButton({ status, error, speaking, labels, descr
         type="button"
         onClick={onClick}
         aria-pressed={active}
+        aria-busy={starting || stopping}
+        aria-disabled={stopping}
         aria-label={active ? labels.stop : labels.start}
         aria-describedby={describedBy}
         title={active ? labels.stop : labels.start}
@@ -76,7 +79,7 @@ export default function HeroVoiceButton({ status, error, speaking, labels, descr
             : blocked
               ? "!bg-transparent !text-[#94a3b8] hover:!bg-[#f1f5f9]"
               : "!bg-transparent !text-[#0b1f3a] hover:!bg-[#eef7fc] hover:!text-[#0973BA]",
-          starting ? "opacity-80" : "",
+          starting || stopping ? "opacity-80" : "",
         ].join(" ")}
       >
         {active ? (

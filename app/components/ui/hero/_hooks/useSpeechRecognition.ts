@@ -18,41 +18,62 @@ import {
    verdiği `onText` ile METİN ALANINA yazmak. Arama başlatmaz, parser
    çağırmaz, URL kurmaz, sunucuya bir şey göndermez.
 
-   Durumlar: idle → starting → listening → done | error  (unsupported:
-   tarayıcıda API yok / güvenli bağlam değil).
+   Durumlar:
+     idle → starting → listening → stopping → done | error
+     (unsupported: tarayıcıda API yok / güvenli bağlam değil)
 
    Metin kuralları:
      • Oturum başında alandaki metin `base` olarak saklanır; ASLA silinmez.
      • Konuşma `base`'in sonuna tek boşlukla eklenir (anlık, ara sonuçlar
-       dahil).
+       dahil). Her yeni oturumun `base`'i bir önceki oturumun sonucudur →
+       art arda konuşmalar uç uca eklenir.
      • stop() / doğal bitiş → kesin + son ara metin kalır.
-     • cancel() / hata / sekme değişimi / arka plan → yalnız KESİNLEŞMİŞ
-       konuşma kalır, tamamlanmamış (ara) metin geri alınır.
+     • cancel() / hata / sekme değişimi / arka plan → yalnız O OTURUMUN
+       kesinleşmiş metni kalır, tamamlanmamış (ara) metni geri alınır.
      • detach() (kullanıcı yazmaya başladı / Villa Bul) → alana artık
        dokunulmaz; kullanıcının o anki metni geçerlidir.
 
-   Yaşam döngüsü:
-     • Aynı anda tek oturum: `sessionRef` + oturum kapanış bayrağı; hızlı
-       tekrar tıklamalar ikinci oturum açmaz.
-     • Her oturum yeni bir tanıyıcı örneği oluşturur; bitişte tüm olay
-       işleyicileri null'lanır (eski olay sızıntısı yok).
-     • `onend` gelmezse (bazı mobil tarayıcılar) yedek zamanlayıcı oturumu
-       kapatır. En uzun oturum süresi sınırlıdır.
-     • enabled=false (sekme değişti), dil değişti, sayfa gizlendi
-       (visibilitychange / pagehide) → cancel(). Unmount → sessiz abort.
+   ── TEKRAR DİNLEME DÜZELTMESİ (kök neden) ──────────────────────────
+   Önceki sürüm oturumun kapanmasını yalnız tarayıcının `onend`
+   olayına bırakıyordu. Gerçek tarayıcılarda bu olay güvenilir değil:
+     • iOS Safari'de (ve askıda kalan Chromium oturumlarında) kullanıcı
+       sustuktan sonra `onend` gelmeyebiliyor; oturum "dinleniyor"da
+       kalıyor, sonraki dokunuş YENİ oturum yerine "durdur" sayılıyordu.
+     • `onerror` sonrası `onend` gelmezse kilit 20+ sn sürüyordu.
+     • Yedek kapanış yerel tanıyıcıyı `abort()` etmeden bırakıyordu.
+     • Kapanış sırasında (görünmeyen "closing" hâli) dokunuşlar sessizce
+       yok sayılıyordu.
+   Düzeltme: oturum kapanışı artık bu hook'un kontrolünde:
+     • Sessizlik bekçisi: son sonuçtan `silenceMs` sonra stop().
+     • Konuşma yok bekçisi: başlangıçtan/onstart'tan sonra hiç ses/sonuç
+       yoksa stop() → "duyamadık".
+     • stop()/abort()/onerror sonrası `onend` beklenir; gelmezse kısa süre
+       içinde yerel tanıyıcı abort() edilir ve oturum ZORLA kapatılır.
+     • Kapanış sürerken buton "stopping" durumunu gösterir (≤ ~1,2 sn).
+     • Sayfa görünür olduğunda takılı kalmış oturum hemen kapatılır.
+     • Her oturum yeni tanıyıcı örneğiyle başlar; eski oturumun geç gelen
+       olayları oturum kimliğiyle (id) yok sayılır, işleyicileri null'lanır.
+     • Tarayıcının kendiliğinden gönderdiği "aborted" hatası artık sessizce
+       yutulmaz (yalnız bizim istediğimiz iptal sessizdir).
    =============================================================== */
 
-export type VoiceStatus = "unsupported" | "idle" | "starting" | "listening" | "done" | "error";
+export type VoiceStatus = "unsupported" | "idle" | "starting" | "listening" | "stopping" | "done" | "error";
 
 type EndMode = "keep" | "final-only" | "detach";
+type Phase = "starting" | "listening" | "closing";
 
 type Session = {
   id: number;
   rec: SpeechRecognitionLike;
-  /** stop/abort çağrıldı; ikinci kez çağrılmaz. */
-  closing: boolean;
+  phase: Phase;
+  /** start() zamanı (ms) — çift dokunuş koruması için. */
+  startedAt: number;
+  /** Bitiş kipi + sessiz (mesajsız) kapanış. */
   setMode: (m: EndMode, silent?: boolean) => void;
-  finish: () => void;
+  /** stop()/abort() isteği (tek kez) + `onend` gelmezse zorla kapanış. */
+  close: (how: "stop" | "abort") => void;
+  /** Hemen kapat (yerel tanıyıcı abort edilir). */
+  forceFinish: () => void;
 };
 
 export type UseSpeechRecognitionOptions = {
@@ -66,9 +87,20 @@ export type UseSpeechRecognitionOptions = {
   onText: (text: string) => void;
   /** En uzun dinleme süresi (ms). */
   maxDurationMs?: number;
+  /** Son sonuçtan sonra bu kadar sessizlik → oturum biter (ms). */
+  silenceMs?: number;
+  /** onstart sonrası hiç ses/sonuç yoksa → "duyamadık" (ms). */
+  noSpeechMs?: number;
+  /** start() sonrası onstart hiç gelmezse → kapat (ms). */
+  startTimeoutMs?: number;
   /** stop()/abort() sonrası `onend` beklenecek en uzun süre (ms). */
   endGraceMs?: number;
+  /** onerror sonrası `onend` beklenecek en uzun süre (ms). */
+  errorGraceMs?: number;
 };
+
+/** Bu süre içindeki ikinci dokunuş "çift dokunuş" sayılır, yok sayılır. */
+const DOUBLE_TAP_MS = 600;
 
 const subscribeNoop = () => () => {};
 const clientSupported = () => getSpeechRecognitionCtor() !== null;
@@ -80,7 +112,11 @@ export function useSpeechRecognition({
   maxLength,
   onText,
   maxDurationMs = 20000,
-  endGraceMs = 2500,
+  silenceMs = 2000,
+  noSpeechMs = 8000,
+  startTimeoutMs = 12000,
+  endGraceMs = 1200,
+  errorGraceMs = 800,
 }: UseSpeechRecognitionOptions) {
   /* SSR'de false; istemcide gerçek destek (hydration uyumlu). */
   const supported = useSyncExternalStore(subscribeNoop, clientSupported, serverSupported);
@@ -104,7 +140,7 @@ export function useSpeechRecognition({
 
   const start = useCallback(
     (currentText: string) => {
-      if (sessionRef.current) return; // tek oturum
+      if (sessionRef.current) return; // tek oturum: önceki oturum TAMAMEN kapanmadan yeni oturum yok
       const Ctor = getSpeechRecognitionCtor();
       if (!Ctor) {
         safeSet("error", "unsupported");
@@ -122,9 +158,21 @@ export function useSpeechRecognition({
       let mode: EndMode = "keep";
       let silent = false;
       let pendingError: VoiceErrorKind | null = null;
+      let requested: "stop" | "abort" | null = null; // bizim istediğimiz kapanış
       let closed = false;
-      let maxTimer: ReturnType<typeof setTimeout> | null = null;
-      let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
+      /* Zamanlayıcılar — hepsi `release()` ile temizlenir. */
+      const timers = new Map<string, ReturnType<typeof setTimeout>>();
+      const setTimer = (key: string, ms: number, fn: () => void) => {
+        const prev = timers.get(key);
+        if (prev) clearTimeout(prev);
+        timers.set(key, setTimeout(fn, ms));
+      };
+      const clearTimer = (key: string) => {
+        const t = timers.get(key);
+        if (t) clearTimeout(t);
+        timers.delete(key);
+      };
 
       const rec = new Ctor();
       rec.lang = lang;
@@ -140,11 +188,13 @@ export function useSpeechRecognition({
         rec.onnomatch = null;
         rec.onspeechstart = null;
         rec.onspeechend = null;
-        if (maxTimer) clearTimeout(maxTimer);
-        if (graceTimer) clearTimeout(graceTimer);
-        maxTimer = graceTimer = null;
+        for (const t of timers.values()) clearTimeout(t);
+        timers.clear();
       };
 
+      const isCurrent = () => !closed && sessionRef.current?.id === id;
+
+      /** Oturumu kapatır, kilidi açar, metni ve durumu sonuçlandırır. */
       const finish = () => {
         if (closed) return;
         closed = true;
@@ -164,9 +214,48 @@ export function useSpeechRecognition({
           safeSet("error", pendingError);
           return;
         }
-        const heard = `${finalText} ${interimText}`.trim();
-        if (mode === "keep" && !heard) safeSet("error", "no-speech");
+        const heard = (mode === "keep" ? `${finalText} ${interimText}` : finalText).trim();
+        if (!heard) safeSet("error", "no-speech");
         else safeSet("done");
+      };
+
+      /** `onend` gelmese bile: yerel tanıyıcıyı durdur ve hemen bitir. */
+      const forceFinish = () => {
+        if (closed) return;
+        rec.onend = null; // geç gelecek onend artık bu oturuma dokunmaz
+        if (requested !== "abort") {
+          requested = "abort";
+          try {
+            rec.abort(); // yerel tanıyıcı mikrofonu bırakmalı
+          } catch {
+            /* zaten kapalı */
+          }
+        }
+        finish();
+      };
+
+      /** Kapanış isteği (tek kez); `onend` bekleme süresi dolarsa zorla kapat. */
+      const close = (how: "stop" | "abort") => {
+        if (closed) return;
+        const s = sessionRef.current;
+        if (s?.id === id) s.phase = "closing";
+        if (requested === null || (requested === "stop" && how === "abort")) {
+          requested = how;
+          clearTimer("silence");
+          clearTimer("noSpeech");
+          clearTimer("startTimeout");
+          clearTimer("max");
+          try {
+            if (how === "stop") rec.stop();
+            else rec.abort();
+          } catch {
+            forceFinish();
+            return;
+          }
+        }
+        if (closed) return; // bazı motorlar onend'i stop()/abort() içinde eşzamanlı gönderir
+        if (mountedRef.current) safeSet("stopping");
+        setTimer("grace", endGraceMs, forceFinish);
       };
 
       const setMode = (m: EndMode, quiet = false) => {
@@ -174,13 +263,30 @@ export function useSpeechRecognition({
         silent = silent || quiet;
       };
 
-      const isCurrent = () => !closed && sessionRef.current?.id === id;
+      /** Ses/sonuç geldikçe "konuşma yok" bekçisi kapanır, sessizlik bekçisi yenilenir. */
+      const onActivity = (withResult: boolean) => {
+        clearTimer("noSpeech");
+        if (withResult) setTimer("silence", silenceMs, () => isCurrent() && close("stop"));
+      };
 
       rec.onstart = () => {
-        if (isCurrent()) safeSet("listening");
+        if (!isCurrent()) return;
+        clearTimer("startTimeout");
+        const s = sessionRef.current;
+        if (s && s.phase === "starting") {
+          s.phase = "listening";
+          safeSet("listening");
+        }
+        setTimer("noSpeech", noSpeechMs, () => {
+          if (!isCurrent()) return;
+          if (!pendingError) pendingError = "no-speech";
+          close("stop");
+        });
       };
       rec.onspeechstart = () => {
-        if (isCurrent() && mountedRef.current) setSpeaking(true);
+        if (!isCurrent()) return;
+        onActivity(false);
+        if (mountedRef.current) setSpeaking(true);
       };
       rec.onspeechend = () => {
         if (isCurrent() && mountedRef.current) setSpeaking(false);
@@ -190,6 +296,7 @@ export function useSpeechRecognition({
         const r = readResults(e);
         finalText = r.final;
         interimText = r.interim;
+        onActivity(true);
         if (mode !== "detach") onTextRef.current(mergeVoiceText(base, `${finalText} ${interimText}`, maxLength));
       };
       rec.onnomatch = () => {
@@ -197,65 +304,61 @@ export function useSpeechRecognition({
       };
       rec.onerror = (e) => {
         if (!isCurrent()) return;
-        const kind = mapSpeechError(e.error);
-        if (kind) {
-          pendingError = kind;
-          if (mode === "keep") mode = "final-only"; // hata: ara metin geri alınır
-        }
+        /* Bizim istediğimiz kapanışın (stop/abort) "aborted" hatası sessizdir
+           (iOS stop() sonrası da "aborted" gönderebiliyor); tarayıcının
+           KENDİLİĞİNDEN gönderdiği "aborted" ise genel hata olarak gösterilir. */
+        const kind = e.error === "aborted" && requested === null ? "generic" : mapSpeechError(e.error);
+        if (kind && !pendingError) pendingError = kind;
+        if (mode === "keep" && kind) mode = "final-only"; // hata: ara metin geri alınır
+        setTimer("grace", errorGraceMs, forceFinish); // onend gelmezse de kilit açılır
       };
-      rec.onend = () => finish();
+      rec.onend = () => {
+        if (closed) return;
+        finish();
+      };
 
-      sessionRef.current = { id, rec, closing: false, setMode, finish };
+      sessionRef.current = { id, rec, phase: "starting", startedAt: Date.now(), setMode, close, forceFinish };
       safeSet("starting");
       try {
         rec.start(); // mikrofon izni YALNIZ burada, kullanıcı tıklamasıyla istenir
       } catch {
         pendingError = "generic";
-        mode = "detach";
-        finish();
+        forceFinish();
         return;
       }
-      maxTimer = setTimeout(() => {
+      setTimer("startTimeout", startTimeoutMs, () => {
         if (!isCurrent()) return;
-        try {
-          rec.stop();
-        } catch {
-          /* yoksay */
-        }
-        graceTimer = setTimeout(finish, endGraceMs);
-      }, maxDurationMs);
+        if (!pendingError) pendingError = "generic";
+        mode = "final-only";
+        close("abort");
+      });
+      setTimer("max", maxDurationMs, () => isCurrent() && close("stop"));
     },
-    [lang, maxLength, maxDurationMs, endGraceMs, safeSet]
-  );
-
-  /** Oturumu kapat (abort/stop) ve `onend` gelmezse yedek zamanlayıcıyla bitir. */
-  const end = useCallback(
-    (how: "stop" | "abort", mode: EndMode, quiet = false) => {
-      const s = sessionRef.current;
-      if (!s) return;
-      s.setMode(mode, quiet);
-      if (s.closing) return; // zaten kapanıyor: yalnız bitiş kipi güncellenir
-      s.closing = true;
-      try {
-        if (how === "stop") s.rec.stop();
-        else s.rec.abort();
-      } catch {
-        /* yoksay */
-      }
-      setTimeout(() => s.finish(), endGraceMs);
-    },
-    [endGraceMs]
+    [lang, maxLength, maxDurationMs, silenceMs, noSpeechMs, startTimeoutMs, endGraceMs, errorGraceMs, safeSet]
   );
 
   /** Kullanıcı "dinlemeyi bitir": konuşulan metin alanda kalır. */
-  const stop = useCallback(() => end("stop", "keep"), [end]);
+  const stop = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s) return;
+    s.setMode("keep");
+    s.close("stop");
+  }, []);
   /** Kullanıcı iptal / sekme değişimi / arka plan: tamamlanmamış metin eklenmez. */
-  const cancel = useCallback(() => end("abort", "final-only", true), [end]);
+  const cancel = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s) return;
+    s.setMode("final-only", true);
+    s.close("abort");
+  }, []);
   /** Kullanıcı yazmaya başladı ya da Villa Bul'a bastı: alana artık dokunma. */
   const detach = useCallback(() => {
-    end("abort", "detach", true);
-    if (!sessionRef.current) safeSet("idle");
-  }, [end, safeSet]);
+    const s = sessionRef.current;
+    if (s) {
+      s.setMode("detach", true);
+      s.close("abort");
+    } else safeSet("idle");
+  }, [safeSet]);
   /** "Konuşma tamamlandı" / hata mesajını temizle. */
   const reset = useCallback(() => {
     if (!sessionRef.current) safeSet("idle");
@@ -270,35 +373,43 @@ export function useSpeechRecognition({
   useEffect(() => {
     return () => {
       const s = sessionRef.current;
-      if (s && !s.closing) {
+      if (s) {
         s.setMode("final-only", true);
-        s.closing = true;
-        try {
-          s.rec.abort();
-        } catch {
-          /* yoksay */
-        }
-        setTimeout(() => s.finish(), endGraceMs); // onend gelmezse
+        s.close("abort");
       }
     };
-  }, [lang, endGraceMs]);
+  }, [lang]);
 
-  /* Sayfa arka plana alındı / kapatılıyor → iptal (mikrofon açık kalmasın). */
+  /* Sayfa arka plana alındı → iptal (mikrofon açık kalmasın). Geri
+     gelindiğinde takılı kalmış (kapanmakta olan) oturum hemen kapatılır;
+     arka planda zamanlayıcılar kısılmış olabilir. */
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") cancel();
+      const s = sessionRef.current;
+      if (!s) return;
+      if (document.visibilityState === "hidden") {
+        s.setMode("final-only", true);
+        s.close("abort");
+      } else if (s.phase === "closing") {
+        s.forceFinish();
+      }
     };
-    const onPageHide = () => cancel();
+    const onPageHide = () => {
+      const s = sessionRef.current;
+      if (!s) return;
+      s.setMode("final-only", true);
+      s.close("abort");
+    };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [cancel]);
+  }, []);
 
-  /* Unmount → sessiz abort, işleyiciler temizlenir, setState yapılmaz. */
+  /* Unmount → sessiz abort, işleyiciler ve zamanlayıcılar temizlenir, setState yok. */
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -306,26 +417,31 @@ export function useSpeechRecognition({
       const s = sessionRef.current;
       if (s) {
         s.setMode("detach", true);
-        if (!s.closing) {
-          s.closing = true;
-          try {
-            s.rec.abort();
-          } catch {
-            /* yoksay */
-          }
-        }
-        s.finish();
+        s.forceFinish();
       }
     };
   }, []);
 
   const status: VoiceStatus = supported ? state.status : "unsupported";
-  const active = state.status === "starting" || state.status === "listening";
+  const active = state.status === "starting" || state.status === "listening" || state.status === "stopping";
 
+  /** Mikrofon butonu:
+   *   • oturum yok → başlat
+   *   • dinleniyor → durdur (konuşulan metin kalır)
+   *   • başlatılıyor (tarayıcı henüz onstart göndermedi):
+   *       – ilk 600 ms içinde → yok say (çift dokunuş ikinci oturum açmaz)
+   *       – daha sonra → takılmış başlatmayı iptal et (yerel tanıyıcı
+   *         abort edilir, kilit HEMEN açılır); sonraki dokunuş yeni oturum
+   *   • kapanıyor → yok say (≤ endGraceMs sonra kilit açılır) */
   const toggle = useCallback(
     (currentText: string) => {
-      if (sessionRef.current) stop();
-      else start(currentText);
+      const s = sessionRef.current;
+      if (!s) start(currentText);
+      else if (s.phase === "listening") stop();
+      else if (s.phase === "starting" && Date.now() - s.startedAt >= DOUBLE_TAP_MS) {
+        s.setMode("final-only", true);
+        s.forceFinish();
+      }
     },
     [start, stop]
   );
