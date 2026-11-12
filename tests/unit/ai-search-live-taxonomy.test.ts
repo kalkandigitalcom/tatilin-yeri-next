@@ -124,8 +124,10 @@ describe("1) Alt bölge adları tek başına", () => {
     expect(kalamar.suggestions).toEqual([]);
     const typo = parse("Kalamr");
     expect(typo.suggestions.map((s) => s.option.id)).not.toContain("L:dalaman");
-    expect(parse("Fethye").suggestions.map((s) => s.option.id)).toEqual(["L:fethiye"]);
-    expect(parse("Fethye").regions).toEqual([]);
+    // v3: tek ve kesin karşılıklı yazım hatası uygulanır (bkz. corrections)
+    expect(parse("Fethye").regions.map((o) => o.id)).toEqual(["L:fethiye"]);
+    expect(parse("Fethye").corrections).toEqual([{ from: "Fethye", to: "Fethiye" }]);
+    expect(parse("Kalamr").regions.map((o) => o.id)).not.toContain("L:dalaman");
   });
 
   it("canlıdaki 67 bölgenin kısa adlarından 'Merkez' ve yaygın kelimeler dışındakiler tanınır", () => {
@@ -250,6 +252,12 @@ describe("3) Küçük eksikler", () => {
       for (const row of rows) {
         for (const [locale, name] of [["tr", row.name], ["en", row.name_by_locale?.en], ["de", row.name_by_locale?.de]] as const) {
           if (!name) continue;
+          /* v3.1 (bilinçli): canlıda Muhafazakar Villalar'ın EN adı
+             "Private Villas". İngilizcede "private villa" her müstakil
+             villa demektir; bu ad tipe bağlanınca sıradan sorgular
+             muhafazakâr tipine daralıyordu (yanlış pozitif). Ad bilerek
+             eşleştirilmez; aşağıdaki ayrı test bunu doğrular. */
+          if (locale === "en" && name.trim().toLowerCase() === "private villas") continue;
           const r = parse(name, locale);
           const ok = ids(kind === "type" ? r.types : r.features).includes(row.id) || choiceIds(r).includes(row.id);
           if (!ok) failed.push(`${kind}/${locale}: ${name}`);
@@ -257,6 +265,15 @@ describe("3) Küçük eksikler", () => {
       }
     }
     expect(failed).toEqual([]);
+  });
+
+  it("'Private Villas' / 'private villa' hiçbir tipe daraltmaz (muhafazakâr değil)", () => {
+    for (const q of ["Private Villas", "private villa", "private villa in Kalkan"]) {
+      const r = parse(q, "en");
+      expect(r.types).toEqual([]);
+      expect(r.choices).toEqual([]);
+    }
+    expect(ids(parse("conservative villa", "en").types)).toEqual(["T:muhafazakar-villalar"]);
   });
 });
 
@@ -369,5 +386,50 @@ describe("Tip + özellik çakışması otomatik seçilmez (UX turu)", () => {
     expect(r.features).toEqual([]);
     expect(r.choices.map((c) => c.reason)).toEqual(["ambiguous_match"]);
     expect(choiceIds(r)).toEqual([...options].sort());
+  });
+});
+
+describe("5) TR / EN / DE eşdeğerleri AYNI gerçek kayda gider (v3.1)", () => {
+  const all = (q: string, l: "tr" | "en" | "de") => {
+    const r = parse(q, l);
+    return [...ids(r.types), ...ids(r.features), ...ids(r.regions), ...choiceIds(r)].sort();
+  };
+  it.each([
+    ["korunaklı havuz", "secluded pool", "sichtgeschützter Pool", ["F:Korunaklı Havuz"]],
+    ["jakuzi", "hot tub", "Whirlpool", ["F:Jakuzi"]],
+    ["çift jakuzi", "double jacuzzi", "Doppel-Whirlpool", ["F:Çift Jakuzi"]],
+    ["sauna", "sauna", "Sauna", ["F:Sauna"]],
+    ["hamam", "turkish bath", "türkisches Bad", ["F:Hamam"]],
+    ["sinema odası", "cinema room", "Kinoraum", ["F:Sinema Odası"]],
+    ["barbekü", "BBQ", "Grill", ["F:Barbekü"]],
+    ["langırt", "table football", "Tischfußball", ["F:Langırt"]],
+    ["bilardo", "billiards", "Billard", ["F:Bilardo"]],
+    ["masa tenisi", "table tennis", "Tischtennis", ["F:Masa Tenisi"]],
+    ["spor salonu", "fitness room", "Fitnessraum", ["F:Spor Salonu"]],
+    ["havlu çarşaf", "towels", "Handtücher", ["F:Havlu / Çarşaf"]],
+    ["jeneratör", "generator", "Generator", ["F:Jeneratör"]],
+    ["geniş bahçe", "spacious garden", "geräumiger Garten", ["F:Geniş Bahçe"]],
+    ["beyaz eşya", "household appliances", "Haushaltsgeräte", ["F:Beyaz Eşya"]],
+    ["merkezi konum", "central location", "zentrale Lage", ["F:Merkezi Konum"]],
+    ["açık otopark", "parking", "Parkplatz", ["F:Açık Otopark"]],
+    ["özel plajlı", "private beach", "Privatstrand", ["F:Özel Plajlı Villa"]],
+    ["wifi", "wi-fi", "WLAN", ["F:Wifi"]],
+    ["saç kurutma makinesi", "hair dryer", "Haartrockner", ["F:Saç Kurutma Makinesi"]],
+    ["muhafazakar villa", "conservative villa", "konservative Villa", ["T:muhafazakar-villalar"]],
+    ["lüks villa", "luxury villa", "Luxusvilla", ["T:luks-villalar"]],
+    ["deniz manzaralı villa", "sea view villa", "Villa mit Meerblick", ["T:deniz-manzarali-villalar"]],
+    ["balayı villası", "honeymoon villa", "Flitterwochen Villa", ["T:balayi-villalari"]],
+    ["çocuk havuzlu villa", "kids pool villa", "Kinderpool Villa", ["T:cocuk-havuzlu-villalar"]],
+    ["evcil hayvan izinli", "pet friendly", "haustierfreundlich", ["T:evcil-hayvan-izinli"]],
+    ["doğa manzaralı villa", "nature view villa", "Villa mit Naturblick", ["T:doga-manzarali"]],
+    ["ekonomik villa", "budget villa", "preiswerte Villa", ["T:ekonomik-villalar"]],
+    ["geniş aileye uygun", "large family", "Großfamilie", ["T:genis-aileye-uygun-villalar"]],
+    ["birbirine yakın villalar", "nearby villas", "Villen nebeneinander", ["T:birbirine-yakin-villalar"]],
+    ["bungalov", "bungalow", "Bungalow", ["T:bungalov"]],
+    ["apart", "apartment", "Ferienwohnung", ["T:apartlar"]],
+  ] as const)("%s = %s = %s", (tr, en, de, want) => {
+    expect(all(tr, "tr")).toEqual([...want]);
+    expect(all(en, "en")).toEqual([...want]);
+    expect(all(de, "de")).toEqual([...want]);
   });
 });

@@ -110,13 +110,14 @@ describe("2) Bölge eşleştirmesi", () => {
     expect(r.choices[0].reason).toBe("ambiguous_region");
   });
 
-  it("yazım hatası otomatik uygulanmaz, öneri olarak döner", () => {
+  /* v3 (bilinçli davranış değişikliği): yaygın yazım hataları artık
+     anlaşılır — yalnız TEK ve kesin karşılık varsa, ilk harf aynı ve
+     ≤1 (8+ harfte ≤2) harf farkıyla; düzeltme `corrections`'ta raporlanır. */
+  it("tek ve kesin karşılığı olan yazım hatası düzeltilir ve raporlanır", () => {
     const r = parse("Fethye 4 kişi");
-    expect(r.regions).toEqual([]);
-    expect(r.unknown).toEqual(["Fethye"]);
-    expect(r.suggestions).toEqual([
-      { phrase: "Fethye", option: { kind: "region", id: "loc-fethiye", label: "Fethiye" } },
-    ]);
+    expect(r.regions.map((o) => o.id)).toEqual(["loc-fethiye"]);
+    expect(r.unknown).toEqual([]);
+    expect(r.corrections).toEqual([{ from: "Fethye", to: "Fethiye" }]);
   });
 });
 
@@ -428,7 +429,11 @@ describe("11) Boş veya anlamsız sorgu", () => {
 
   it("anlaşılamayan kelimeler sessizce atılmaz", () => {
     expect(parse("asdf qwerty").unknown).toEqual(["asdf", "qwerty"]);
-    expect(parse("Kalkan sessiz sakin").unknown).toEqual(["sessiz", "sakin"]);
+    /* v3: "sessiz/sakin" artık bilinen ama sistemde karşılığı olmayan
+       kriter olarak raporlanır (yine filtreye dönüşmez, sessizce atılmaz). */
+    const q = parse("Kalkan sessiz sakin");
+    expect(q.unsupported.map((u) => u.phrase)).toEqual(["sessiz", "sakin"]);
+    expect(q.features).toEqual([]);
   });
 
   it("uzun metin 300 karakterde kesilir, hata vermez", () => {

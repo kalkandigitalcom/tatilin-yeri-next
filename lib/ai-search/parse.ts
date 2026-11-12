@@ -24,16 +24,20 @@ import type { Locale } from "@/lib/i18n/config";
 
 import {
   AMBIGUOUS_NUMBER_WORDS,
+  GENERIC_PLACE_WORDS,
   NORM,
+  NORM_V3,
   NUMBER_WORDS,
   VILLA_WORDS,
   type GuestRole,
   type UnsupportedCode,
 } from "./lexicon";
-import { tokenize, type Token } from "./tokenize";
+import { normalizePhrase, tokenize, type Token } from "./tokenize";
 import {
+  ANY_VILLA,
   localizedName,
   tokenMatches,
+  type AliasEntry,
   type Vocabulary,
   type VocabOption,
 } from "./vocabulary";
@@ -110,6 +114,49 @@ function levenshtein(a: string, b: string): number {
   return prev[b.length];
 }
 
+/** Damerau–Levenshtein (bitişik harf yer değiştirme = 1 işlem). */
+function damerau(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const d: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[m][n];
+}
+
+/** Sözlükteki bütün alias kelimeleri (yazım düzeltmesi ve "-sız" ayrımı için). */
+const aliasTokenCache = new WeakMap<Vocabulary, Set<string>>();
+function aliasTokens(vocab: Vocabulary): Set<string> {
+  let set = aliasTokenCache.get(vocab);
+  if (!set) {
+    set = new Set<string>();
+    for (const a of vocab.aliases) for (const t of a.tokens) set.add(t);
+    aliasTokenCache.set(vocab, set);
+  }
+  return set;
+}
+
+/** Yazım düzeltmesine ASLA aday olmayan kelimeler (stopword, birim, ay,
+ *  yaygın kelime…). "eden" → Eşen gibi yanlış düzeltmeleri engeller. */
+const PROTECTED_WORDS: Set<string> = (() => {
+  const s = new Set<string>([
+    ...NORM.stopwords, ...NORM.dateFillers, ...NORM.nightUnits, ...NORM.currencyWords,
+    ...NORM.distanceUnits, ...NORM.roomUnits, ...NORM.rangeWords, ...NORM_V3.commonWords,
+    ...NORM_V3.negationPrefix, ...NORM_V3.negationSuffix, ...NORM_V3.negationBridge,
+    ...Object.keys(NUMBER_WORDS),
+  ]);
+  for (const g of NORM.guestUnits) for (const w of g.words) s.add(w);
+  for (const mo of NORM.months) for (const w of [...mo.names, ...mo.short]) s.add(w);
+  return s;
+})();
+
 /* =================================================================== */
 
 export function parseNaturalQuery(
@@ -118,7 +165,19 @@ export function parseNaturalQuery(
   opts: ParseOptions
 ): ParseResult {
   const text = String(input ?? "").slice(0, MAX_QUERY_LENGTH);
-  const toks: Token[] = tokenize(text);
+  /* v3 — "-sız/-siz/-suz/-süz" eki: "jakuzisiz", "havuzsuz" → kök + olumsuz.
+     Kelimenin kendisi sözlükte varsa ("sessiz") dokunulmaz. */
+  const knownTokens = aliasTokens(vocab);
+  const toks: Array<Token & { neg?: boolean }> = tokenize(text).map((t) => {
+    if (t.kind !== "word" || t.norm.length < 6 || knownTokens.has(t.norm) || PROTECTED_WORDS.has(t.norm)) return t;
+    for (const suf of NORM_V3.negationTokenSuffixes) {
+      if (t.norm.endsWith(suf)) {
+        const base = t.norm.slice(0, -suf.length);
+        if (base.length >= 3) return { ...t, norm: base, neg: true };
+      }
+    }
+    return t;
+  });
   const used: boolean[] = toks.map(() => false);
   const n = toks.length;
 
@@ -154,6 +213,34 @@ export function parseNaturalQuery(
       return NUMBER_WORDS[t.norm];
     return null;
   };
+
+  /* ------------------------------------------------------------------
+     0) v3 — sıralama ve esnek tarih ifadeleri ("en ucuz", "flexible dates")
+     ------------------------------------------------------------------ */
+  const wordFits = (i: number, w: string) =>
+    free(i) && (toks[i].kind === "word" ? tokenMatches(toks[i].norm, w) : toks[i].norm === w);
+  const phraseAt = (i: number, p: string[]) => p.every((w, k) => wordFits(i + k, w));
+  let sort: ParseResult["sort"] = null;
+  let flexible: number | null = null;
+  for (let i = 0; i < n; i++) {
+    if (!free(i)) continue;
+    let done = false;
+    for (const sp of NORM_V3.sort) {
+      const p = [...sp.phrases].sort((a, b) => b.length - a.length).find((ph) => phraseAt(i, ph));
+      if (p) {
+        sort = sp.sort;
+        consume(i, i + p.length);
+        done = true;
+        break;
+      }
+    }
+    if (done) continue;
+    const fp = [...NORM_V3.flexible].sort((a, b) => b.length - a.length).find((ph) => phraseAt(i, ph));
+    if (fp) {
+      flexible = 3;
+      consume(i, i + fp.length);
+    }
+  }
 
   /* ------------------------------------------------------------------
      1) Sayılı desteklenmeyen kalıplar
@@ -518,9 +605,13 @@ export function parseNaturalQuery(
       consume(i, i + 2);
     }
   }
+  const ARTICLE_ONE = new Set(["ein", "eine", "einen", "einer", "einem", "one", "bir"]);
   // "for 6" · "für 6" (birimsiz)
   for (let i = 0; i < n; i++) {
     if (!isWord(i, NORM.forWords)) continue;
+    /* "für eine große Familie", "for one week": artikel/belirsiz "bir"
+       birimsiz kişi sayısı değildir (birimli "für eine Person" yukarıda). */
+    if (isWord(i + 1, ARTICLE_ONE)) continue;
     const v = numberAt(i + 1);
     if (v === null || v > 30) continue;
     const after = toks[i + 2];
@@ -534,6 +625,50 @@ export function parseNaturalQuery(
     if (blocked) continue;
     guestHits.push({ role: "total", value: v, phrase: phraseOf(i, i + 2) });
     consume(i, i + 2);
+  }
+
+  /* v3.1 — birimsiz EN kalıpları: "party of 12", "family of 16",
+     "group of 8", "sleeps 10", "6 of us"; artikel = 1: "a baby",
+     "an infant", "a child". */
+  {
+    const GROUP_WORDS = new Set(["party", "family", "group", "gruppe"]);
+    const OF = new Set(["of", "von"]);
+    const SLEEPS = new Set(["sleeps", "sleeping"]);
+    const US = new Set(["us"]);
+    const ARTICLE = new Set(["a", "an"]);
+    for (let i = 0; i < n; i++) {
+      if (isWord(i, GROUP_WORDS) && isWord(i + 1, OF)) {
+        const v = numberAt(i + 2);
+        if (v !== null && v <= 30 && !roleOf(i + 3)) {
+          guestHits.push({ role: "total", value: v, phrase: phraseOf(i, i + 3) });
+          consume(i + 1, i + 3);
+          continue;
+        }
+      }
+      if (isWord(i, SLEEPS)) {
+        const v = numberAt(i + 1);
+        if (v !== null && v <= 30) {
+          guestHits.push({ role: "total", value: v, phrase: phraseOf(i, i + 2) });
+          consume(i, i + 2);
+          continue;
+        }
+      }
+      const v = numberAt(i);
+      if (v !== null && v <= 30 && isWord(i + 1, OF) && isWord(i + 2, US)) {
+        guestHits.push({ role: "total", value: v, phrase: phraseOf(i, i + 3) });
+        consume(i, i + 3);
+        continue;
+      }
+      if (isWord(i, ARTICLE)) {
+        const role = roleOf(i + 1);
+        if (role === "children" || role === "infants") {
+          const next = toks[i + 2];
+          if (next && next.kind === "word" && /^(pool|havuz|friendly|play|freundlich)/.test(next.norm)) continue; // "a kids pool", "a kid friendly villa"
+          guestHits.push({ role, value: 1, phrase: phraseOf(i, i + 2) });
+          consume(i, i + 2);
+        }
+      }
+    }
   }
 
   let guests: number | null = null;
@@ -586,11 +721,31 @@ export function parseNaturalQuery(
      bölge adları) otomatik seçilmez; öneri + anlaşılamayan olarak döner. */
   const weakSuggestions: ParseResult["suggestions"] = [];
   const weakUnknown: string[] = [];
+  const negated: ParseResult["negated"] = [];
+  const corrections: ParseResult["corrections"] = [];
   /** Sözlükte rakam olan token (ör. "2027 Kiralık Villalar") rakamla eşleşir. */
   const tokenFits = (t: Token, aliasTok: string) =>
     t.kind === "word"
       ? tokenMatches(t.norm, aliasTok)
       : t.kind === "num" && /^\d+$/.test(aliasTok) && t.norm === aliasTok;
+  /** v3 — güvenli yazım toleransı: yalnız ≥5 harfli, korunmayan kelimeler;
+   *  ilk harf aynı; ≤7 harfte 1, ≥8 harfte 2 işlem (Damerau). Ek kökü de
+   *  denenir ("jakuzli" ↔ "jakuzi"). Kayıt kelimesi de ≥5 harf olmalı. */
+  const fuzzyFits = (t: Token, aliasTok: string, compoundHead = false) => {
+    if (tokenFits(t, aliasTok)) return true;
+    /* Bileşik kelimenin ön parçası ("Whirpool" → "whir"+"pool") 4 harf
+       olabilir; kuyruk ("pool") birebir eşleşmek zorundadır. */
+    if (t.kind !== "word" || aliasTok.length < 5 || t.norm.length < (compoundHead ? 4 : 5)) return false;
+    if (PROTECTED_WORDS.has(t.norm) || knownTokens.has(t.norm)) return false;
+    if (t.norm[0] !== aliasTok[0]) return false;
+    const max = Math.max(t.norm.length, aliasTok.length) >= 8 ? 2 : 1;
+    if (damerau(t.norm, aliasTok) <= max) return true;
+    for (const suf of ["li", "lu", "si", "su", "da", "de", "ta", "te", "nda", "nde"]) {
+      if (t.norm.endsWith(suf) && t.norm.length - suf.length >= 4 && damerau(t.norm.slice(0, -suf.length), aliasTok) <= 1)
+        return true;
+    }
+    return false;
+  };
 
   /* Bağlam ipuçları (otomatik çözümleme): villa kelimesine uzaklık. */
   const isVillaTok = (j: number) =>
@@ -601,8 +756,11 @@ export function parseNaturalQuery(
     for (let j = end; j < Math.min(n, end + 3); j++) if (isVillaTok(j)) return j - end;
     return Infinity;
   };
+  /** "kapalı havuzu OLAN villa", "… BULUNAN villa": ilgi sözcüğü atlanır. */
+  const REL = new Set(["olan", "bulunan", "sahip", "li", "lu"]);
   const attachedAt = (from: number, to: number) => {
     if (isVillaTok(to)) return true;
+    if (to < n && toks[to].kind === "word" && REL.has(toks[to].norm) && isVillaTok(to + 1)) return true;
     let k = from - 1;
     let gaps = 0;
     while (k >= 0 && toks[k].kind === "word" && LINK.has(toks[k].norm) && gaps < 2) {
@@ -613,29 +771,120 @@ export function parseNaturalQuery(
   };
   const typeEnds = new Map<string, number>();
 
-  for (let i = 0; i < n; i++) {
-    if (!free(i) || (toks[i].kind !== "word" && toks[i].kind !== "num")) continue;
+  /** i konumundaki en uzun sözlük eşleşmesi (fuzzy: yazım toleranslı). */
+  const matchAt = (i: number, fuzzy: boolean): { best: number; hits: AliasEntry[]; fuzzyUsed: boolean } => {
     let best = 0;
-    const hits: typeof vocab.aliases = [];
+    const hits: AliasEntry[] = [];
+    let fuzzyUsed = false;
     for (const a of vocab.aliases) {
       const len = a.tokens.length;
       if (len < best) break;
       if (i + len > n) continue;
+      /* Hız: yazım toleranslı aramada ilk harf zaten aynı olmak zorunda. */
+      if (fuzzy && a.tokens[0] !== ANY_VILLA && toks[i].kind === "word" && a.tokens[0][0] !== toks[i].norm[0]) continue;
       let ok = true;
+      let exactCount = 0;
+      let usedFuzzy = false;
       for (let k = 0; k < len; k++) {
         const t = toks[i + k];
-        if (!free(i + k) || !tokenFits(t, a.tokens[k])) {
+        if (!free(i + k) || (k > 0 && t.breakBefore)) {
           ok = false;
           break;
         }
+        if (tokenFits(t, a.tokens[k])) {
+          exactCount++;
+          continue;
+        }
+        const compoundHead = k + 1 < len && i + k + 1 < n && toks[i + k + 1].raw === "" && toks[i + k + 1].kind === "word";
+        if (fuzzy && !a.weak && fuzzyFits(t, a.tokens[k], compoundHead)) {
+          usedFuzzy = true;
+          continue;
+        }
+        ok = false;
+        break;
       }
       if (!ok) continue;
-      best = len;
+      /* Çok kelimeli adda en az bir kelime birebir olmalı (yalnız yazım
+         toleransıyla kurulan eşleşme kabul edilmez). */
+      if (fuzzy && usedFuzzy && len > 1 && exactCount === 0) continue;
+      if (len > best) {
+        best = len;
+        hits.length = 0;
+        fuzzyUsed = false;
+      }
       hits.push(a);
+      if (usedFuzzy) fuzzyUsed = true;
     }
-    if (best === 0) continue;
+    return { best, hits, fuzzyUsed };
+  };
 
+  /** v3 — eşleşme olumsuzlanmış mı? ("no pets", "jakuzi olmasın",
+   *  "evcil hayvan kabul etmeyen", "jakuzisiz", "ohne Pool"). */
+  const negationSpan = (from: number, to: number): { negated: boolean; extraTo: number; extraFrom: number } => {
+    for (let k = from; k < to; k++) if (toks[k].neg) return { negated: true, extraTo: to, extraFrom: from };
+    // önde: "no", "without", "ohne", "kein(e)" (+ bir artikel)
+    let p = from - 1;
+    if (p >= 0 && toks[p].kind === "word" && ["a", "an", "any", "the"].includes(toks[p].norm)) p--;
+    if (p >= 0 && toks[p].kind === "word" && NORM_V3.negationPrefix.has(toks[p].norm) && free(p))
+      return { negated: true, extraTo: to, extraFrom: p };
+    /* "don't need a sea view", "do not want a jacuzzi", "no need for …",
+       "brauchen keinen …" önde ihtiyaç fiiliyle. */
+    if (p >= 0 && toks[p].kind === "word" && ["need", "want", "require", "needed", "for"].includes(toks[p].norm)) {
+      let q2 = p - 1;
+      if (q2 >= 0 && toks[q2].kind === "word" && toks[q2].norm === "need") q2--; // "no need for"
+      if (q2 >= 0 && toks[q2].kind === "word" && (NORM_V3.negationPrefix.has(toks[q2].norm) || ["dont", "don", "doesnt", "doesn"].includes(toks[q2].norm)) && free(q2))
+        return { negated: true, extraTo: to, extraFrom: q2 };
+    }
+    // arkada: köprü kelimeler atlanır, sonra olumsuz kelime
+    let q = to;
+    let bridges = 0;
+    while (q < n && bridges < 2 && toks[q].kind === "word" && NORM_V3.negationBridge.has(toks[q].norm) && free(q)) {
+      q++;
+      bridges++;
+    }
+    if (q < n && free(q) && toks[q].kind === "word" && NORM_V3.negationSuffix.has(toks[q].norm)) {
+      // "not overlooked" gibi başka bir sözlük ifadesinin başlangıcıysa olumsuzluk değildir
+      if (matchAt(q, false).best === 0) {
+        let end = q + 1;
+        // "şart değil", "olmasa da olur" gibi kalıpların kuyruğu
+        while (end < n && end < q + 3 && toks[end].kind === "word" && (NORM_V3.negationSuffix.has(toks[end].norm) || NORM_V3.negationBridge.has(toks[end].norm))) end++;
+        return { negated: true, extraTo: end, extraFrom: from };
+      }
+    }
+    return { negated: false, extraTo: to, extraFrom: from };
+  };
+
+  const PROX_BEFORE = new Set(["near", "close", "nearby", "nahe", "nah", "naehe", "bei", "beim"]);
+  const PROX_SKIP = new Set(["to", "the", "of", "by", "am", "an", "dem", "der", "zum", "zur", "town"]);
+  const PROX_AFTER = new Set(["yakin", "yakininda", "yakinda", "yakinlarinda", "civari", "civarinda", "near", "nearby", "nahe"]);
+  const isCentreRegion = (o: VocabOption) => {
+    const slash = o.name.lastIndexOf("/");
+    if (slash < 0) return false;
+    const short = normalizePhrase(o.name.slice(slash + 1));
+    return short.length === 1 && GENERIC_PLACE_WORDS.has(short[0]);
+  };
+
+  const handleHit = (i: number, best: number, hits: AliasEntry[], viaFuzzy: boolean) => {
     const phrase = phraseOf(i, i + best);
+    /* Olumsuz ifade: filtreye DÖNÜŞMEZ (sistemde "hariç tut" filtresi yok). */
+    const neg = negationSpan(i, i + best);
+    if (neg.negated) {
+      const labels = new Set<string>();
+      for (const h of hits) {
+        if (h.target.kind === "option") {
+          const o = vocab.options[h.target.optionKey];
+          if (o) labels.add(localizedName(o, opts.locale));
+        } else if (h.target.kind === "concept") {
+          for (const k of vocab.conceptOptions[h.target.concept] ?? []) {
+            const o = vocab.options[k];
+            if (o) labels.add(localizedName(o, opts.locale));
+          }
+        }
+      }
+      negated.push({ phrase: phraseOf(neg.extraFrom, neg.extraTo), labels: Array.from(labels) });
+      consume(neg.extraFrom, neg.extraTo);
+      return;
+    }
     if (hits.every((h) => h.weak)) {
       for (const h of hits) {
         const o = h.target.kind === "option" ? vocab.options[h.target.optionKey] : undefined;
@@ -643,15 +892,36 @@ export function parseNaturalQuery(
       }
       if (!weakUnknown.includes(phrase)) weakUnknown.push(phrase);
       consume(i, i + best);
-      continue;
+      return;
     }
-    /* Aynı uzunlukta hem birebir hem ek/çoğul toleranslı eşleşme varsa
-       birebir olan kazanır ("Heated Indoor Pool" özelliği ≠ "…Pools" tipi). */
+    /* Aynı uzunlukta: birebir > ek/çoğul toleranslı; tam ad > türetilmiş alt ad. */
     const nonWeak = hits.filter((h) => !h.weak);
-    const exact = nonWeak.filter((h) =>
-      h.tokens.every((a, k) => toks[i + k].norm === a)
-    );
-    const strongHits = exact.length > 0 ? exact : nonWeak;
+    const exact = nonWeak.filter((h) => h.tokens.every((a, k) => toks[i + k].norm === a));
+    /* Birebir yazım ekli yazımı eler — ama yalnız AYNI türde. Aynı ifade
+       hem tipe hem özelliğe çıkıyorsa ("heated indoor pool" = özellik adı,
+       "Villas with Heated Indoor Pools" = tip adı) karşı türdeki aday
+       — ifade bir villa kelimesine bağlıysa — korunur; seçim tip↔özellik
+       kuralına bırakılır. Tek başına tam özellik adı ("Heated Indoor
+       Pool") yine doğrudan özelliğe gider. */
+    const kindOf = (h: AliasEntry) =>
+      h.target.kind === "option" ? vocab.options[h.target.optionKey]?.kind ?? null : null;
+    const exactKinds = new Set(exact.map(kindOf));
+    const villaAttached = attachedAt(i, i + best);
+    let strongHits =
+      exact.length > 0 && villaAttached
+        ? [
+            ...exact,
+            ...nonWeak.filter((h) => {
+              const k = kindOf(h);
+              return !exact.includes(h) && (k === "type" || k === "feature") && !exactKinds.has(k) &&
+                (exactKinds.has("type") || exactKinds.has("feature"));
+            }),
+          ]
+        : exact.length > 0
+          ? exact
+          : nonWeak;
+    const full = strongHits.filter((h) => !h.partial);
+    if (full.length > 0) strongHits = full;
     const optionKeys = new Set<string>();
     const missingConcepts: string[] = [];
     const codes: UnsupportedCode[] = [];
@@ -662,6 +932,66 @@ export function parseNaturalQuery(
         if (linked.length) linked.forEach((k) => optionKeys.add(k));
         else missingConcepts.push(h.target.concept);
       } else codes.push(h.target.code);
+    }
+
+    /* Yazım düzeltmesi YALNIZ tek ve kesin bir karşılık varsa uygulanır. */
+    if (viaFuzzy) {
+      const found = Array.from(optionKeys).map((k) => vocab.options[k]).filter(Boolean);
+      const regs = found.filter((o) => o.kind === "region");
+      const single =
+        found.length === 1 ||
+        (found.length > 1 && regs.length === found.length && regs.filter((o) => o.isGroupRoot).length === 1);
+      if (!single || missingConcepts.length || codes.length) return; // belirsiz → dokunma (bilinmeyen kalır)
+      const target = found.length === 1 ? found[0] : regs.find((o) => o.isGroupRoot)!;
+      /* Bölgeye yazım düzeltmesi daha sıkı: yaygın kelimeler ("kalan",
+         "karşı", "devre") bölge adına bir harf uzaktır. Yalnız özel ad
+         belirtisi varsa uygulanır: büyük harf, kesme işaretli ek, ≥7 harf
+         ya da hemen ardından villa kelimesi. */
+      if (target.kind === "region") {
+        const t0 = toks[i];
+        const properNoun =
+          /^\p{Lu}/u.test(t0.raw) || !!t0.suffix || t0.norm.length >= 7 || isVillaTok(i + best);
+        if (!properNoun) return;
+      }
+      addRef(target);
+      if (target.kind === "type" && !typeEnds.has(target.id)) typeEnds.set(target.id, i + best);
+      corrections.push({ from: phrase, to: localizedName(target, opts.locale) });
+      consume(i, i + best);
+      return;
+    }
+
+    /* "Kalkan merkeze yakın", "near Kalkan centre", "nahe Kalkan Zentrum":
+       "X / Merkez" alt bölgesi YAKINLIK ifadesiyle geçiyorsa kullanıcı
+       merkezde değil merkeze yakın arıyor → ana bölge + "Merkezi Konum"
+       özelliği (kayıt varsa). "Kalkan merkezde" ise alt bölge kalır. */
+    if (optionKeys.size === 1) {
+      const o = vocab.options[Array.from(optionKeys)[0]];
+      const centre = o?.kind === "region" && !o.isGroupRoot && isCentreRegion(o);
+      const central = (vocab.conceptOptions["central_location"] ?? []).map((k) => vocab.options[k]).filter(Boolean);
+      if (centre && central.length) {
+        let from = i;
+        let to = i + best;
+        let prox = false;
+        let k = i - 1;
+        while (k >= 0 && toks[k].kind === "word" && PROX_SKIP.has(toks[k].norm) && free(k)) k--;
+        if (k >= 0 && toks[k].kind === "word" && PROX_BEFORE.has(toks[k].norm) && free(k)) {
+          prox = true;
+          from = k;
+        }
+        if (to < n && toks[to].kind === "word" && PROX_AFTER.has(toks[to].norm) && free(to)) {
+          prox = true;
+          to += 1;
+        }
+        if (prox) {
+          const root = Object.values(vocab.options).find(
+            (r) => r.kind === "region" && r.isGroupRoot && (r.groupName ?? "").trim() === (o.groupName ?? "").trim()
+          );
+          if (root) addRef(root);
+          for (const c of central) addRef(c);
+          consume(from, to);
+          return;
+        }
+      }
     }
 
     if (optionKeys.size > 0) {
@@ -694,6 +1024,72 @@ export function parseNaturalQuery(
       addUnsupported(codes[0], phrase);
     }
     consume(i, i + best);
+  };
+
+  /** Eşleşme gerçek bir kayda bağlanıyor mu (desteklenmeyen/bağsız kavram değil)? */
+  const linked = (hits: AliasEntry[]) =>
+    hits.some(
+      (h) =>
+        !h.weak &&
+        (h.target.kind === "option" ||
+          (h.target.kind === "concept" && (vocab.conceptOptions[h.target.concept] ?? []).length > 0))
+    );
+
+  // Geçiş 1 — birebir / ek toleranslı eşleşmeler
+  for (let i = 0; i < n; i++) {
+    if (!free(i) || (toks[i].kind !== "word" && toks[i].kind !== "num")) continue;
+    const { best, hits } = matchAt(i, false);
+    if (best === 0) continue;
+    /* Çakışma: bağsız/desteklenmeyen bir eşleşme, içinden başlayıp daha
+       ileri uzanan GERÇEK bir kayıt eşleşmesini yutmasın ("with
+       children's pool" → "children's pool" = Çocuk Havuzlu). */
+    /* Bileşik kelimenin kuyruğu ("Whirpool" → "pool") tek başına
+       desteklenmeyen sayılmadan önce yazım düzeltmesine şans verilir
+       (Geçiş 3'te yine değerlendirilir). */
+    if (toks[i].raw === "" && !linked(hits)) continue;
+    if (!linked(hits)) {
+      let yielded = false;
+      for (let j = i + 1; j < i + best && !yielded; j++) {
+        const m2 = matchAt(j, false);
+        if (m2.best > 0 && j + m2.best > i + best && linked(m2.hits)) yielded = true;
+      }
+      if (yielded) continue;
+    }
+    handleHit(i, best, hits, false);
+  }
+
+  /* "özel ve korunaklı havuzlu", "private and heated pool": eksiltili
+     sıralamada baştaki "özel/private" de havuza aittir → private_pool
+     (desteklenmiyor) olarak raporlanır; filtreye dönüşmez. */
+  const PRIVATE_WORDS = new Set(["ozel", "private", "privat", "privaten", "privatem", "privater", "eigener", "eigenem", "eigenen"]);
+  const COORD = new Set(["ve", "and", "und", "ile"]);
+  for (let i = 0; i + 2 < n; i++) {
+    if (!free(i) || toks[i].kind !== "word" || !PRIVATE_WORDS.has(toks[i].norm)) continue;
+    /* "private and secluded pool" (bağlaçlı) ya da "private secluded pool"
+       (bitişik; ardındaki havuz ifadesi zaten eşleşmiş) */
+    const coord = toks[i + 1].kind === "word" && COORD.has(toks[i + 1].norm);
+    if (!coord && free(i + 1)) continue;
+    let poolAhead = false;
+    for (let k = i + 1; k < Math.min(n, i + 6); k++) {
+      if (toks[k].breakBefore) break;
+      if (toks[k].kind === "word" && /^(havuz|pool)/.test(toks[k].norm)) poolAhead = true;
+    }
+    if (!poolAhead) continue;
+    addUnsupported("not_in_system", toks[i].raw, "private_pool");
+    consume(i, coord ? i + 2 : i + 1);
+  }
+  // Geçiş 2 — kalan kelimelerde güvenli yazım düzeltmesi
+  for (let i = 0; i < n; i++) {
+    if (!free(i) || toks[i].kind !== "word") continue;
+    const { best, hits, fuzzyUsed } = matchAt(i, true);
+    if (best === 0 || !fuzzyUsed) continue;
+    handleHit(i, best, hits, true);
+  }
+  // Geçiş 3 — düzeltmeden sonra kalan birebir eşleşmeler (bileşik kuyrukları)
+  for (let i = 0; i < n; i++) {
+    if (!free(i) || (toks[i].kind !== "word" && toks[i].kind !== "num")) continue;
+    const { best, hits } = matchAt(i, false);
+    if (best > 0) handleHit(i, best, hits, false);
   }
 
   // Villa tipleri `/arama`'da AND çalışır → birden fazla tip otomatik gönderilmez.
@@ -736,7 +1132,7 @@ export function parseNaturalQuery(
     if (t.raw.length === 0) continue;
     if (!unknown.includes(t.raw)) unknown.push(t.raw);
 
-    if (t.kind === "word" && t.norm.length >= 4) {
+    if (t.kind === "word" && t.norm.length >= 5 && !PROTECTED_WORDS.has(t.norm)) {
       /* Yanlış öneriyi önlemek için: ilk harf aynı olmalı; 8+ harfte en çok
          2, daha kısa kelimelerde en çok 1 harf farkı ("Fethye" → Fethiye;
          "Kalamar" → Dalaman ÖNERİLMEZ). */
@@ -774,6 +1170,7 @@ export function parseNaturalQuery(
     features.length === 0 &&
     guests === null &&
     start === null &&
+    sort === null &&
     choices.length === 0;
 
   return {
@@ -790,6 +1187,10 @@ export function parseNaturalQuery(
     unknown,
     suggestions,
     nothingParsed,
+    negated,
+    corrections,
+    flexible: start !== null ? flexible : null,
+    sort,
   };
 }
 

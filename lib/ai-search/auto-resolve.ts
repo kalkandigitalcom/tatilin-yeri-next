@@ -22,9 +22,18 @@
        2) İfade bir villa kelimesine bağlıysa ("…lı villa", "villa with …")
           tip seçilir.
        3) Aksi hâlde özellik seçilir; tip/özellik dışı çakışmada ilk aday.
-   • multiple_types: villa kelimesine en yakın (baş isim) tip seçilir
-     ("muhafazakâr balayı villası" → Balayı; ipucu parser'dan `head`);
-     bulunamazsa son yazılan.
+   • multiple_types (v3): /arama tiplerde AND uygular; kullanıcı her
+     tipi istediği için NİTELİK tipleri ("muhafazakâr", "balayı",
+     "çocuk havuzlu", "korunaklı havuzlu"…) HEPSİ birlikte gönderilir
+     (`typeIds`) — rastgele düşürme yok.
+       – SINIF tipleri (konaklama biçimi: Bungalov, Apart) birbirini
+         dışlar: tek sınıf tipi nitelik tipleriyle birlikte kalır; iki
+         ve daha fazla sınıf tipi varsa ("bungalov veya apart") hiçbiri
+         gönderilmez (her biri tek başına AND'de sonucu sıfırlardı).
+       – Birbirini dışlayan nitelik çifti (Lüks ↔ Ekonomik) birlikte
+         gelirse ikisi de gönderilmez.
+     Sınıf/dışlayıcı tipler sözlükteki kavram eşleşmesinden (ad
+     eşitliği) bulunur; slug/id sabit kodlanmaz.
    • conflicting_guests: en büyük kişi sayısı (kapasite kaybı olmaz).
    • Tarih sorunu (yalnız ay, tek tarih, geçersiz, geçmiş…): tarih
      gönderilmez; diğer kriterlerle aranır.
@@ -34,13 +43,23 @@
 
 import { normalizePhrase } from "./tokenize";
 import type { ConfirmedCriteria, ParseChoice, ParseResult } from "./schema";
-import type { Vocabulary } from "./vocabulary";
+import { tokenMatches, type Vocabulary } from "./vocabulary";
 
 export type AutoDecision = {
   reason: ParseChoice["reason"];
   phrase: string;
   picked: string[];
-  rule: "context" | "canonical" | "all" | "type_present" | "villa_head" | "default" | "max";
+  rule:
+    | "context"
+    | "canonical"
+    | "all"
+    | "type_present"
+    | "villa_head"
+    | "default"
+    | "max"
+    | "all_types"
+    | "dropped_conflicting_kinds"
+    | "dropped_exclusive_pair";
 };
 
 export type AutoResolved = {
@@ -54,11 +73,24 @@ export function autoResolve(result: ParseResult, vocab: Vocabulary): AutoResolve
   const c: ConfirmedCriteria = {
     regionIds: result.regions.map((o) => o.id),
     typeId: result.types[0]?.id ?? null,
+    typeIds: result.types.map((o) => o.id),
     featureIds: result.features.map((o) => o.id),
     guests: result.guests,
     start: result.start,
     end: result.end,
+    flexible: result.flexible ?? null,
+    sort: result.sort ?? null,
   };
+  const typeIdsOf = (concepts: string[]) =>
+    new Set(
+      concepts.flatMap((k) => vocab.conceptOptions[k] ?? []).flatMap((key) => {
+        const o = vocab.options[key];
+        return o && o.kind === "type" ? [o.id] : [];
+      })
+    );
+  const KIND_TYPES = typeIdsOf(["bungalow", "apartment"]);
+  const LUX = typeIdsOf(["luxury"]);
+  const ECO = typeIdsOf(["economy"]);
   const decisions: AutoDecision[] = [];
   const addRegion = (id: string) => {
     if (!c.regionIds.includes(id)) c.regionIds.push(id);
@@ -83,13 +115,20 @@ export function autoResolve(result: ParseResult, vocab: Vocabulary): AutoResolve
     }
 
     if (ch.reason === "multiple_types") {
-      const ids = ch.options.flatMap((o) => (o.kind === "type" ? [o.id] : []));
+      let ids = ch.options.flatMap((o) => (o.kind === "type" ? [o.id] : []));
       if (!ids.length) continue;
-      const head = ch.head && ids.includes(ch.head) ? ch.head : null;
-      const pick = head ?? ids[ids.length - 1];
-      const rule: AutoDecision["rule"] = head ? "villa_head" : "default";
-      c.typeId = pick;
-      decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [pick], rule });
+      const kinds = ids.filter((id) => KIND_TYPES.has(id));
+      if (kinds.length > 1) {
+        ids = ids.filter((id) => !KIND_TYPES.has(id));
+        decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [], rule: "dropped_conflicting_kinds" });
+      }
+      if (ids.some((id) => LUX.has(id)) && ids.some((id) => ECO.has(id))) {
+        ids = ids.filter((id) => !LUX.has(id) && !ECO.has(id));
+        decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [], rule: "dropped_exclusive_pair" });
+      }
+      c.typeIds = ids;
+      c.typeId = ids[0] ?? null;
+      if (ids.length) decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: ids, rule: "all_types" });
       continue;
     }
 
@@ -113,7 +152,11 @@ export function autoResolve(result: ParseResult, vocab: Vocabulary): AutoResolve
       }
       // 2) Canonical: slug = adın kendisi (ana bölge öneki yok)
       const core = normalizePhrase(ch.phrase).join("");
-      const canonical = regs.filter((o) => (o.slug ?? "").replace(/-/g, "") === core);
+      /* Sorgudaki ek ("Üzümlü'de", "Uzumlude") canonical eşleşmeyi bozmaz. */
+      const canonical = regs.filter((o) => {
+        const slug = (o.slug ?? "").replace(/-/g, "");
+        return slug.length > 0 && tokenMatches(core, slug);
+      });
       if (canonical.length === 1) {
         addRegion(canonical[0].id);
         decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [canonical[0].id], rule: "canonical" });
@@ -134,6 +177,7 @@ export function autoResolve(result: ParseResult, vocab: Vocabulary): AutoResolve
         decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [featOpt.id], rule: "type_present" });
       } else if (ch.attachedToVilla) {
         c.typeId = typeOpt.id;
+        c.typeIds = [typeOpt.id];
         decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [typeOpt.id], rule: "villa_head" });
       } else {
         addFeature(featOpt.id);
@@ -145,9 +189,31 @@ export function autoResolve(result: ParseResult, vocab: Vocabulary): AutoResolve
     if (!first || first.kind === "guests") continue;
     if (first.kind === "region") addRegion(first.id);
     else if (first.kind === "type") {
-      if (c.typeId === null) c.typeId = first.id;
+      if (c.typeId === null) {
+        c.typeId = first.id;
+        c.typeIds = [first.id];
+      }
     } else addFeature(first.id);
     decisions.push({ reason: ch.reason, phrase: ch.phrase, picked: [first.id], rule: "default" });
+  }
+
+  /* Ana bölge + aynı ana bölgeden alt bölge birlikte → yalnız alt bölge
+     (sıra fark etmez: "Kalkan Üzümlü" = "Yeşilköy Kalkan"). /arama ana
+     bölgeyi tüm alt bölgelere genişlettiği için kök kalırsa alt bölge
+     anlamsızlaşırdı. */
+  {
+    const regionOf = (id: string) => vocab.options[`region:${id}`];
+    const subGroups = new Set(
+      c.regionIds
+        .map(regionOf)
+        .filter((o): o is NonNullable<typeof o> => !!o && !o.isGroupRoot)
+        .map((o) => (o.groupName ?? "").trim())
+        .filter((g) => g.length > 0)
+    );
+    c.regionIds = c.regionIds.filter((id) => {
+      const o = regionOf(id);
+      return !(o?.isGroupRoot && subGroups.has((o.groupName ?? "").trim()));
+    });
   }
 
   // Tarih: ikisi birden ve geçerli sırada değilse hiç gönderilmez.
@@ -155,8 +221,13 @@ export function autoResolve(result: ParseResult, vocab: Vocabulary): AutoResolve
     c.start = null;
     c.end = null;
   }
+  // Esnek tarih (±gün) yalnız geçerli tarih aralığıyla anlamlıdır.
+  if (!c.start) c.flexible = null;
 
   const hasCriteria =
-    c.regionIds.length > 0 || c.typeId !== null || c.featureIds.length > 0 || c.guests !== null || c.start !== null;
+    c.regionIds.length > 0 || c.typeId !== null || c.featureIds.length > 0 ||
+    c.guests !== null ||
+    c.start !== null ||
+    !!c.sort;
   return { criteria: c, decisions, hasCriteria };
 }

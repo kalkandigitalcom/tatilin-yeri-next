@@ -49,6 +49,9 @@ export const TaxonomyResponseSchema = z.object({
 });
 export type TaxonomyResponse = z.infer<typeof TaxonomyResponseSchema>;
 
+/** `/arama` sıralama izin listesi (lib/pagination ALLOWED_PUBLIC_SORTS; "smart" varsayılandır). */
+export const SortSchema = z.enum(["price-asc", "price-desc", "capacity-asc", "capacity-desc"]);
+
 export const OptionKindSchema = z.enum(["region", "type", "feature"]);
 
 export const OptionRefSchema = z.object({
@@ -126,21 +129,35 @@ export const ParseResultSchema = z.object({
   unknown: z.array(z.string()),
   suggestions: z.array(z.object({ phrase: z.string(), option: OptionRefSchema })),
   nothingParsed: z.boolean(),
+  /** v3 — olumsuzlanan kriterler ("jakuzi olmasın", "no pets", "ohne Pool").
+   *  Filtreye DÖNÜŞMEZ (sistemde "hariç tut" filtresi yok); yalnız bilgi. */
+  negated: z.array(z.object({ phrase: z.string(), labels: z.array(z.string()) })).default([]),
+  /** v3 — güvenli yazım düzeltmeleri ("Kalkn" → Kalkan). */
+  corrections: z.array(z.object({ from: z.string(), to: z.string() })).default([]),
+  /** v3 — esnek tarih (±gün); `/arama` yalnız 0..3 uygular. */
+  flexible: z.number().int().min(0).max(3).nullable().default(null),
+  /** v3 — `/arama` sıralama izin listesi (smart hariç). */
+  sort: SortSchema.nullable().default(null),
 });
 export type ParseResult = z.infer<typeof ParseResultSchema>;
 export type OptionRef = z.infer<typeof OptionRefSchema>;
 export type ParseChoice = ParseResult["choices"][number];
 
-/** Onay ekranında kullanıcının son hâli. Villa tipi TEK seçimdir:
- *  `/arama` tiplerde AND uygular; çoklu tip kullanıcı seçimiyle teke iner. */
+/** Arama URL'sine gidecek son kriterler. Villa tipleri `/arama`'da AND
+ *  uygulanır (`typeIds`); `typeId` geriye uyumluluk için tek tiptir. */
 export const ConfirmedCriteriaSchema = z
   .object({
     regionIds: z.array(nonEmpty).max(30),
     typeId: nonEmpty.nullable(),
+    /** v3 — birden fazla villa tipi (`/arama` tiplerde AND uygular).
+     *  Verilirse `typeId` yerine bu liste kullanılır. */
+    typeIds: z.array(nonEmpty).max(10).optional(),
     featureIds: z.array(nonEmpty).max(30),
     guests: z.number().int().min(1).max(50).nullable(),
     start: ymd.nullable(),
     end: ymd.nullable(),
+    flexible: z.number().int().min(0).max(3).nullable().optional(),
+    sort: SortSchema.nullable().optional(),
   })
   .refine((c) => (c.start === null) === (c.end === null), {
     message: "start/end birlikte verilmeli",

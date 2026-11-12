@@ -13,6 +13,18 @@
                  `db` listesiyle birebir örtüşen kayıtlara bağlanır;
                  bağlanacak kayıt yoksa "sistemde yok" olarak raporlanır.
      • unsupported — filtresi olmayan istekler (bütçe, havuz vb.).
+
+   v3 — OTOMATİK TÜRETİLEN ADLAR (elle kelime eklemeden):
+     • ayırt edici alt ad: "Korunaklı Havuz" → "korunaklı",
+       "Sinema Odası" → "sinema", "Açık Otopark" → "otopark".
+       Yalnız TEK bir kayda işaret ediyorsa ve çok anlamlı bir kelime
+       değilse üretilir (`partial`; aynı konumda tam ad varsa o kazanır).
+     • bitişik yazım: "deniz manzaralı" ↔ "denizmanzaralı".
+     • ayrı yazım: tek kelimelik bölge adları ("Kayaköy" ↔ "kaya köy").
+     • çok anlamlı tek kelimelik çekirdek ("Private Villas" → "private")
+       tek başına eşleşmez; yalnız villa kelimesiyle ("private villa").
+     • bölge alternatif adları (ör. "Gelemiş" → Patara) yalnız slug'ı
+       canlıda varsa bağlanır.
    =============================================================== */
 
 import type { FilterOption } from "@/app/components/ui/hero/_types/hero";
@@ -22,6 +34,7 @@ import {
   GENERIC_PLACE_WORDS,
   LINK_WORDS,
   NORM,
+  NORM_V3,
   RENT_WORDS,
   VILLA_WORDS,
   WEAK_PLACE_WORDS,
@@ -51,7 +64,13 @@ export type AliasTarget =
   | { kind: "unsupported"; code: UnsupportedCode };
 
 /** `weak`: tek başına otomatik seçilmez, yalnız öneri olur (ör. "yalı"). */
-export type AliasEntry = { tokens: string[]; target: AliasTarget; weak?: boolean };
+export type AliasEntry = {
+  tokens: string[];
+  target: AliasTarget;
+  weak?: boolean;
+  /** v3 — otomatik türetilmiş ayırt edici alt ad (aynı uzunlukta tam ad varsa o kazanır). */
+  partial?: boolean;
+};
 
 /** Sözlükte "herhangi bir villa kelimesi" yer tutucusu ("2027 villaları"). */
 export const ANY_VILLA = "*villa";
@@ -77,6 +96,11 @@ const SUFFIXES = new Set([
   "la", "le", "lar", "ler", "lari", "leri", "larda", "lerde", "daki", "deki", "taki",
   "teki", "ki", "yla", "yle", "sinda", "sinde", "sindan", "sinden", "ni", "nu", "yi", "yu",
   "lerin", "larin", "imiz", "umuz",
+  // çoğul iyelik ("ailemiz", "balayımız", "jakuzilerimiz", "kedimizi")
+  "miz", "mizi", "mize", "mizle", "muz", "muzu", "muza", "muzla",
+  "imizi", "imize", "imizle", "umuzu", "umuza", "umuzla", "lerimiz", "larimiz", "lerimizi", "larimizi",
+  // iyelik + bulunma ("yarımadasında", "koyunda")
+  "nda", "nde", "ndan", "nden", "ndaki", "ndeki",
   // EN / DE
   "s", "es", "n", "en", "em", "er", "ern",
 ]);
@@ -119,6 +143,8 @@ export function coreTokens(tokens: string[]): string[] {
 
 /* ---------------------------- Kurulum ---------------------------- */
 
+const PRIVACY_WORDS = new Set(["private", "privat", "privater", "privaten", "privatem", "ozel", "own", "eigener", "eigene"]);
+
 export function localizedName(opt: VocabOption, locale: Locale): string {
   if (opt.kind === "region" || locale === "tr") return opt.name;
   const v = opt.nameByLocale[locale];
@@ -128,14 +154,16 @@ export function localizedName(opt: VocabOption, locale: Locale): string {
 export function buildVocabulary(tax: TaxonomyResponse): Vocabulary {
   const options: Record<string, VocabOption> = {};
   const aliases: AliasEntry[] = [];
-  const pushAlias = (tokens: string[], target: AliasTarget, weak = false) => {
+  const seen = new Set<string>();
+  const pushAlias = (tokens: string[], target: AliasTarget, weak = false, partial = false) => {
     if (tokens.length === 0) return;
-    const dup = aliases.some(
-      (a) =>
-        a.tokens.join(" ") === tokens.join(" ") &&
-        JSON.stringify(a.target) === JSON.stringify(target)
-    );
-    if (!dup) aliases.push(weak ? { tokens, target, weak } : { tokens, target });
+    const sig = `${tokens.join(" ")}|${JSON.stringify(target)}`;
+    if (seen.has(sig)) return;
+    seen.add(sig);
+    const e: AliasEntry = { tokens, target };
+    if (weak) e.weak = true;
+    if (partial) e.partial = true;
+    aliases.push(e);
   };
 
   /* Bölgeler — adlar çevrilmez (özel isim). Grup kökü: name === filter_group_name. */
@@ -164,6 +192,24 @@ export function buildVocabulary(tax: TaxonomyResponse): Vocabulary {
       const joined = short.join(" ");
       if (short.length > 0 && !(short.length === 1 && GENERIC_PLACE_WORDS.has(joined))) {
         pushAlias(short, { kind: "option", optionKey: opt.key }, WEAK_PLACE_WORDS.has(joined));
+      }
+      /* "X / Merkez" alt bölgesi: EN/DE ve TR çekimli söylenişleri
+         ("Kalkan centre", "Kalkan town centre", "centre of Kalkan",
+         "Zentrum von Kalkan", "Kalkan merkezi"). Ana bölge adı kaydın
+         kendi adından alınır; sabit bölge yazılmaz. */
+      if (short.length === 1 && GENERIC_PLACE_WORDS.has(joined)) {
+        const root = normalizePhrase(opt.name.slice(0, slash));
+        const t: AliasTarget = { kind: "option", optionKey: opt.key };
+        if (root.length > 0) {
+          for (const w of ["merkezi", "centre", "center", "zentrum", "stadtzentrum", "ortszentrum"]) {
+            pushAlias([...root, w], t);
+            pushAlias([...root, "town", w], t);
+          }
+          for (const [w, link] of [["centre", "of"], ["center", "of"], ["zentrum", "von"]] as const) {
+            pushAlias([w, link, ...root], t);
+            pushAlias(["town", w, link, ...root], t);
+          }
+        }
       }
     }
   }
@@ -200,7 +246,21 @@ export function buildVocabulary(tax: TaxonomyResponse): Vocabulary {
         const core = coreTokens(toks);
         const target: AliasTarget = { kind: "option", optionKey: opt.key };
         const numericOnly = (xs: string[]) => xs.every((t) => /^\d+$/.test(t));
-        if (!numericOnly(core)) pushAlias(core, target);
+        /* Çok anlamlı tek kelimelik çekirdek ("Private Villas" → "private")
+           tek başına eşleşmez; villa kelimesiyle birlikte aranır. */
+        const ambiguousSingle = (xs: string[]) => xs.length === 1 && NORM_V3.ambiguousCore.has(xs[0]);
+        /* "Private Villas" (Muhafazakar Villalar'ın canlıdaki EN adı):
+           İngilizcede "private villa" her müstakil villa için kullanılır
+           (sitenin kendi metni: "Private Villa Advisor"). Bu ad tipe
+           bağlanırsa sıradan bir sorgu yanlışlıkla muhafazakâr tipine
+           daralır → "özel/private/privat" tek çekirdekli adlardan alias
+           ÜRETİLMEZ (yanlış pozitif önlemi; veri düzeltmesi raporda). */
+        const privacyOnly = (xs: string[]) => xs.length === 1 && PRIVACY_WORDS.has(xs[0]);
+        if (privacyOnly(core)) {
+          // bilerek boş
+        } else if (ambiguousSingle(core)) {
+          pushAlias([core[0], ANY_VILLA], target);
+        } else if (!numericOnly(core)) pushAlias(core, target);
         coresByKey[opt.key].push(core);
         /* "kiralık / for rent" atılmış varyant. Geriye yalnız sayı kalırsa
            ("2027 Kiralık Villalar" → "2027") sayı TEK BAŞINA eşleşmez (tarih
@@ -210,14 +270,16 @@ export function buildVocabulary(tax: TaxonomyResponse): Vocabulary {
           pushAlias([...noRent, ANY_VILLA], target);
           pushAlias([ANY_VILLA, ...noRent], target);
         } else if (noRent.length > 0 && noRent.length < core.length) {
-          pushAlias(noRent, target);
+          if (ambiguousSingle(noRent)) pushAlias([noRent[0], ANY_VILLA], target);
+          else pushAlias(noRent, target);
           coresByKey[opt.key].push(noRent);
         }
         /* Bağlaçsız varyant: "Villas with Children's Play Areas" →
            "children play areas" (sorguda "with" yazılmayabilir). */
         const noLink = noRent.filter((t) => !LINK_WORDS.has(t));
         if (noLink.length > 0 && noLink.length < noRent.length && !numericOnly(noLink)) {
-          pushAlias(noLink, target);
+          if (ambiguousSingle(noLink)) pushAlias([noLink[0], ANY_VILLA], target);
+          else pushAlias(noLink, target);
           coresByKey[opt.key].push(noLink);
         }
       }
@@ -237,6 +299,75 @@ export function buildVocabulary(tax: TaxonomyResponse): Vocabulary {
 
   for (const u of NORM.unsupported) {
     for (const p of u.phrases) pushAlias(p, { kind: "unsupported", code: u.code });
+  }
+
+  /* ---------------- v3: bölge alternatif adları ---------------- */
+  const regionBySlug = new Map<string, VocabOption>();
+  for (const o of Object.values(options)) if (o.kind === "region" && o.slug) regionBySlug.set(o.slug, o);
+  for (const ra of NORM_V3.regionAliases) {
+    const o = regionBySlug.get(ra.slug);
+    if (!o) continue; // canlıda yoksa bağlanmaz (uydurma yok)
+    for (const p of ra.phrases) pushAlias(p, { kind: "option", optionKey: o.key });
+  }
+
+  /* ---------------- v3: ayırt edici alt ad (otomatik) ----------------
+     Tip/özellik adının çekirdeğinden genel baş kelimeler ("havuz", "odası",
+     "pool", "area"…) ve anlamı daraltmayan sıfatlar ("açık") atılır. Kalan
+     kısım YALNIZ tek bir kayda işaret ediyorsa, başka bir kaydın adıyla
+     çakışmıyorsa ve çok anlamlı tek kelime değilse eklenir. */
+  const partialTargets = new Map<string, { tokens: string[]; keys: Set<string> }>();
+  for (const [key, cores] of Object.entries(coresByKey)) {
+    for (const core of cores) {
+      let rest = core.filter((t) => !NORM_V3.genericHeads.has(t) && !LINK_WORDS.has(t) && !RENT_WORDS.has(t));
+      while (rest.length > 1 && NORM_V3.droppableModifiers.has(rest[0])) rest = rest.slice(1);
+      if (rest.length === 0 || rest.length >= core.length) continue;
+      if (rest.every((t) => /^\d+$/.test(t))) continue;
+      if (rest.join("").length < 4) continue;
+      if (rest.length === 1 && (NORM_V3.ambiguousCore.has(rest[0]) || NORM.stopwords.has(rest[0]))) continue;
+      const sig = rest.join(" ");
+      const cur = partialTargets.get(sig) ?? { tokens: rest, keys: new Set<string>() };
+      cur.keys.add(key);
+      partialTargets.set(sig, cur);
+    }
+  }
+  const optionAliasSigs = new Map<string, Set<string>>();
+  for (const a of aliases) {
+    if (a.target.kind !== "option") continue;
+    const sig = a.tokens.join(" ");
+    const set = optionAliasSigs.get(sig) ?? new Set<string>();
+    set.add(a.target.optionKey);
+    optionAliasSigs.set(sig, set);
+  }
+  for (const [sig, { tokens, keys }] of partialTargets) {
+    if (keys.size !== 1) continue;
+    const key = Array.from(keys)[0];
+    const other = optionAliasSigs.get(sig);
+    if (other && Array.from(other).some((k) => k !== key)) continue;
+    pushAlias(tokens, { kind: "option", optionKey: key }, false, true);
+  }
+
+  /* ---------------- v3: ayrı yazılan bölge adları ----------------
+     Tek kelimelik bölge adı ("kayakoy", "saribelen") iki parçaya bölünmüş
+     yazımla da eşleşir ("kaya köy"). Parçalar en az 3 harf. */
+  for (const o of Object.values(options)) {
+    if (o.kind !== "region") continue;
+    const short = normalizePhrase(o.name.slice(o.name.lastIndexOf("/") + 1));
+    if (short.length !== 1) continue;
+    const w = short[0];
+    if (w.length < 7 || WEAK_PLACE_WORDS.has(w) || GENERIC_PLACE_WORDS.has(w)) continue;
+    for (let k = 3; k <= w.length - 3; k++) {
+      pushAlias([w.slice(0, k), w.slice(k)], { kind: "option", optionKey: o.key });
+    }
+  }
+
+  /* ---------------- v3: bitişik yazım ----------------
+     Çok kelimeli her ad / ifade bitişik yazılmış hâliyle de eşleşir
+     ("denizmanzaralı", "masatenisi", "wifi"). */
+  for (const a of [...aliases]) {
+    if (a.tokens.length < 2 || a.tokens.some((t) => t === ANY_VILLA || /^\d+$/.test(t))) continue;
+    const joined = a.tokens.join("");
+    if (joined.length < 6) continue;
+    pushAlias([joined], a.target, !!a.weak, !!a.partial);
   }
 
   aliases.sort((a, b) => b.tokens.length - a.tokens.length);

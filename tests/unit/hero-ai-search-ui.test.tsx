@@ -124,10 +124,11 @@ describe("HeroAiSearch — doğrudan arama", () => {
     expect(pushMock).toHaveBeenCalledWith("/arama?bolgeler=kas&guests=4");
   });
 
-  it("çoklu villa tipi → soru yok; villa kelimesine bağlı tip (baş isim) seçilir", async () => {
+  /* v3: tipler rastgele düşürülmez; ikisi de `/arama`'ya AND ile gider. */
+  it("çoklu villa tipi → soru yok; tüm nitelik tipleri birlikte gönderilir", async () => {
     await renderModes();
     await ask("muhafazakar balayı villası 2 kişi");
-    expect(pushMock).toHaveBeenCalledWith("/arama?villa-turleri=balayi-villalari&guests=2");
+    expect(pushMock).toHaveBeenCalledWith("/arama?villa-turleri=muhafazakar-villalar%2Cbalayi-villalari&guests=2");
     expectNoIntermediateUi();
   });
 

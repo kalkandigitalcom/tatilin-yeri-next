@@ -47,6 +47,10 @@ export type Token = {
   digits?: number;
   /** `date` için ayrıştırılmış tarih parçaları. */
   date?: NumericDate;
+  /** Önünde virgül / noktalı virgül / soru-ünlem işareti var (cümle
+   *  parçası sınırı): çok kelimeli sözlük ifadeleri bu sınırı aşmaz
+   *  ("billiards, table tennis" → "billiards table" DEĞİL). */
+  breakBefore?: boolean;
 };
 
 /** Tek kelimelik metni eşleştirme kanonuna indirger. */
@@ -100,6 +104,10 @@ function parseNumericDate(raw: string, sep: "." | "/" | "-"): NumericDate | null
 
 /** Bileşik villa kelimesi: en az 3 harflik önek + villa/villen/villas. */
 const COMPOUND_VILLA_RE = /^([a-z]{3,})(villa|villen|villas)$/;
+/** Bileşik havuz kelimesi (DE/EN): "Kinderpool", "Privatpool", "Innenpool",
+ *  "Whirlpool", "Swimmingpool" → önek + "pool". Sözlük girdileri de aynı
+ *  tokenizer'dan geçtiği için iki taraf tutarlı bölünür. */
+const COMPOUND_POOL_RE = /^([a-z]{3,})(pool|pools)$/;
 /** Kendisi zaten "villa" anlamı taşıyan bileşikler bölünmez. */
 const COMPOUND_KEEP = new Set(["ferienvilla", "ferienvillen", "ferienvillas"]);
 
@@ -108,8 +116,12 @@ export function tokenize(input: string): Token[] {
   const out: Token[] = [];
   TOKEN_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
+  let lastEnd = 0;
   while ((m = TOKEN_RE.exec(text)) !== null) {
     const raw = m[0];
+    const brk = /[,;!?]/.test(text.slice(lastEnd, m.index));
+    lastEnd = m.index + raw.length;
+    const before = out.length;
     let tok: Omit<Token, "index"> | null = null;
     if (m[1]) {
       const date = parseNumericDate(m[1], "-");
@@ -141,7 +153,7 @@ export function tokenize(input: string): Token[] {
         /* Almanca bileşik "Luxusvilla"/"Luxusvillen": önek + "villa"
            olarak iki token'a ayrılır (ikinci token'ın gösterim metni
            boştur; ifade birleştirilirken atlanır). */
-        const cm = COMPOUND_VILLA_RE.exec(norm);
+        const cm = COMPOUND_VILLA_RE.exec(norm) ?? COMPOUND_POOL_RE.exec(norm);
         if (cm && !COMPOUND_KEEP.has(norm)) {
           out.push({ kind: "word", raw, norm: cm[1], index: 0 });
           tok = { kind: "word", raw: "", norm: cm[2], suffix };
@@ -155,6 +167,7 @@ export function tokenize(input: string): Token[] {
       tok = { kind: "currency", raw, norm: m[10] };
     }
     if (tok) out.push({ ...tok, index: 0 });
+    if (brk && out.length > before && before > 0) out[before] = { ...out[before], breakBefore: true };
   }
 
   /* Kelime-kelime arasındaki tire anlamsızdır ("wi-fi", "pet-friendly");

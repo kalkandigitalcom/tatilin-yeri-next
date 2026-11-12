@@ -35,10 +35,13 @@ describe("DasVilla referans sorgusu", () => {
     expect(r.criteria).toEqual({
       regionIds: ["L:uzumlu"],
       typeId: "T:balayi-villalari",
+      typeIds: ["T:balayi-villalari"],
       featureIds: [],
       guests: 2,
       start: "2027-06-20",
       end: "2027-06-25",
+      flexible: null,
+      sort: null,
     });
     expect(r.parsed.unknown).toEqual([]);
     expect(r.parsed.dateIssue).toBeNull();
@@ -135,14 +138,26 @@ describe("Otomatik çözümleme — soru yok, uydurma yok", () => {
     expect(r.criteria.featureIds).toEqual(features);
   });
 
+  /* v3 (bilinçli politika değişikliği): kullanıcı her nitelik tipini
+     istediği için tipler RASTGELE düşürülmez; hepsi `/arama`'ya AND ile
+     gider (`villa-turleri=a,b`). Yalnız birbirini dışlayan sınıflar
+     (Bungalov + Apart) ve Lüks + Ekonomik çifti gönderilmez. */
   it.each([
-    ["muhafazakar balayı villası", "tr", "T:balayi-villalari"],
-    ["balayı villası muhafazakar", "tr", "T:balayi-villalari"],
-    ["lüks deniz manzaralı villa", "tr", "T:deniz-manzarali-villalar"],
-    ["conservative honeymoon villa", "en", "T:balayi-villalari"],
-    ["konservative Flitterwochen Villa", "de", "T:balayi-villalari"],
-  ] as const)("çoklu tip: %s → tek tip (baş isim)", (q, locale, typeId) => {
-    expect(run(q, locale).criteria.typeId).toBe(typeId);
+    ["muhafazakar balayı villası", "tr", ["T:muhafazakar-villalar", "T:balayi-villalari"]],
+    ["balayı villası muhafazakar", "tr", ["T:balayi-villalari", "T:muhafazakar-villalar"]],
+    ["lüks deniz manzaralı villa", "tr", ["T:luks-villalar", "T:deniz-manzarali-villalar"]],
+    ["conservative honeymoon villa", "en", ["T:muhafazakar-villalar", "T:balayi-villalari"]],
+    ["konservative Flitterwochen Villa", "de", ["T:muhafazakar-villalar", "T:balayi-villalari"]],
+  ] as const)("çoklu tip: %s → tüm tipler (AND)", (q, locale, typeIds) => {
+    const r = run(q, locale);
+    expect(r.criteria.typeIds).toEqual(typeIds);
+    expect(r.criteria.typeId).toBe(typeIds[0]);
+  });
+
+  it("çoklu tip: bungalov + apart (dışlayan sınıflar) → ikisi de gönderilmez, nitelik tipi kalır", () => {
+    const r = run("jakuzili bungalov veya apart balayı için");
+    expect(r.criteria.typeIds).toEqual(["T:balayi-villalari"]);
+    expect(r.decisions.some((d) => d.rule === "dropped_conflicting_kinds")).toBe(true);
   });
 
   it("çakışan kişi sayısı → en büyük", () => {
@@ -156,10 +171,13 @@ describe("Otomatik çözümleme — soru yok, uydurma yok", () => {
     expect(r.url).toBe("bolgeler=kas&guests=4");
   });
 
-  it("yazım hatası önerisi otomatik uygulanmaz (uydurma yok)", () => {
+  /* v3: tek ve kesin karşılıklı yazım hatası düzeltilir; belirsiz/kısa
+     kelimeler (ör. "eden") hiçbir zaman bölgeye çevrilmez. */
+  it("yazım hatası yalnız tek kesin karşılıkta uygulanır (uydurma yok)", () => {
     const r = run("Kalkn 4 kişi");
-    expect(r.criteria.regionIds).toEqual([]);
-    expect(r.url).toBe("guests=4");
+    expect(r.criteria.regionIds).toEqual(["L:kalkan"]);
+    expect(r.url).toBe("bolgeler=kalkan&guests=4");
+    expect(run("Kaş'ta köpek kabul eden villa").criteria.regionIds).toEqual(["L:kas"]);
   });
 
   it("hiçbir şey tanınmazsa hasCriteria=false", () => {
