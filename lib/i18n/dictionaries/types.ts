@@ -663,6 +663,22 @@ export type Dictionary = {
       switchToDate: string;
       emptyQuery: string;
       loadError: string;
+      /* Sesli arama (Web Speech API; ses kaydedilmez) */
+      voiceStart: string;
+      voiceStop: string;
+      voiceCancel: string;
+      voiceStarting: string;
+      voiceListening: string;
+      voiceDone: string;
+      voiceNoSpeech: string;
+      voiceDenied: string;
+      voiceServiceOff: string;
+      voiceMicUnavailable: string;
+      voiceNetwork: string;
+      voiceLanguage: string;
+      voiceUnsupported: string;
+      voiceError: string;
+      voicePrivacy: string;
     };
     advantages: {
       sectionAriaLabel: string;

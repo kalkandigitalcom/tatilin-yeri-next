@@ -224,7 +224,7 @@ export default function HeroSearchModes({
           hidden={mode !== "ai"}
         >
           {AiPanel ? (
-            <AiPanel locale={locale} onSwitchToDate={() => select("date")} />
+            <AiPanel locale={locale} onSwitchToDate={() => select("date")} active={mode === "ai"} />
           ) : (
             <div
               role="status"
