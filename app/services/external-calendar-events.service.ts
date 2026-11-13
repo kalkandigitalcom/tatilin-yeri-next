@@ -37,6 +37,8 @@ export type ExternalEventListItem = {
   source: {
     id: string;
     source_name: string;
+    /** 'kiraligim' → Kiraligim eklentisi kaydı (elle değiştirilemez). */
+    source_type?: string | null;
     is_active: boolean | null;
     last_success_at: string | null;
     last_error: string | null;

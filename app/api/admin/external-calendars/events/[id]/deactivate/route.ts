@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isKiraligimEvent, KIRALIGIM_MANAGED_MESSAGE } from "@/lib/plugins/kiraligim/guard.server";
 
 import { authorizeAdminCaller } from "@/lib/admin-route-auth";
 import {
@@ -71,6 +72,15 @@ export async function POST(
     return NextResponse.json(
       { ok: false, error: "event id gerekli" },
       { status: 400 }
+    );
+  }
+
+  /* Kiraligim eklentisinin etkinlikleri yalnız Kiraligim üzerinden
+     değişir (elle aç/kapa desteklenmez). iCal etkinlikleri etkilenmez. */
+  if (await isKiraligimEvent(eventId)) {
+    return NextResponse.json(
+      { ok: false, error: KIRALIGIM_MANAGED_MESSAGE },
+      { status: 409 }
     );
   }
 

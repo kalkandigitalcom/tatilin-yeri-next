@@ -237,3 +237,21 @@ tetiklenmiyor demektir.
 | Mail Logs Cleanup | `0 3 * * *` | `/api/cron/mail-logs-cleanup` |
 | Activity Logs Cleanup | `30 3 * * *` | `/api/cron/activity-logs-cleanup` |
 | Short Gaps Refresh* | `0 4 * * *` | `/api/cron/short-gaps-refresh` *(endpoint ön koşul)* |
+
+---
+
+## 7. Kiraligim eklentisi — ayrı görev (yalnız eklenti kullanılıyorsa)
+
+Yukarıdaki görevlere **dokunmaz**; bağımsız bir görevdir. Kurulum ve ortam
+değişkenleri: [`docs/kiraligim-plugin.md`](./kiraligim-plugin.md).
+
+- **Frequency:** her 5 dakikada bir (`*/5 * * * *`)
+- **URL:** `https://DOMAIN/api/cron/kiraligim-sync`
+
+```bash
+curl -fsS --max-time 120 -H "Authorization: Bearer $CRON_SECRET" https://DOMAIN/api/cron/kiraligim-sync
+```
+
+Beklenen: `200 {"ok":true,"locked":true,...}`. Kiraligim ortam değişkenleri
+tanımlı değilse `200 {"ok":true,"skipped":"not_configured"}` (görev hata vermez).
+Başka bir senkron sürüyorsa `"locked":false` (normal).

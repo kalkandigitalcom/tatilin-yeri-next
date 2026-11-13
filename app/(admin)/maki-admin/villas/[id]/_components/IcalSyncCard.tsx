@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Calendar,
@@ -511,6 +513,9 @@ function SourceRow({
 }) {
   const isOk =
     !source.last_error && source.last_success_at !== null;
+  /* Kiraligim eklentisi kaynağı: iCal adresi yok, elle senkron / aç-kapa
+     yok — yönetim Eklentiler → Kiraligim sayfasından. */
+  const isKiraligim = source.source_type === "kiraligim";
   return (
     <div
       className={
@@ -557,7 +562,7 @@ function SourceRow({
             )}
           </div>
           <p className="text-[11.5px] font-mono text-[var(--color-stone-500)] truncate mt-1.5">
-            {source.ical_url}
+            {isKiraligim ? "Kiraligim API · merkezi takvim" : source.ical_url}
           </p>
           <div className="flex items-center gap-2 flex-wrap mt-2 text-[11.5px] text-[var(--color-stone-500)]">
             <span className="inline-flex items-center gap-1 tabular-nums">
@@ -578,6 +583,15 @@ function SourceRow({
           )}
         </div>
 
+        {isKiraligim ? (
+          <Link
+            href="/maki-admin/eklentiler/kiraligim"
+            className="admin-btn-ghost shrink-0"
+            title="Bu kaynak Kiraligim'den gelir ve yalnız Kiraligim üzerinden değiştirilebilir."
+          >
+            Eklentiler → Kiraligim
+          </Link>
+        ) : (
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
@@ -619,6 +633,7 @@ function SourceRow({
             {source.is_active ? "Pasifleştir" : "Aktifleştir"}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

@@ -40,6 +40,7 @@ import {
   Wallet,
   Share2,
   Tag,
+  Puzzle,
 } from "lucide-react";
 
 import {
@@ -260,6 +261,20 @@ const menuGroups: MenuGroup[] = [
         href: "/maki-admin/reviews",
         icon: Star,
         permissionKey: "reviews",
+      },
+    ],
+  },
+  {
+    /* 🧩 Eklentiler — harici sistem entegrasyonları (ilk eklenti:
+       Kiraligim merkezi takvim). Kayıt: lib/plugins/registry.ts.
+       Tek izin anahtarı: "plugins". */
+    label: "Eklentiler",
+    items: [
+      {
+        name: "Eklentiler",
+        href: "/maki-admin/eklentiler",
+        icon: Puzzle,
+        permissionKey: "plugins",
       },
     ],
   },

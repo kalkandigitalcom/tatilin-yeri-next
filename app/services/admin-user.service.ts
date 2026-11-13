@@ -278,6 +278,9 @@ export const SIDEBAR_PERMISSIONS: PermissionItem[] = [
      birebir parity. */
   { key: "reviews", label: "Yorumlar", group: "İçerik" },
 
+  // Eklentiler — harici sistem entegrasyonları (Kiraligim vb.).
+  { key: "plugins", label: "Eklentiler", group: "Eklentiler" },
+
   // Sistem
   { key: "settings", label: "Ayarlar", group: "Sistem" },
   { key: "webmaster", label: "Webmaster", group: "Sistem" },

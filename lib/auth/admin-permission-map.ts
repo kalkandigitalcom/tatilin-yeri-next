@@ -46,6 +46,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   { href: "/maki-admin/messages", need: "messages" },
   { href: "/maki-admin/faqs", need: "faqs" },
   { href: "/maki-admin/reviews", need: "reviews" },
+  { href: "/maki-admin/eklentiler", need: "plugins" },
   { href: "/maki-admin/settings", need: "settings" },
   { href: "/maki-admin/webmaster", need: "webmaster" },
   { href: "/maki-admin/system-logs", need: "system_logs" },

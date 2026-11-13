@@ -68,6 +68,8 @@ type SourceRow = {
   id: string;
   villa_id: string;
   source_name: string;
+  /** Kiraligim eklentisi kaynakları ('kiraligim') iCal değildir. */
+  source_type?: string | null;
   ical_url: string;
   is_active: boolean | null;
 };
@@ -202,6 +204,20 @@ export async function syncExternalCalendarSource(
     };
   }
   const source = srcData as SourceRow;
+  /* Kiraligim eklentisinin kaynağı iCal adresinden ÇEKİLMEZ (veri
+     imzalı Kiraligim API'sinden eklenti senkronuyla gelir). Cron zaten
+     bu kaynakları listelemez; bu guard manuel tetiklemeyi de kapatır.
+     Kaynak satırına ve etkinliklerine hiçbir yazım yapılmaz. */
+  if (source.source_type === "kiraligim") {
+    return {
+      ok: false,
+      sourceId: source.id,
+      sourceName: source.source_name,
+      villaId: source.villa_id,
+      error: "Kiraligim kaynağı iCal ile senkronize edilmez",
+      stage: "fetch",
+    };
+  }
   if (source.is_active === false) {
     return {
       ok: false,

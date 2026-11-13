@@ -740,7 +740,7 @@ function ExternalEventRow({
           <div className="flex items-center gap-2 flex-wrap">
             {/* "Harici" badge — admin gerçek reservation ile karıştırmasın */}
             <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-stone-900)] text-white px-2.5 py-0.5 text-[10.5px] font-medium tracking-[0.05em] uppercase">
-              iCal
+              {row.source?.source_type === "kiraligim" ? "Kiraligim" : "iCal"}
             </span>
 
             {/* Source name badge — coral/blue/purple/gray */}
@@ -811,6 +811,17 @@ function ExternalEventRow({
             row'da "Pasif" badge zaten gösteriliyor + opacity-60 ile
             görsel olarak ayrışıyor. */}
         <div className="shrink-0 flex items-center gap-2">
+          {/* Kiraligim eklentisi kaydı: yalnız Kiraligim üzerinden değişir —
+              pasifleştir / aktifleştir / senkronize et düğmeleri yok. */}
+          {row.source?.source_type === "kiraligim" ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-stone-200)] bg-[var(--color-stone-50)] px-2.5 py-1 text-[11px] text-[var(--color-stone-600)]"
+              title="Bu doluluk Kiraligim'den gelir ve yalnız Kiraligim üzerinden değiştirilebilir."
+            >
+              Kiraligim · merkezi yönetim
+            </span>
+          ) : (
+          <>
           {row.is_active && (
             <button
               type="button"
@@ -863,6 +874,8 @@ function ExternalEventRow({
               )}
               Senkronize
             </button>
+          )}
+          </>
           )}
         </div>
       </div>

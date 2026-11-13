@@ -1,6 +1,7 @@
 import { externalCalendarSourceRepository } from "@/lib/db/external-calendar-source.repository";
 import { externalCalendarEventRepository } from "@/lib/db/external-calendar-event.repository";
 import { validateExternalUrlStatic } from "@/lib/security/ssrf";
+import { isKiraligimSource, KIRALIGIM_MANAGED_MESSAGE } from "@/lib/plugins/kiraligim/guard.server";
 
 /* ===============================================================
    🛡️ FAZ 56E — EXTERNAL CALENDAR SOURCE (admin CRUD)
@@ -167,6 +168,8 @@ export async function setExternalCalendarSourceActive(
   active: boolean
 ): Promise<ExternalCalendarSourceResult> {
   if (!id) return { ok: false, error: "id gerekli" };
+  /* Kiraligim kaynağı yalnız eklenti senkronuyla yönetilir. */
+  if (await isKiraligimSource(id)) return { ok: false, error: KIRALIGIM_MANAGED_MESSAGE };
   const { data, error } = await externalCalendarSourceRepository.updateById(
     id,
     {
@@ -193,6 +196,7 @@ export async function updateExternalCalendarSourceUrl(
   icalUrl: string
 ): Promise<ExternalCalendarSourceResult> {
   if (!id) return { ok: false, error: "id gerekli" };
+  if (await isKiraligimSource(id)) return { ok: false, error: KIRALIGIM_MANAGED_MESSAGE };
   const url = sanitizeUrl(icalUrl);
   const check = isValidIcalUrl(url);
   if (!check.ok) return { ok: false, error: check.error || "URL hatası" };

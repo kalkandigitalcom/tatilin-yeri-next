@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isKiraligimSource, KIRALIGIM_MANAGED_MESSAGE } from "@/lib/plugins/kiraligim/guard.server";
 
 import { authorizeAdminCaller } from "@/lib/admin-route-auth";
 import {
@@ -80,6 +81,14 @@ export async function POST(
     return NextResponse.json(
       { ok: false, error: "source id gerekli" },
       { status: 400 }
+    );
+  }
+
+  /* Kiraligim kaynağı yalnız eklenti senkronuyla yönetilir. */
+  if (await isKiraligimSource(sourceId)) {
+    return NextResponse.json(
+      { ok: false, error: KIRALIGIM_MANAGED_MESSAGE },
+      { status: 409 }
     );
   }
 

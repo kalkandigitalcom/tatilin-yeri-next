@@ -56,12 +56,16 @@ export const externalCalendarSourceServerRepository = {
   },
 
   /** Aktif source id'leri — cron sync loop input'u (.select("id")
-   *  .eq("is_active", true)). Pasif source'lar sync edilmez. */
+   *  .eq("is_active", true)). Pasif source'lar sync edilmez.
+   *  Kiraligim eklentisinin kaynakları (source_type = 'kiraligim')
+   *  iCal değildir; kendi senkronuyla yazılır → bu listeye girmez.
+   *  Diğer bütün source_type değerleri için davranış aynıdır. */
   async findActiveIds() {
     return await dbAdmin
       .from("external_calendar_sources")
       .select("id")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .neq("source_type", "kiraligim");
   },
 
   /** Sync — source row fetch (id, villa_id, source_name, ical_url,
@@ -69,7 +73,7 @@ export const externalCalendarSourceServerRepository = {
   async findForSync(id: string) {
     return await dbAdmin
       .from("external_calendar_sources")
-      .select("id, villa_id, source_name, ical_url, is_active")
+      .select("id, villa_id, source_name, source_type, ical_url, is_active")
       .eq("id", id)
       .maybeSingle();
   },
