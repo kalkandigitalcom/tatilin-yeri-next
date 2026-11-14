@@ -115,6 +115,20 @@ export type Dictionary = {
      *  ⚠️ Marka adı "Costeralla Travel" ÖZEL İSİMDİR ve dictionary'ye
      *  ALINMADI — hiçbir dilde çevrilmez. */
     agencyCredential: string;
+    /** 🧭 Masaüstü mega menü (Bölgeler / Kategoriler) metinleri.
+     *  `{count}` yer tutucusu `formatDictionaryString` ile doldurulur;
+     *  `...One` anahtarları count === 1 için tekil biçimdir. */
+    megaRegionsTitle: string;
+    megaRegionsCount: string;
+    megaRegionsCountOne: string;
+    megaRegionsAll: string;
+    megaCategoriesTitle: string;
+    megaCategoriesCount: string;
+    megaCategoriesCountOne: string;
+    megaCategoriesAll: string;
+    megaVillaCount: string;
+    megaVillaCountOne: string;
+    megaMore: string;
   };
   footer: {
     explore: string;

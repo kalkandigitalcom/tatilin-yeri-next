@@ -12,8 +12,21 @@ import Header from "./Header";
    → dönen veri, tip, null/hata davranışı DEĞİŞMEZ. Yeni cache
    mekanizması KURULMADI; tag'ler ("settings" / "menu") ve
    revalidateSettings()/revalidateMenu() invalidation yolu AYNEN. */
-import { getCachedMenu, getCachedSettings } from "@/lib/cache.helpers";
-import { resolveAssetUrlVersioned } from "@/lib/storage.helpers";
+import {
+  getCachedCategoryCovers,
+  getCachedLocationVillaCounts,
+  getCachedMenu,
+  getCachedSettings,
+  getCachedVillaLocations,
+  getCachedVillaTypes,
+} from "@/lib/cache.helpers";
+import {
+  appendAssetVersion,
+  getCategoryCoverPublicUrl,
+  getLocationCoverPublicUrl,
+  resolveAssetUrlVersioned,
+} from "@/lib/storage.helpers";
+import { isRegionGroupRoot, regionGroupKey } from "@/lib/taxonomy-landing";
 /* 🛡️ PHASE 10H — dil etiketleri locale'den BAĞIMSIZ okunur, seçim client
    tarafta (`Header.tsx`, `usePathname()` locale'i) yapılır — bu wrapper
    `headers()`/`cookies()` KULLANMAMAYA devam eder. `getMenu()` /
@@ -40,6 +53,10 @@ type MenuNodeLike = {
   source_id?: string | null;
   children?: MenuNodeLike[];
   nameByLocale?: TaxonomyNameByLocale;
+  /** 🧭 Mega menü — kart görseli (bölge/kategori kapağı; yoksa null). */
+  imageUrl?: string | null;
+  /** 🧭 Mega menü — aktif villa sayısı (bölge grubu toplamı / kategori). */
+  villaCount?: number;
 };
 
 /** Ağaçtaki tüm `category` öğelerinin `source_id`'lerini toplar. */
@@ -161,6 +178,115 @@ function dropUnlabelled<T extends MenuNodeLike>(nodes: T[]): T[] {
   return out;
 }
 
+/** Ağaçta `region` / `category` kaynaklı düğüm var mı? (yoksa ek okuma YOK) */
+function hasTaxonomyNodes(nodes: MenuNodeLike[]): boolean {
+  return nodes.some(
+    (n) =>
+      ((n?.source_type === "region" || n?.source_type === "category") &&
+        typeof n.source_id === "string") ||
+      (Array.isArray(n?.children) && hasTaxonomyNodes(n.children))
+  );
+}
+
+type MegaMeta = { imageUrl: string | null; villaCount: number };
+
+/* ===============================================================
+   🧭 MEGA MENÜ — KART VERİSİ (görsel + villa sayısı)
+   ===============================================================
+   YENİ servis / sorgu / alan YOK: anasayfa koleksiyonlarının ZATEN
+   kullandığı `unstable_cache` sarmalayıcıları aynen okunur ve AYNI
+   kurallar uygulanır:
+     • Bölge (LocationCollection ile birebir): grup kökü
+       (name === filter_group_name) → grubun TÜM üyelerinin sayısı
+       toplanır; kapak = kökün kapağı, yoksa kapağı olan ilk üye.
+       Kök olmayan bölge → kendi sayısı + kendi kapağı.
+     • Kategori (CategoryCollection ile birebir): admin kapağı →
+       yoksa ilk villa görseli; sayı `covers[id].villaCount`.
+   Okuma hatası menüyü ETKİLEMEZ (çağıran try/catch) → kartlar
+   görselsiz/sayısız render olur. */
+async function loadMegaMeta(): Promise<{
+  region: Record<string, MegaMeta>;
+  category: Record<string, MegaMeta>;
+}> {
+  const [locations, counts, types, covers] = await Promise.all([
+    getCachedVillaLocations().catch(() => []),
+    getCachedLocationVillaCounts().catch(() => ({}) as Record<string, number>),
+    getCachedVillaTypes().catch(() => []),
+    getCachedCategoryCovers().catch(() => ({}) as Awaited<ReturnType<typeof getCachedCategoryCovers>>),
+  ]);
+
+  type Loc = {
+    id: string;
+    name?: string | null;
+    filter_group_name?: string | null;
+    cover_image?: string | null;
+    cover_v?: number;
+  };
+  const locs = (Array.isArray(locations) ? locations : []) as Loc[];
+  const countOf = (id: string) => Number((counts as Record<string, number>)?.[id] ?? 0) || 0;
+  const coverOf = (l: Loc) =>
+    appendAssetVersion(getLocationCoverPublicUrl(l.cover_image), l.cover_v);
+
+  const region: Record<string, MegaMeta> = {};
+  for (const l of locs) {
+    const id = String(l.id);
+    if (isRegionGroupRoot(l)) {
+      const key = regionGroupKey(l);
+      const members = locs.filter((o) => regionGroupKey(o) === key);
+      let imageUrl = coverOf(l);
+      if (!imageUrl) {
+        for (const m of members) {
+          imageUrl = coverOf(m);
+          if (imageUrl) break;
+        }
+      }
+      region[id] = {
+        imageUrl,
+        villaCount: members.reduce((sum, m) => sum + countOf(String(m.id)), 0),
+      };
+    } else {
+      region[id] = { imageUrl: coverOf(l), villaCount: countOf(id) };
+    }
+  }
+
+  type VType = { id: string; cover_image?: string | null; cover_v?: number };
+  const category: Record<string, MegaMeta> = {};
+  for (const t of (Array.isArray(types) ? types : []) as VType[]) {
+    const id = String(t.id);
+    const c = (covers as Record<string, { coverImageUrl: string | null; villaCount: number }>)?.[id];
+    const adminCover = appendAssetVersion(getCategoryCoverPublicUrl(t.cover_image), t.cover_v);
+    category[id] = {
+      imageUrl: adminCover || c?.coverImageUrl || null,
+      villaCount: Number(c?.villaCount ?? 0) || 0,
+    };
+  }
+  return { region, category };
+}
+
+/** Kart verisini düğümlere ekler (yeni node'lar; mutasyon YOK). */
+function attachMegaMeta<T extends MenuNodeLike>(
+  nodes: T[],
+  meta: { region: Record<string, MegaMeta>; category: Record<string, MegaMeta> }
+): T[] {
+  return nodes.map((n) => {
+    const children = Array.isArray(n?.children) ? attachMegaMeta(n.children, meta) : n?.children;
+    const src =
+      typeof n?.source_id === "string"
+        ? n.source_type === "region"
+          ? meta.region[n.source_id]
+          : n.source_type === "category"
+            ? meta.category[n.source_id]
+            : undefined
+        : undefined;
+    if (!src && children === n?.children) return n;
+    return {
+      ...n,
+      ...(children === n?.children ? {} : { children }),
+      ...(src ? { imageUrl: src.imageUrl, villaCount: src.villaCount } : {}),
+    };
+  });
+}
+
 export default async function HeaderWrapper() {
   /* ===============================================================
      🔥 SITE LOGO
@@ -229,6 +355,17 @@ export default async function HeaderWrapper() {
   } catch (err) {
     console.error("❌ HeaderWrapper menu error:", err);
     menuItems = [];
+  }
+
+  /* 🧭 Mega menü kart verisi — AYRI try: hata olursa menü AYNEN kalır
+     (kartlar görselsiz/sayısız). Bölge/kategori düğümü yoksa okuma YOK. */
+  if (menuItems.length > 0 && hasTaxonomyNodes(menuItems as MenuNodeLike[])) {
+    try {
+      const meta = await loadMegaMeta();
+      menuItems = attachMegaMeta(menuItems as MenuNodeLike[], meta) as typeof menuItems;
+    } catch {
+      /* kart verisi opsiyonel — menü değişmeden render edilir */
+    }
   }
 
   return <Header menu={menuItems} siteLogo={siteLogo} trHomeHref={trHomeHref} />;

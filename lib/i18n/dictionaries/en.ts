@@ -47,6 +47,18 @@ export const en: Dictionary = {
     /* 🛡️ TopBar statik metinleri. */
     supportBadge: "24/7 Support",
     agencyCredential: "TURSAB Group A Agency · License No: {no}",
+    /* 🧭 Masaüstü mega menü. */
+    megaRegionsTitle: "Featured Regions",
+    megaRegionsCount: "{count} Regions",
+    megaRegionsCountOne: "{count} Region",
+    megaRegionsAll: "View All Regions",
+    megaCategoriesTitle: "Featured Categories",
+    megaCategoriesCount: "{count} Categories",
+    megaCategoriesCountOne: "{count} Category",
+    megaCategoriesAll: "View All Categories",
+    megaVillaCount: "{count} villas",
+    megaVillaCountOne: "{count} villa",
+    megaMore: "More",
   },
   footer: {
     explore: "Explore",

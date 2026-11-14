@@ -51,6 +51,18 @@ export const tr: Dictionary = {
        kopyasıdır; render çıktısı byte-identical. */
     supportBadge: "7/24 Destek",
     agencyCredential: "TURSAB A Grubu Acenta · Belge No: {no}",
+    /* 🧭 Masaüstü mega menü. */
+    megaRegionsTitle: "Öne Çıkan Bölgeler",
+    megaRegionsCount: "{count} Bölge",
+    megaRegionsCountOne: "{count} Bölge",
+    megaRegionsAll: "Tüm Bölgeleri Gör",
+    megaCategoriesTitle: "Öne Çıkan Kategoriler",
+    megaCategoriesCount: "{count} Kategori",
+    megaCategoriesCountOne: "{count} Kategori",
+    megaCategoriesAll: "Tüm Kategorileri Gör",
+    megaVillaCount: "{count} villa",
+    megaVillaCountOne: "{count} villa",
+    megaMore: "Diğerleri",
   },
   footer: {
     explore: "Keşfet",
